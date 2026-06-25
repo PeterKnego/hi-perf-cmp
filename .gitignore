@@ -17,6 +17,8 @@ target
 # Test binaries and coverage
 go/**/*.test
 go/**/*.out
+# autobench builds the Go cell to a binary here for direct (orphan-free) launch.
+/go/bin/
 
 # --- Java / Gradle ---
 .gradle/

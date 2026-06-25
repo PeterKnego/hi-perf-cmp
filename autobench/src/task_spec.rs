@@ -77,6 +77,53 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
         }),
+        "go-network-rtt-tcp" => Some(TaskSpec {
+            task: "go-network-rtt-tcp",
+            language: "go",
+            focus_area: "network-rtt",
+            experiment: "tcp",
+            kind: Kind::Network,
+            // Build the cell to a binary and launch it directly (not `go run`):
+            // run-iter SIGKILLs the server child on drop, and a killed `go run`
+            // parent can orphan the actual server process holding the port.
+            build: &[
+                "go",
+                "build",
+                "-o",
+                "bin/network-rtt-tcp",
+                "./cmd/network-rtt-tcp",
+            ],
+            build_dir: "go",
+            run: &["./bin/network-rtt-tcp"],
+            run_dir: "go",
+            gate_a: &["go", "test", "./..."],
+            gate_a_dir: "go",
+            primary_metric: "rtt_p50",
+            direction: Direction::Minimize,
+        }),
+        "java-network-rtt-tcp" => Some(TaskSpec {
+            task: "java-network-rtt-tcp",
+            language: "java",
+            focus_area: "network-rtt",
+            experiment: "tcp",
+            kind: Kind::Network,
+            // `installDist` emits a launcher script that `exec`s the JVM, so the
+            // launched process IS the JVM — run-iter's SIGKILL reaps it cleanly
+            // (no Gradle daemon / worker JVM left orphaned on the port).
+            build: &["./gradlew", "--quiet", ":network-rtt-tcp:installDist"],
+            build_dir: "java",
+            run: &["./network-rtt-tcp/build/install/network-rtt-tcp/bin/network-rtt-tcp"],
+            run_dir: "java",
+            gate_a: &[
+                "./gradlew",
+                "--quiet",
+                ":network-rtt-tcp:test",
+                ":common:test",
+            ],
+            gate_a_dir: "java",
+            primary_metric: "rtt_p50",
+            direction: Direction::Minimize,
+        }),
         _ => None,
     }
 }
@@ -104,6 +151,37 @@ mod tests {
             &["cargo", "run", "--release", "-q", "-p", "network-rtt-tcp"]
         );
         assert_eq!(s.gate_a, &["cargo", "test"]);
+    }
+
+    #[test]
+    fn go_cell_resolves_to_direct_binary() {
+        let s = task_spec("go-network-rtt-tcp").unwrap();
+        assert_eq!(s.language, "go");
+        assert_eq!(s.experiment, "tcp");
+        assert_eq!(s.kind, Kind::Network);
+        // Launch the built binary directly so SIGKILL can't orphan the server.
+        assert_eq!(s.run, &["./bin/network-rtt-tcp"]);
+        assert_eq!(s.run_dir, "go");
+        assert_eq!(s.gate_a, &["go", "test", "./..."]);
+        assert_eq!(s.primary_metric, "rtt_p50");
+    }
+
+    #[test]
+    fn java_cell_resolves_to_installdist_launcher() {
+        let s = task_spec("java-network-rtt-tcp").unwrap();
+        assert_eq!(s.language, "java");
+        assert_eq!(s.experiment, "tcp");
+        assert_eq!(s.kind, Kind::Network);
+        assert_eq!(
+            s.build,
+            &["./gradlew", "--quiet", ":network-rtt-tcp:installDist"]
+        );
+        // The launcher script exec's the JVM, so the spawned process is the JVM.
+        assert_eq!(
+            s.run,
+            &["./network-rtt-tcp/build/install/network-rtt-tcp/bin/network-rtt-tcp"]
+        );
+        assert_eq!(s.run_dir, "java");
     }
 
     #[test]
