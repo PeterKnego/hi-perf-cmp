@@ -1,0 +1,22 @@
+[package]
+name = "hi-perf-autobench"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Autoresearch-style perf optimization loop for hi-perf-cmp benchmark cells"
+license = "Apache-2.0"
+
+[lib]
+name = "hi_perf_autobench"
+path = "src/lib.rs"
+
+[[bin]]
+name = "run-iter"
+path = "src/bin/run-iter.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+wait-timeout = "0.2"
+tempfile = "3"

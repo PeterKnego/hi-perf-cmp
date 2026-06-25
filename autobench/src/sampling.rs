@@ -1,0 +1,236 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Peter Knego
+
+//! Contract-line parsing, `median`, and the two-process `Network` fitness
+//! driver.
+//!
+//! The fitness binary is the experiment artifact itself — it prints one
+//! result-contract JSON object per line on stdout (see `docs/result-contract.md`).
+//! We parse those lines into a metrics map keyed `<metric>_ns`, filtered to the
+//! task's `focus_area`/`experiment`, and take the median over `--samples` runs.
+
+use std::collections::BTreeMap;
+use std::io::Read;
+use std::net::TcpStream;
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
+
+/// Median of `xs`. For an even count, returns the lower-middle of the two
+/// central elements (nearest-rank style), matching the bench convention. Empty
+/// input returns 0.0.
+pub fn median(xs: &[f64]) -> f64 {
+    if xs.is_empty() {
+        return 0.0;
+    }
+    let mut v = xs.to_vec();
+    v.sort_by(|a, b| a.partial_cmp(b).expect("no NaN in samples"));
+    v[(v.len() - 1) / 2]
+}
+
+/// Parse result-contract JSON lines from a captured stdout `String` into a
+/// metrics map keyed `<metric>_ns` (e.g. `rtt_p50` -> `"rtt_p50_ns"`).
+///
+/// Lines whose `focus_area`/`experiment` do not match the task are ignored, as
+/// are non-JSON lines (diagnostics belong on stderr, but tolerate strays). The
+/// `value` is read as an f64 so integer and float forms (`42000`, `0.0`) both
+/// parse; the optional `notes` field is ignored.
+pub fn parse_contract_metrics(
+    stdout: &str,
+    focus_area: &str,
+    experiment: &str,
+) -> BTreeMap<String, f64> {
+    let mut out = BTreeMap::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if v.get("focus_area").and_then(|f| f.as_str()) != Some(focus_area) {
+            continue;
+        }
+        if v.get("experiment").and_then(|e| e.as_str()) != Some(experiment) {
+            continue;
+        }
+        let Some(metric) = v.get("metric").and_then(|m| m.as_str()) else {
+            continue;
+        };
+        let Some(value) = v.get("value").and_then(serde_json::Value::as_f64) else {
+            continue;
+        };
+        out.insert(format!("{metric}_ns"), value);
+    }
+    out
+}
+
+/// A spawned child that is killed on drop. Guarantees the server process is
+/// reaped even if the driver returns early via `?` or panics.
+struct KillOnDrop(Child);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// Build the artifact-launch `Command` for the given run argv, cwd, and env.
+fn run_command(run: &[&str], run_dir: &str, env: &[(&str, &str)]) -> Command {
+    let mut cmd = Command::new(run[0]);
+    cmd.args(&run[1..]).current_dir(crate::resolve_dir(run_dir));
+    for (k, val) in env {
+        cmd.env(k, val);
+    }
+    cmd
+}
+
+/// Wait until `127.0.0.1:port` accepts a connection, or `timeout` elapses.
+/// Returns true if the port became connectable. Polls with short backoff.
+fn wait_for_bind(port: u16, timeout: Duration) -> bool {
+    let addr = format!("127.0.0.1:{port}");
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if TcpStream::connect(&addr).is_ok() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    false
+}
+
+/// Outcome of one two-process network run.
+pub struct NetworkRun {
+    /// True if the client exited 0.
+    pub client_ok: bool,
+    /// Client stdout (the contract lines).
+    pub stdout: String,
+    /// Client stderr + a note of any server failure.
+    pub stderr: String,
+}
+
+/// Run one two-process network fitness sample over `127.0.0.1`.
+///
+/// Spawns the artifact in `RTT_MODE=server` (plus `extra_env`, e.g. port and
+/// iteration counts) as a child, waits for it to bind `port`, then runs the
+/// artifact in `RTT_MODE=client RTT_HOST=127.0.0.1` (plus `extra_env`) and
+/// captures its stdout. The server child is ALWAYS killed via a drop guard,
+/// even if the client run errors.
+pub fn run_network_once(
+    run: &[&str],
+    run_dir: &str,
+    port: u16,
+    extra_env: &[(&str, &str)],
+) -> std::io::Result<NetworkRun> {
+    let port_s = port.to_string();
+    // Server env: RTT_MODE=server + the port + caller's extra env.
+    let mut server_env: Vec<(&str, &str)> = vec![("RTT_MODE", "server"), ("RTT_TCP_PORT", &port_s)];
+    server_env.extend_from_slice(extra_env);
+
+    let mut server_cmd = run_command(run, run_dir, &server_env);
+    server_cmd.stdout(Stdio::null()).stderr(Stdio::piped());
+    let mut guard = KillOnDrop(server_cmd.spawn()?);
+
+    let bound = wait_for_bind(port, Duration::from_secs(10));
+    if !bound {
+        // Drain whatever the server logged to help diagnose the bind failure.
+        let mut server_err = String::new();
+        if let Some(mut e) = guard.0.stderr.take() {
+            let _ = e.read_to_string(&mut server_err);
+        }
+        return Ok(NetworkRun {
+            client_ok: false,
+            stdout: String::new(),
+            stderr: format!("server did not bind 127.0.0.1:{port} within 10s\n{server_err}"),
+        });
+    }
+
+    // Client env: RTT_MODE=client RTT_HOST=127.0.0.1 + port + caller's extra env.
+    let mut client_env: Vec<(&str, &str)> = vec![
+        ("RTT_MODE", "client"),
+        ("RTT_HOST", "127.0.0.1"),
+        ("RTT_TCP_PORT", &port_s),
+    ];
+    client_env.extend_from_slice(extra_env);
+
+    let output = run_command(run, run_dir, &client_env)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    // `guard` is dropped at end of scope, killing the server.
+    Ok(NetworkRun {
+        client_ok: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TCP_LINES: &str = r#"
+{"language":"rust","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_p50","value":42000,"unit":"ns","samples":100000}
+{"language":"rust","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_p99","value":81000,"unit":"ns","samples":100000}
+{"language":"rust","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_mean","value":50000.5,"unit":"ns","samples":100000}
+"#;
+
+    #[test]
+    fn parses_three_tcp_lines() {
+        let m = parse_contract_metrics(TCP_LINES, "network-rtt", "tcp");
+        assert_eq!(m.len(), 3);
+        assert_eq!(m["rtt_p50_ns"], 42000.0);
+        assert_eq!(m["rtt_p99_ns"], 81000.0);
+        assert_eq!(m["rtt_mean_ns"], 50000.5);
+    }
+
+    #[test]
+    fn ignores_other_experiments_and_focus_areas() {
+        let mixed = format!(
+            "{}\n{}\n{}",
+            r#"{"language":"rust","focus_area":"network-rtt","experiment":"udp","metric":"rtt_p50","value":99,"unit":"ns","samples":1}"#,
+            r#"{"language":"rust","focus_area":"filesystem-write","experiment":"tcp","metric":"rtt_p50","value":99,"unit":"ns","samples":1}"#,
+            r#"{"language":"rust","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_p50","value":42000,"unit":"ns","samples":1}"#,
+        );
+        let m = parse_contract_metrics(&mixed, "network-rtt", "tcp");
+        assert_eq!(m.len(), 1);
+        assert_eq!(m["rtt_p50_ns"], 42000.0);
+    }
+
+    #[test]
+    fn tolerates_float_values_and_notes() {
+        // Java-style "0.0" floats and a notes field must still parse.
+        let line = r#"{"language":"java","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_p50","value":0.0,"unit":"ns","samples":10,"notes":"warm"}"#;
+        let m = parse_contract_metrics(line, "network-rtt", "tcp");
+        assert_eq!(m["rtt_p50_ns"], 0.0);
+    }
+
+    #[test]
+    fn tolerates_non_json_strays() {
+        let s = format!("some diagnostic noise\n{}", TCP_LINES.trim());
+        let m = parse_contract_metrics(&s, "network-rtt", "tcp");
+        assert_eq!(m.len(), 3);
+    }
+
+    #[test]
+    fn median_odd() {
+        assert_eq!(median(&[3.0, 1.0, 2.0]), 2.0);
+    }
+
+    #[test]
+    fn median_even_lower_middle() {
+        assert_eq!(median(&[1.0, 2.0, 3.0, 4.0]), 2.0);
+    }
+
+    #[test]
+    fn median_single() {
+        assert_eq!(median(&[42.0]), 42.0);
+    }
+
+    #[test]
+    fn median_empty_is_zero() {
+        assert_eq!(median(&[]), 0.0);
+    }
+}
