@@ -1,0 +1,69 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+A comparison of high-performance code artifacts across **Rust**, **Java**, and **Go**, over three focus areas:
+**network-rtt** (request/response round-trip time), **filesystem-write** (write throughput/latency), and
+**thread-handoff** (latency of passing work between threads).
+
+The repo is at the **skeleton stage**: every benchmark is a stub that builds, runs, and emits a placeholder
+result line. Real measurement logic is added per focus area later.
+
+## Architecture: the result contract is the only coupling
+
+The design is deliberately decoupled. Each benchmark is an independently runnable executable that prints
+**one JSON object per line to stdout** in a shared schema (see `docs/result-contract.md`). That contract is
+the *only* thing tying benchmarks to the future comparison harness:
+
+- Benchmarks stay plain executables with no harness dependency.
+- The harness (placeholder in `harness/`, not yet implemented) stays a plain stdout-line reader with no
+  per-language build knowledge — it runs an artifact, parses the lines, aligns by `focus_area` + `metric`.
+
+**Consequence for any change:** stdout is for result lines only — send logs/progress/diagnostics to stderr.
+A benchmark reporting multiple metrics prints one line per metric. Each language has one canonical emitter;
+reuse it rather than hand-rolling JSON:
+- Rust — hand-rendered `println!` in each `src/main.rs` (zero deps).
+- Go — `internal/result` package (`result.Emit`).
+- Java — `net.knego.hiperf.common.Result#emit` in the `:common` subproject.
+
+## Layout is language-first
+
+Top-level dirs are the languages, each a self-contained idiomatic workspace with one runnable unit per focus
+area. This keeps each toolchain (Cargo workspace / single Go module / single Gradle build) intact — do not
+fragment a language's build across focus-area dirs. Cross-language side-by-side comparison is the harness's
+job, not the directory layout's.
+
+## Build & run
+
+```sh
+# Rust — Cargo workspace, crate per focus area
+cd rust && cargo build --release
+cargo run --release -p network-rtt          # | filesystem-write | thread-handoff
+
+# Go — single module, cmd/ binary per area
+cd go && go build ./... && go vet ./...
+go run ./cmd/network-rtt                     # | filesystem-write | thread-handoff
+
+# Java — single Gradle build, app subproject per area + :common, JDK 21 toolchain
+cd java && ./gradlew build
+./gradlew :network-rtt:run -q                # | :filesystem-write:run | :thread-handoff:run
+```
+
+The Gradle **wrapper is checked in** (`java/gradlew`, `java/gradle/wrapper/`); always invoke Gradle via
+`./gradlew`, not a system `gradle`. There are no tests yet — when adding them, use each language's standard
+runner (`cargo test`, `go test ./...`, `./gradlew test`).
+
+## Toolchain versions
+
+Rust 1.96 · Go 1.22 · Java 21 · Gradle 8.10.2 (via wrapper).
+
+## Adding a real benchmark
+
+Replace a stub's placeholder emit (`metric: "placeholder"`, `notes: "stub"`) with real measurement that emits
+the same contract. Keep the focus-area names exact (`network-rtt`, `filesystem-write`, `thread-handoff`) and
+`language` matching the directory — the harness aligns results on these strings. The Rust release profile is
+tuned for benchmarking (fat LTO, `codegen-units = 1`, `panic = "abort"`) in `rust/Cargo.toml`.
+
+Design rationale lives in `docs/superpowers/specs/`.
