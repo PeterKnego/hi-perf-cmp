@@ -2,13 +2,36 @@
 
 Comparing high-performance code artifacts across **Rust**, **Java** and **Go**.
 
-This project is an exploration in high-performance code, with emphasis on
-comparison between the three languages across three focus areas, each with one or
-more **experiments** (variants) compared on a grid of **experiment × language**:
+An exploration of high-performance code where the point is the *comparison*: the
+same problem, solved with the same methodology in each language, measured under
+identical conditions, so the numbers are apples-to-apples. Work is organized as a
+grid of **experiment × language** within three focus areas:
 
 - **network-rtt** — request/response round-trip time. Experiments: `tcp`, `udp`, `quic`.
 - **filesystem-write** — filesystem write throughput / latency _(stub)_.
 - **thread-handoff** — latency of handing work between threads _(stub)_.
+
+## Features
+
+- **Three languages, one methodology.** Each language has a shared `bench-common`
+  library (identical stats — nearest-rank percentiles + mean — env-driven config,
+  and the timed measurement loop) so differences reflect the language/runtime, not
+  the harness. Algorithms, payloads, warmup, and iteration counts are matched.
+- **Experiment × language matrix.** Each experiment is its own runnable artifact
+  (`network-rtt-tcp`, …); the matrix is sparse-friendly, so a language need not
+  implement every experiment.
+- **network-rtt across TCP, UDP, and QUIC.** Strict ping-pong latency (one request
+  outstanding), `TCP_NODELAY`, connected UDP with timeout-as-error, and QUIC over a
+  long-lived bidi stream — measured the same way for fair transport comparison.
+- **Real cross-host benchmarking.** `bench-infra/` provisions a 2-node AWS fleet
+  (Terraform + Ansible) on NVMe-bearing `c6id` instances and runs the matrix on
+  real hardware over a real network — never loopback for network results.
+- **Uniform result contract.** Every benchmark emits one JSON line per metric in a
+  shared schema (`language, focus_area, experiment, metric, value, unit, samples`),
+  the only coupling between benchmarks and tooling.
+- **Versioned journal + regression tracking.** Runs are recorded in `journal/`,
+  correlated with the producing commit, and compared with the `tools/journal` CLI,
+  which flags regressions (direction-aware, threshold-based) against a baseline.
 
 ## Layout
 
