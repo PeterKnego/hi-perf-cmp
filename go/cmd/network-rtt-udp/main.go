@@ -20,9 +20,11 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/peterknego/hi-perf-cmp/go/internal/bench"
@@ -122,6 +124,12 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 	}
 	defer conn.Close()
 
+	rc, err := conn.SyscallConn()
+	if err != nil {
+		return nil, fmt.Errorf("udp: rawconn: %w", err)
+	}
+	errRecvTimeout := errors.New("udp recv timed out (datagram loss)")
+
 	send := cfg.Payload()
 	recv := make([]byte, cfg.PayloadBytes)
 
@@ -129,12 +137,31 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 		if _, err := conn.Write(send); err != nil {
 			return fmt.Errorf("udp: write: %w", err)
 		}
-		if err := conn.SetReadDeadline(time.Now().Add(udpReadTimeout)); err != nil {
-			return fmt.Errorf("udp: set deadline: %w", err)
+		deadline := time.Now().Add(udpReadTimeout)
+		var n int
+		var rerr error
+		cberr := rc.Read(func(fd uintptr) bool {
+			for spins := 0; ; spins++ {
+				nn, e := syscall.Read(int(fd), recv)
+				if e == syscall.EINTR {
+					continue
+				}
+				if e == syscall.EAGAIN {
+					if spins&255 == 0 && time.Now().After(deadline) {
+						rerr = errRecvTimeout
+						return true // never park: return from rc.Read
+					}
+					continue
+				}
+				n, rerr = nn, e
+				return true
+			}
+		})
+		if cberr != nil {
+			return fmt.Errorf("udp: rawread: %w", cberr)
 		}
-		n, err := conn.Read(recv)
-		if err != nil {
-			return fmt.Errorf("udp: read: %w", err)
+		if rerr != nil {
+			return fmt.Errorf("udp: read: %w", rerr)
 		}
 		if n != len(send) || !bytes.Equal(recv[:n], send) {
 			return fmt.Errorf("udp: echo mismatch")
