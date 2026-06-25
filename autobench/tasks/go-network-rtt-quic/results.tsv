@@ -1,1 +1,3 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
+a9a8ebe	103241	163652	105736	keep	baseline (unmodified cell, median-of-5)
+ef32ca9	101301	161761	104161	discard	GOMAXPROCS(2): ~2% (within noise), adds hardcoded core count (cross-host hazard); quic.Config knobs irrelevant for 1-outstanding 64B -- baseline stays (median-of-7)
