@@ -174,7 +174,7 @@ fn main() {
     let Some(spec) = task_spec(&args.task) else {
         let mut v = Verdict::new(Status::UnknownTask, "setup");
         v.stderr_tail = Some(format!(
-            "unknown task {:?}; known: {{rust,go,java}}-network-rtt-{{tcp,udp}}",
+            "unknown task {:?}; known: {{rust,go,java}}-network-rtt-{{tcp,udp,quic}}",
             args.task
         ));
         emit_and_exit(&v);

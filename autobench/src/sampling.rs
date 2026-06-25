@@ -17,20 +17,24 @@ use std::time::{Duration, Instant};
 
 /// Transport of a `Network` cell — selects the port env var and the
 /// server-readiness probe. TCP detects readiness by connecting to the
-/// listener; UDP (connectionless) sends a probe datagram and waits for the
-/// echo server to reflect it.
+/// listener; UDP (connectionless) sends a probe datagram and waits for the echo
+/// server to reflect it; QUIC (over UDP, but speaks a TLS handshake so it won't
+/// echo a raw datagram) detects readiness by a UDP bind-probe — the port
+/// becoming `AddrInUse` means the server has bound it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Transport {
     Tcp,
     Udp,
+    Quic,
 }
 
 impl Transport {
     /// Map a TaskSpec `experiment` to a transport. Unknown experiments default
-    /// to TCP (the only other network experiment, `quic`, is not wired here).
+    /// to TCP.
     pub fn from_experiment(experiment: &str) -> Self {
         match experiment {
             "udp" => Transport::Udp,
+            "quic" => Transport::Quic,
             _ => Transport::Tcp,
         }
     }
@@ -40,6 +44,7 @@ impl Transport {
         match self {
             Transport::Tcp => "RTT_TCP_PORT",
             Transport::Udp => "RTT_UDP_PORT",
+            Transport::Quic => "RTT_QUIC_PORT",
         }
     }
 }
@@ -153,6 +158,32 @@ fn wait_for_udp_echo(port: u16, timeout: Duration) -> bool {
     false
 }
 
+/// Wait until a QUIC server has bound the UDP `port` on `127.0.0.1`, or
+/// `timeout` elapses. A QUIC server won't echo a raw datagram (it expects a TLS
+/// handshake), so we instead probe by trying to bind the port ourselves: while
+/// our bind SUCCEEDS the server hasn't bound yet (we release immediately and
+/// retry); once it FAILS with `AddrInUse` the server holds the port → ready.
+/// The QUIC servers don't set SO_REUSEPORT, so this overlap detection is
+/// reliable; QUIC's handshake retransmission covers any brief gap between the
+/// bind and the endpoint being ready to accept.
+fn wait_for_udp_bind_probe(port: u16, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        match UdpSocket::bind(("127.0.0.1", port)) {
+            // We could bind it → the server has not bound yet. Release at once
+            // (minimizing any window in which we'd block the server's bind) and
+            // retry after a short backoff.
+            Ok(sock) => {
+                drop(sock);
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            // Bind refused → the port is taken by the server → ready.
+            Err(_) => return true,
+        }
+    }
+    false
+}
+
 /// Outcome of one two-process network run.
 pub struct NetworkRun {
     /// True if the client exited 0.
@@ -191,6 +222,7 @@ pub fn run_network_once(
     let ready = match transport {
         Transport::Tcp => wait_for_bind(port, Duration::from_secs(10)),
         Transport::Udp => wait_for_udp_echo(port, Duration::from_secs(10)),
+        Transport::Quic => wait_for_udp_bind_probe(port, Duration::from_secs(10)),
     };
     if !ready {
         // Drain whatever the server logged to help diagnose the bind failure.
@@ -296,16 +328,18 @@ mod tests {
     }
 
     #[test]
-    fn transport_from_experiment_maps_udp_and_defaults_tcp() {
+    fn transport_from_experiment_maps_each_and_defaults_tcp() {
         assert_eq!(Transport::from_experiment("udp"), Transport::Udp);
+        assert_eq!(Transport::from_experiment("quic"), Transport::Quic);
         assert_eq!(Transport::from_experiment("tcp"), Transport::Tcp);
-        // Unknown / unwired experiments default to TCP.
-        assert_eq!(Transport::from_experiment("quic"), Transport::Tcp);
+        // Unknown experiments default to TCP.
+        assert_eq!(Transport::from_experiment("mystery"), Transport::Tcp);
     }
 
     #[test]
     fn transport_selects_port_env() {
         assert_eq!(Transport::Tcp.port_env(), "RTT_TCP_PORT");
         assert_eq!(Transport::Udp.port_env(), "RTT_UDP_PORT");
+        assert_eq!(Transport::Quic.port_env(), "RTT_QUIC_PORT");
     }
 }

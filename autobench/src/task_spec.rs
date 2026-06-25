@@ -180,6 +180,62 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
         }),
+        "rust-network-rtt-quic" => Some(TaskSpec {
+            task: "rust-network-rtt-quic",
+            language: "rust",
+            focus_area: "network-rtt",
+            experiment: "quic",
+            kind: Kind::Network,
+            build: &["cargo", "build", "--release", "-p", "network-rtt-quic"],
+            build_dir: "rust",
+            run: &["cargo", "run", "--release", "-q", "-p", "network-rtt-quic"],
+            run_dir: "rust",
+            gate_a: &["cargo", "test"],
+            gate_a_dir: "rust",
+            primary_metric: "rtt_p50",
+            direction: Direction::Minimize,
+        }),
+        "go-network-rtt-quic" => Some(TaskSpec {
+            task: "go-network-rtt-quic",
+            language: "go",
+            focus_area: "network-rtt",
+            experiment: "quic",
+            kind: Kind::Network,
+            build: &[
+                "go",
+                "build",
+                "-o",
+                "bin/network-rtt-quic",
+                "./cmd/network-rtt-quic",
+            ],
+            build_dir: "go",
+            run: &["./bin/network-rtt-quic"],
+            run_dir: "go",
+            gate_a: &["go", "test", "./..."],
+            gate_a_dir: "go",
+            primary_metric: "rtt_p50",
+            direction: Direction::Minimize,
+        }),
+        "java-network-rtt-quic" => Some(TaskSpec {
+            task: "java-network-rtt-quic",
+            language: "java",
+            focus_area: "network-rtt",
+            experiment: "quic",
+            kind: Kind::Network,
+            build: &["./gradlew", "--quiet", ":network-rtt-quic:installDist"],
+            build_dir: "java",
+            run: &["./network-rtt-quic/build/install/network-rtt-quic/bin/network-rtt-quic"],
+            run_dir: "java",
+            gate_a: &[
+                "./gradlew",
+                "--quiet",
+                ":network-rtt-quic:test",
+                ":common:test",
+            ],
+            gate_a_dir: "java",
+            primary_metric: "rtt_p50",
+            direction: Direction::Minimize,
+        }),
         _ => None,
     }
 }
@@ -250,6 +306,22 @@ mod tests {
             let s = task_spec(task).unwrap();
             assert_eq!(s.language, lang);
             assert_eq!(s.experiment, "udp");
+            assert_eq!(s.focus_area, "network-rtt");
+            assert_eq!(s.kind, Kind::Network);
+            assert_eq!(s.primary_metric, "rtt_p50");
+        }
+    }
+
+    #[test]
+    fn quic_cells_resolve_with_quic_experiment() {
+        for (task, lang) in [
+            ("rust-network-rtt-quic", "rust"),
+            ("go-network-rtt-quic", "go"),
+            ("java-network-rtt-quic", "java"),
+        ] {
+            let s = task_spec(task).unwrap();
+            assert_eq!(s.language, lang);
+            assert_eq!(s.experiment, "quic");
             assert_eq!(s.focus_area, "network-rtt");
             assert_eq!(s.kind, Kind::Network);
             assert_eq!(s.primary_metric, "rtt_p50");
