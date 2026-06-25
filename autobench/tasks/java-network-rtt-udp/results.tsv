@@ -1,3 +1,4 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
 6750573	29900	59530	31078	keep	baseline (unmodified cell, median-of-5)
 cc1cddc	7490	21489	8175	keep	NIO DatagramChannel non-blocking: client deadline-bounded hot-spin (preserves loss error), responder bounded-spin(1000)-then-block; -75% p50, -64% p99 (median-of-7)
+fe4b8f3	6970	20699	7956	keep	SPIN_BUDGET 1000->4000: consistent ~6% p50 gain, no regression (responder catches more before blocking fallback) (median-of-9)
