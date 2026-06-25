@@ -14,6 +14,7 @@ import net.knego.hiperf.common.Measure;
 import tech.kwik.core.QuicClientConnection;
 import tech.kwik.core.QuicConnection;
 import tech.kwik.core.QuicStream;
+import tech.kwik.core.StreamClosedException;
 import tech.kwik.core.log.Logger;
 import tech.kwik.core.log.NullLogger;
 import tech.kwik.core.server.ApplicationProtocolConnection;
@@ -39,6 +40,18 @@ final class QuicRtt {
     private static final Logger LOG = new NullLogger();
     // Generous per-stream receive buffer so a single bidi stream never stalls.
     private static final long STREAM_BUFFER = 1L << 20;
+    // Idle timeout: kept short so a stalled connection (see MAX_ATTEMPTS below)
+    // surfaces in seconds rather than the QUIC default tens of seconds. The
+    // ping-pong is continuous, so this never fires during a healthy run.
+    private static final int IDLE_TIMEOUT_SECONDS = 5;
+    // Kwik 0.10.10 occasionally wedges its loss-recovery under spurious PTO
+    // (scheduling-induced ACK delays > PTO on a busy host), stalling the
+    // connection until the idle timeout closes it. That is a transport-library
+    // fault, not a latency result, so a measurement attempt that stalls is
+    // discarded and re-run on a fresh connection. Each attempt is an independent
+    // full clean measurement, so retrying does not bias the reported samples.
+    // Echo-byte mismatches are NOT retried — they remain a hard failure.
+    private static final int MAX_ATTEMPTS = 5;
 
     private QuicRtt() {}
 
@@ -91,28 +104,39 @@ final class QuicRtt {
      * assertion. Returns the measured samples.
      */
     static long[] client(String host, int port, Config cfg) throws Exception {
-        // Kwik's noServerCertificateCheck() prints a SECURITY WARNING to
-        // System.out; stdout is reserved for result lines, so build the
-        // connection with stdout temporarily pointed at stderr, then restore it.
-        QuicClientConnection connection = buildClient(host, port);
-        connection.connect();
-        try {
-            // One long-lived client-initiated bidirectional stream.
-            QuicStream stream = connection.createStream(true);
-            InputStream in = stream.getInputStream();
-            OutputStream out = stream.getOutputStream();
-            int n = cfg.payloadBytes();
+        StreamClosedException lastStall = null;
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            QuicClientConnection connection = buildClient(host, port);
+            connection.connect();
+            try {
+                // One long-lived client-initiated bidirectional stream.
+                QuicStream stream = connection.createStream(true);
+                InputStream in = stream.getInputStream();
+                OutputStream out = stream.getOutputStream();
+                int n = cfg.payloadBytes();
 
-            byte[] send = new byte[n];
-            for (int i = 0; i < n; i++) {
-                send[i] = (byte) (i & 0xFF);
+                byte[] send = new byte[n];
+                for (int i = 0; i < n; i++) {
+                    send[i] = (byte) (i & 0xFF);
+                }
+                byte[] recv = new byte[n];
+
+                return Measure.run(cfg, () -> roundTrip(in, out, send, recv, n));
+            } catch (StreamClosedException e) {
+                // Transport stalled mid-measurement (Kwik loss-recovery wedge).
+                // Discard this partial attempt and re-measure on a fresh
+                // connection. Echo mismatches are a plain IOException and are
+                // NOT caught here, so they remain a hard failure.
+                lastStall = e;
+                System.err.println("network-rtt-quic: connection stalled (Kwik loss-recovery);"
+                        + " retrying measurement " + attempt + "/" + MAX_ATTEMPTS + ": "
+                        + e.getMessage());
+            } finally {
+                connection.close();
             }
-            byte[] recv = new byte[n];
-
-            return Measure.run(cfg, () -> roundTrip(in, out, send, recv, n));
-        } finally {
-            connection.close();
         }
+        throw new IOException("QUIC measurement failed after " + MAX_ATTEMPTS
+                + " attempts: connection stalled each time (Kwik loss-recovery)", lastStall);
     }
 
     /**
@@ -127,7 +151,7 @@ final class QuicRtt {
                     .uri(java.net.URI.create("https://" + host + ":" + port))
                     .applicationProtocol(ALPN)
                     .noServerCertificateCheck()
-                    .maxIdleTimeout(Duration.ofSeconds(30))
+                    .maxIdleTimeout(Duration.ofSeconds(IDLE_TIMEOUT_SECONDS))
                     .defaultStreamReceiveBufferSize(STREAM_BUFFER)
                     .connectTimeout(Duration.ofSeconds(10))
                     .logger(LOG)
@@ -142,9 +166,11 @@ final class QuicRtt {
         out.write(send, 0, n);
         out.flush();
         if (!readFully(in, recv, n)) {
-            throw new IOException("QUIC echo server closed stream mid-round-trip");
+            // Stream/connection closed under us — retryable (see client()).
+            throw new StreamClosedException("QUIC echo server closed stream mid-round-trip");
         }
         if (!Arrays.equals(send, recv)) {
+            // Correctness violation — NOT retryable.
             throw new IOException("QUIC echo mismatch: received bytes differ from sent");
         }
     }
@@ -165,7 +191,7 @@ final class QuicRtt {
     private static ServerConnector buildServer(DatagramSocket socket, int payloadBytes)
             throws Exception {
         ServerConnectionConfig config = ServerConnectionConfig.builder()
-                .maxIdleTimeoutInSeconds(30)
+                .maxIdleTimeoutInSeconds(IDLE_TIMEOUT_SECONDS)
                 .maxOpenPeerInitiatedBidirectionalStreams(10)
                 .maxBidirectionalStreamBufferSize(STREAM_BUFFER)
                 .maxConnectionBufferSize(STREAM_BUFFER * 2)
