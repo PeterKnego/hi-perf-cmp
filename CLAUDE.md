@@ -15,25 +15,26 @@ result line. Real measurement logic is added per focus area later.
 
 The design is deliberately decoupled. Each benchmark is an independently runnable executable that prints
 **one JSON object per line to stdout** in a shared schema (see `docs/result-contract.md`). That contract is
-the *only* thing tying benchmarks to the future comparison harness:
+the *only* thing tying benchmarks to the downstream tooling:
 
-- Benchmarks stay plain executables with no harness dependency.
-- The harness (placeholder in `harness/`, not yet implemented) stays a plain stdout-line reader with no
-  per-language build knowledge — it runs an artifact, parses the lines, aligns by `focus_area` + `metric`.
+- Benchmarks stay plain executables with no tooling dependency.
+- The `tools/journal` CLI is a plain stdout-line reader with no per-language build knowledge — it parses the
+  lines and aligns on the cell key `(focus_area, experiment, language, metric)`.
 
 **Consequence for any change:** stdout is for result lines only — send logs/progress/diagnostics to stderr.
-A benchmark reporting multiple metrics prints one line per metric. Each language has one canonical emitter;
-reuse it rather than hand-rolling JSON:
-- Rust — hand-rendered `println!` in each `src/main.rs` (zero deps).
-- Go — `internal/result` package (`result.Emit`).
-- Java — `net.knego.hiperf.common.Result#emit` in the `:common` subproject.
+A benchmark reporting multiple metrics prints one line per metric. Each language has one shared bench library
+that owns Stats, env-config parsing, the timed loop, and result emission (including `experiment`); reuse it
+rather than hand-rolling JSON:
+- Rust — `bench-common` crate (`result::emit`).
+- Go — `internal/bench` package (`bench.Emit`).
+- Java — `net.knego.hiperf.common` (`Result#emit`) in the `:common` subproject.
 
 ## Layout is language-first
 
 Top-level dirs are the languages, each a self-contained idiomatic workspace with one runnable unit per focus
 area. This keeps each toolchain (Cargo workspace / single Go module / single Gradle build) intact — do not
-fragment a language's build across focus-area dirs. Cross-language side-by-side comparison is the harness's
-job, not the directory layout's.
+fragment a language's build across focus-area dirs. Cross-language/experiment comparison is the
+`tools/journal` CLI's job, not the directory layout's.
 
 ## Build & run
 
@@ -76,8 +77,8 @@ local-dev convenience, never a reported result.
 
 Replace a stub's placeholder emit (`metric: "placeholder"`, `notes: "stub"`) with real measurement that emits
 the same contract. Keep the focus-area names exact (`network-rtt`, `filesystem-write`, `thread-handoff`) and
-`language` matching the directory — the harness aligns results on these strings. For the Rust release profile
-and workspace conventions, see below.
+`language` matching the directory, and emit the `experiment` field — the `tools/journal` CLI aligns results on
+`(focus_area, experiment, language, metric)`. For the Rust release profile and workspace conventions, see below.
 
 ## Rust workspace conventions
 

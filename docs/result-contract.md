@@ -2,12 +2,14 @@
 
 Every benchmark — in every language, for every focus area — is an independently
 runnable artifact that prints **one JSON object per line** to **stdout**. This is
-the only coupling between the benchmarks and the (future) comparison harness:
-the harness runs an artifact and parses the line(s) it emits.
+the only coupling between the benchmarks and the downstream tooling: the
+`tools/journal` CLI runs an artifact (or reads a collected run) and parses the
+line(s) it emits.
 
 Keeping the contract this small means each benchmark stays a plain executable
-with no harness dependency, and the harness stays a plain line reader with no
-per-language knowledge.
+with no tooling dependency, and the journal stays a plain line reader with no
+per-language knowledge. The journal records runs over time and compares them —
+see `journal/README.md`.
 
 ## Schema
 

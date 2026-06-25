@@ -1,0 +1,16 @@
+timestamp=20260620T120000Z
+instance_type=c7g.large
+vcpus=2
+mem_mb=3922
+kernel=6.8.0-aws
+rtt_payload_bytes=64
+rtt_warmup=1000
+rtt_iterations=100000
+rtt_tcp_port=9000
+rtt_udp_port=9001
+rtt_quic_port=9002
+languages=rust,java,go
+experiments=network-rtt/tcp,network-rtt/udp,network-rtt/quic
+git_sha=aaaaaaaaaaaa000000000000baselinesha
+node0_role=node0 (client/driver + single-host benches)
+node1_role=node1 (network-rtt responder)

@@ -1,0 +1,4 @@
+{"language":"rust","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_p50","value":63000,"unit":"ns","samples":100000}
+{"language":"rust","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_p99","value":81200,"unit":"ns","samples":100000}
+{"language":"java","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_p50","value":34151.0,"unit":"ns","samples":100000,"notes":"warmed"}
+{"language":"rust","focus_area":"filesystem-write","experiment":"placeholder","metric":"placeholder","value":0,"unit":"ns","samples":0,"notes":"stub"}
