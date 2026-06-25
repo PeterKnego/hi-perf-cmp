@@ -8,20 +8,12 @@ import (
 	"time"
 )
 
-// measureTCP starts an in-process TCP echo server on loopback, connects one
-// client with TCP_NODELAY set, runs warmup then cfg.Iterations strict
-// ping-pong round trips, and returns the per-round-trip elapsed nanoseconds.
-func measureTCP(cfg Config) ([]int64, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, fmt.Errorf("tcp: listen: %w", err)
-	}
-	defer ln.Close()
-
-	srvErr := make(chan error, 1)
-	go tcpEchoServer(ln, cfg.PayloadBytes, srvErr)
-
-	conn, err := net.Dial("tcp", ln.Addr().String())
+// tcpClient connects to addr with TCP_NODELAY set, runs warmup then
+// cfg.Iterations strict ping-pong round trips, and returns the per-round-trip
+// elapsed nanoseconds. One request is outstanding at a time. The echoed bytes
+// are asserted equal to the sent bytes.
+func tcpClient(addr string, cfg Config) ([]int64, error) {
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("tcp: dial: %w", err)
 	}
@@ -71,38 +63,43 @@ func measureTCP(cfg Config) ([]int64, error) {
 		samples[i] = time.Since(start).Nanoseconds()
 	}
 
-	// Close the client so the server's echo loop sees EOF and exits cleanly,
-	// then surface any server-side error that isn't a normal close.
-	conn.Close()
-	ln.Close()
-	if err := <-srvErr; err != nil {
-		return nil, err
-	}
 	return samples, nil
 }
 
-// tcpEchoServer accepts one connection and echoes fixed-size payloads back
-// until the client disconnects.
-func tcpEchoServer(ln net.Listener, payloadBytes int, errc chan<- error) {
-	conn, err := ln.Accept()
-	if err != nil {
-		errc <- nil // listener closed; not an error worth reporting
-		return
+// tcpServe binds a TCP listener at addr and echoes fixed-size payloads back to
+// every client connection, serving until ln is closed. Each accepted
+// connection is handled in its own goroutine. It returns only when the
+// listener stops accepting (e.g. it was closed).
+func tcpServe(ln net.Listener, payloadBytes int) error {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return err
+		}
+		go tcpEchoConn(conn, payloadBytes)
 	}
+}
+
+// tcpEchoConn echoes fixed-size payloads back on conn until the client
+// disconnects or an error occurs. Errors are logged to stderr.
+func tcpEchoConn(conn net.Conn, payloadBytes int) {
 	defer conn.Close()
+
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		_ = tcpConn.SetNoDelay(true)
+	}
 
 	buf := make([]byte, payloadBytes)
 	for {
 		if _, err := io.ReadFull(conn, buf); err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				errc <- nil
-				return
+				return // client disconnected; normal
 			}
-			errc <- fmt.Errorf("tcp echo: read: %w", err)
+			logf("tcp echo: read: %v", err)
 			return
 		}
 		if _, err := conn.Write(buf); err != nil {
-			errc <- fmt.Errorf("tcp echo: write: %w", err)
+			logf("tcp echo: write: %v", err)
 			return
 		}
 	}

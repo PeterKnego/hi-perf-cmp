@@ -1,0 +1,90 @@
+---
+- name: Install base build dependencies + JDK 21
+  ansible.builtin.apt:
+    name:
+      - git
+      - unzip
+      - curl
+      - rsync
+      - build-essential
+      - pkg-config
+      - "openjdk-{{ jdk_version }}-jdk-headless"
+    update_cache: true
+    state: present
+
+# --- Java ---
+- name: Detect JAVA_HOME
+  ansible.builtin.shell: "dirname $(dirname $(readlink -f $(which javac)))"
+  register: java_home_detect
+  changed_when: false
+
+- name: Export JAVA_HOME for all shells
+  ansible.builtin.copy:
+    dest: /etc/profile.d/java.sh
+    content: "export JAVA_HOME={{ java_home_detect.stdout }}\nexport PATH=$JAVA_HOME/bin:$PATH\n"
+    mode: "0644"
+
+# --- Rust (rustup stable into remote_home/.cargo) ---
+- name: Install rustup + stable toolchain (idempotent)
+  ansible.builtin.shell: |
+    if ! [ -x "{{ remote_home }}/.cargo/bin/cargo" ]; then
+      curl -sSf https://sh.rustup.rs | CARGO_HOME={{ remote_home }}/.cargo RUSTUP_HOME={{ remote_home }}/.rustup sh -s -- -y --default-toolchain stable --profile minimal
+    fi
+  args:
+    creates: "{{ remote_home }}/.cargo/bin/cargo"
+
+- name: Export cargo on PATH
+  ansible.builtin.copy:
+    dest: /etc/profile.d/cargo.sh
+    content: "export CARGO_HOME={{ remote_home }}/.cargo\nexport RUSTUP_HOME={{ remote_home }}/.rustup\nexport PATH={{ remote_home }}/.cargo/bin:$PATH\n"
+    mode: "0644"
+
+# --- Go (official tarball into /usr/local/go) ---
+- name: Check installed Go version
+  ansible.builtin.shell: "{{ go_root }}/bin/go version 2>/dev/null | awk '{print $3}' || true"
+  register: go_installed
+  changed_when: false
+
+- name: Install Go from the official tarball
+  when: go_installed.stdout != ('go' ~ go_version)
+  block:
+    - name: Download Go tarball
+      ansible.builtin.get_url:
+        url: "https://go.dev/dl/go{{ go_version }}.linux-amd64.tar.gz"
+        dest: "/tmp/go{{ go_version }}.linux-amd64.tar.gz"
+        mode: "0644"
+
+    - name: Remove any previous Go install
+      ansible.builtin.file:
+        path: "{{ go_root }}"
+        state: absent
+
+    - name: Extract Go to /usr/local
+      ansible.builtin.unarchive:
+        src: "/tmp/go{{ go_version }}.linux-amd64.tar.gz"
+        dest: /usr/local
+        remote_src: true
+
+- name: Export Go on PATH
+  ansible.builtin.copy:
+    dest: /etc/profile.d/go.sh
+    content: "export GOROOT={{ go_root }}\nexport PATH={{ go_root }}/bin:$PATH\n"
+    mode: "0644"
+
+# --- Provenance ---
+- name: Record toolchain versions (provenance)
+  ansible.builtin.shell: |
+    javac -version 2>&1
+    {{ remote_home }}/.cargo/bin/rustc --version
+    {{ go_root }}/bin/go version
+  environment:
+    # rustup proxy needs RUSTUP_HOME to find the toolchain installed above
+    # (non-login shells don't source /etc/profile.d/cargo.sh).
+    CARGO_HOME: "{{ remote_home }}/.cargo"
+    RUSTUP_HOME: "{{ remote_home }}/.rustup"
+  register: tool_versions
+  changed_when: false
+
+- name: Show toolchain versions
+  ansible.builtin.debug:
+    var: tool_versions.stdout_lines

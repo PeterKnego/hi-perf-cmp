@@ -10,15 +10,23 @@ import java.net.Socket;
 import java.util.Arrays;
 
 /**
- * TCP ping-pong RTT measurement over loopback. Starts an in-process echo
- * server on its own thread, opens one client connection with Nagle disabled,
- * and times {@code RTT_ITERATIONS} synchronous round trips.
+ * TCP ping-pong RTT measurement. Splits into a {@link #serve} responder that
+ * binds an address and echoes fixed-size payloads back forever, and a
+ * {@link #client} measurement loop that opens one connection with Nagle
+ * disabled and times {@code RTT_ITERATIONS} synchronous round trips.
+ *
+ * <p>{@link #loopback} wires an in-process server on an ephemeral 127.0.0.1
+ * port to a client, preserving the original local-dev behavior.
  */
 final class TcpRtt {
 
     private TcpRtt() {}
 
-    static long[] measure(Config cfg) throws IOException, InterruptedException {
+    /**
+     * Loopback mode: start an in-process echo server on an ephemeral 127.0.0.1
+     * port and run the client against it, returning the measured samples.
+     */
+    static long[] loopback(Config cfg) throws IOException, InterruptedException {
         InetAddress loopback = InetAddress.getLoopbackAddress();
         try (ServerSocket server = new ServerSocket()) {
             server.bind(new InetSocketAddress(loopback, 0));
@@ -29,23 +37,62 @@ final class TcpRtt {
             serverThread.setDaemon(true);
             serverThread.start();
 
-            try (Socket client = new Socket()) {
-                client.connect(new InetSocketAddress(loopback, port));
-                client.setTcpNoDelay(true);
-
-                long[] samples = runClient(client, cfg);
+            try {
+                long[] samples = client(loopback, port, cfg);
                 serverThread.join(2000);
                 return samples;
+            } finally {
+                server.close();
             }
         }
     }
 
+    /**
+     * Server/responder: bind {@code address:port} and echo fixed-size payloads
+     * for every accepted connection until the process is killed. Each
+     * connection is served on its own daemon thread. Logs to stderr.
+     */
+    static void serve(InetAddress address, int port, int payloadBytes) throws IOException {
+        try (ServerSocket server = new ServerSocket()) {
+            server.bind(new InetSocketAddress(address, port));
+            System.err.println("network-rtt: TCP responder listening on "
+                    + address.getHostAddress() + ":" + port);
+            while (true) {
+                Socket conn = server.accept();
+                Thread t = new Thread(() -> serveConnection(conn, payloadBytes),
+                        "tcp-echo-conn");
+                t.setDaemon(true);
+                t.start();
+            }
+        }
+    }
+
+    /**
+     * Client measurement loop: connect to {@code host:port} (Nagle disabled),
+     * run warmup, then time {@code RTT_ITERATIONS} synchronous round trips with
+     * an echo-byte equality assertion. Returns the pre-allocated samples array.
+     */
+    static long[] client(InetAddress host, int port, Config cfg)
+            throws IOException {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(host, port));
+            socket.setTcpNoDelay(true);
+            return runClient(socket, cfg);
+        }
+    }
+
+    /** Convenience overload resolving {@code cfg.host()} for client mode. */
+    static long[] client(Config cfg) throws IOException {
+        InetAddress host = InetAddress.getByName(cfg.host());
+        return client(host, cfg.tcpPort(), cfg);
+    }
+
     /** Echoes a fixed-size payload back for every round trip until the client closes. */
-    private static void runEchoServer(ServerSocket server, int payloadBytes) {
-        try (Socket conn = server.accept()) {
-            conn.setTcpNoDelay(true);
-            InputStream in = conn.getInputStream();
-            OutputStream out = conn.getOutputStream();
+    private static void serveConnection(Socket conn, int payloadBytes) {
+        try (Socket c = conn) {
+            c.setTcpNoDelay(true);
+            InputStream in = c.getInputStream();
+            OutputStream out = c.getOutputStream();
             byte[] buf = new byte[payloadBytes];
             while (true) {
                 if (!readFully(in, buf, payloadBytes)) {
@@ -56,6 +103,15 @@ final class TcpRtt {
             }
         } catch (IOException e) {
             // Connection closed / reset on client shutdown is expected at end of run.
+        }
+    }
+
+    /** Echoes a single accepted connection (used by the in-process loopback server). */
+    private static void runEchoServer(ServerSocket server, int payloadBytes) {
+        try {
+            serveConnection(server.accept(), payloadBytes);
+        } catch (IOException e) {
+            // Server socket closed at end of run is expected.
         }
     }
 

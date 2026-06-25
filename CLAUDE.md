@@ -59,6 +59,19 @@ runner (`cargo test`, `go test ./...`, `./gradlew test`).
 
 Rust 1.96 · Go 1.22 · Java 21 · Gradle 8.10.2 (via wrapper).
 
+## Remote benchmarking (`bench-infra/`)
+
+`bench-infra/` provisions a 2-node AWS fleet (Terraform) and runs the benchmarks on it (Ansible),
+pulling result-contract lines to `bench-out/dist/<ts>/results.jsonl`. node0 = client/driver +
+single-host benchmarks; node1 = the `network-rtt` cross-host responder. Instances are NVMe-bearing
+`c6id` (local NVMe mounted at the bench home for `filesystem-write`). Workflow: `make init` → `make up`
+→ `make bench` → `make destroy` (creds in a gitignored `.env`). Real runs cost money and are
+**user-initiated** — never `terraform apply` automatically. See `bench-infra/README.md` and the spec.
+
+`network-rtt` has an `RTT_MODE` env contract — `loopback` (default, local dev), `server`, `client` —
+plus `RTT_HOST`/`RTT_TCP_PORT`/`RTT_UDP_PORT`. Real network RTT is **cross-host only**; loopback is a
+local-dev convenience, never a reported result.
+
 ## Adding a real benchmark
 
 Replace a stub's placeholder emit (`metric: "placeholder"`, `notes: "stub"`) with real measurement that emits

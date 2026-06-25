@@ -1,0 +1,59 @@
+---
+# Reset results state on node0 so re-runs start fresh.
+- name: Reset results dir on node0
+  ansible.builtin.shell: |
+    rm -rf {{ remote_results_dir }}
+    mkdir -p {{ remote_results_dir }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: node_role == "node0"
+
+- name: Ensure results dir is owned by the run user (node0)
+  ansible.builtin.file:
+    path: "{{ remote_results_dir }}"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  when: node_role == "node0"
+
+# Kill any stray benchmark processes left from a previous run on BOTH nodes.
+# Bracket trick on the pattern so it doesn't match pkill's own command line.
+- name: Clean stale benchmark processes (all nodes)
+  ansible.builtin.shell: |
+    pkill -9 -f '[t]arget/release/network-rtt' || true
+    pkill -9 -f '[b]in/network-rtt' || true
+    pkill -9 -f '[n]etworkrtt.Main' || true
+  changed_when: false
+
+- name: Ship run_bench.sh to every node
+  ansible.builtin.copy:
+    src: run_bench.sh
+    dest: "{{ remote_home }}/run_bench.sh"
+    mode: "0755"
+
+- name: Detect JAVA_HOME on every node (for the java runs)
+  ansible.builtin.shell: "dirname $(dirname $(readlink -f $(which javac)))"
+  register: java_home
+  changed_when: false
+
+# --- cross_host focus areas: server on node1, client on node0, per language ---
+- name: Run cross_host focus areas (network-rtt) per language, sequentially
+  ansible.builtin.include_tasks: cross_host.yml
+  loop: "{{ languages | product(focus_areas | selectattr('kind', 'equalto', 'cross_host') | list) | list }}"
+  loop_control:
+    loop_var: combo
+  vars:
+    language: "{{ combo.0 }}"
+    focus_area: "{{ combo.1.name }}"
+
+# --- local focus areas: run on node0 only ---
+- name: Run local focus areas per language (node0 only)
+  ansible.builtin.include_tasks: local.yml
+  loop: "{{ languages | product(focus_areas | selectattr('kind', 'equalto', 'local') | list) | list }}"
+  loop_control:
+    loop_var: combo
+  vars:
+    language: "{{ combo.0 }}"
+    focus_area: "{{ combo.1.name }}"
+  when: node_role == "node0"

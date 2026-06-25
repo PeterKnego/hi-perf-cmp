@@ -9,10 +9,14 @@ import java.net.SocketTimeoutException;
 import java.util.Arrays;
 
 /**
- * UDP ping-pong RTT measurement over loopback. Starts an in-process echo
- * server on its own thread, connects one client datagram socket to it, and
+ * UDP ping-pong RTT measurement. Splits into a {@link #serve} responder that
+ * binds an address and echoes each datagram back to its sender forever, and a
+ * {@link #client} measurement loop that connects one client datagram socket and
  * times {@code RTT_ITERATIONS} synchronous round trips. A receive timeout is
- * treated as a hard error (loopback UDP is effectively lossless).
+ * treated as a hard error.
+ *
+ * <p>{@link #loopback} wires an in-process server on an ephemeral 127.0.0.1
+ * port to a client, preserving the original local-dev behavior.
  */
 final class UdpRtt {
 
@@ -20,7 +24,11 @@ final class UdpRtt {
 
     private UdpRtt() {}
 
-    static long[] measure(Config cfg) throws IOException, InterruptedException {
+    /**
+     * Loopback mode: start an in-process echo server on an ephemeral 127.0.0.1
+     * port and run the client against it, returning the measured samples.
+     */
+    static long[] loopback(Config cfg) throws IOException, InterruptedException {
         InetAddress loopback = InetAddress.getLoopbackAddress();
         try (DatagramSocket server = new DatagramSocket(new InetSocketAddress(loopback, 0))) {
             int port = server.getLocalPort();
@@ -30,15 +38,45 @@ final class UdpRtt {
             serverThread.setDaemon(true);
             serverThread.start();
 
-            try (DatagramSocket client = new DatagramSocket()) {
-                client.connect(loopback, port);
-                client.setSoTimeout(SO_TIMEOUT_MS);
-                return runClient(client, cfg);
+            try {
+                return client(loopback, port, cfg);
             } finally {
                 server.close(); // unblock the server's receive
                 serverThread.join(2000);
             }
         }
+    }
+
+    /**
+     * Server/responder: bind {@code address:port} and echo each received
+     * datagram back to its sender until the process is killed. Logs to stderr.
+     */
+    static void serve(InetAddress address, int port, int payloadBytes) throws IOException {
+        try (DatagramSocket server = new DatagramSocket(new InetSocketAddress(address, port))) {
+            System.err.println("network-rtt: UDP responder listening on "
+                    + address.getHostAddress() + ":" + port);
+            runEchoServer(server, payloadBytes);
+        }
+    }
+
+    /**
+     * Client measurement loop: connect a datagram socket to {@code host:port}
+     * with a 1s read timeout (timeout = hard error), run warmup, then time
+     * {@code RTT_ITERATIONS} synchronous round trips with an echo-byte equality
+     * assertion. Returns the pre-allocated samples array.
+     */
+    static long[] client(InetAddress host, int port, Config cfg) throws IOException {
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.connect(host, port);
+            socket.setSoTimeout(SO_TIMEOUT_MS);
+            return runClient(socket, cfg);
+        }
+    }
+
+    /** Convenience overload resolving {@code cfg.host()} for client mode. */
+    static long[] client(Config cfg) throws IOException {
+        InetAddress host = InetAddress.getByName(cfg.host());
+        return client(host, cfg.udpPort(), cfg);
     }
 
     /** Echoes each received datagram back to its sender until the socket is closed. */

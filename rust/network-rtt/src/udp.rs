@@ -1,67 +1,43 @@
-//! UDP synchronous ping-pong RTT measurement over loopback.
+//! UDP synchronous ping-pong RTT measurement.
 //!
-//! An in-process echo server runs on its own thread; the client `connect()`s
-//! its socket and issues one datagram at a time, timing each round trip. A read
-//! timeout guards against (unexpected) loopback loss — a timeout is a hard
-//! error, never a retransmit.
+//! [`serve`] is an echo responder that bounces every datagram back to its
+//! sender until the process is killed. [`client`] `connect()`s its socket and
+//! issues one datagram at a time, timing each round trip. A read timeout guards
+//! against datagram loss — a timeout is a hard error, never a retransmit.
 
 use std::io::{self};
-use std::net::UdpSocket;
-use std::sync::mpsc;
-use std::thread;
+use std::net::{SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 
 use crate::config::Config;
 
-/// Run the UDP benchmark and return one elapsed-nanosecond sample per measured
-/// round trip (`cfg.iterations` of them).
-pub fn run(cfg: &Config) -> io::Result<Vec<u64>> {
-    let server_sock = UdpSocket::bind("127.0.0.1:0")?;
-    let server_addr = server_sock.local_addr()?;
-    let payload_bytes = cfg.payload_bytes;
-
-    // Signal used to stop the echo server once the client is done.
-    let (done_tx, done_rx) = mpsc::channel::<()>();
-
-    // Echo server: bounce every datagram back to its sender. A short read
-    // timeout lets the loop check the shutdown signal without blocking forever.
-    let server = thread::spawn(move || -> io::Result<()> {
-        server_sock.set_read_timeout(Some(Duration::from_millis(200)))?;
-        let mut buf = vec![0u8; payload_bytes];
-        loop {
-            match server_sock.recv_from(&mut buf) {
-                Ok((n, src)) => {
-                    server_sock.send_to(&buf[..n], src)?;
-                }
-                Err(e)
-                    if e.kind() == io::ErrorKind::WouldBlock
-                        || e.kind() == io::ErrorKind::TimedOut =>
-                {
-                    // Timed out waiting for a datagram; check for shutdown.
-                    if done_rx.try_recv().is_ok() {
-                        return Ok(());
-                    }
-                }
-                Err(e) => return Err(e),
-            }
-        }
-    });
-
-    let result = client_loop(server_addr, cfg);
-
-    // Tell the server to stop and wait for it.
-    let _ = done_tx.send(());
-    server
-        .join()
-        .map_err(|_| io::Error::other("udp echo server thread panicked"))??;
-
-    result
+/// Echo responder: bind `addr`, then bounce every datagram back to its sender
+/// until the process is killed. Runs forever; never returns `Ok`.
+pub fn serve(addr: SocketAddr) -> io::Result<()> {
+    serve_socket(UdpSocket::bind(addr)?)
 }
 
-/// Connect, warm up, then measure `cfg.iterations` round trips.
-fn client_loop(server_addr: std::net::SocketAddr, cfg: &Config) -> io::Result<Vec<u64>> {
-    let sock = UdpSocket::bind("127.0.0.1:0")?;
-    sock.connect(server_addr)?;
+/// Echo responder over an already-bound socket (used by loopback mode, which
+/// binds an ephemeral port up front to learn its address). Runs forever.
+pub fn serve_socket(sock: UdpSocket) -> io::Result<()> {
+    // Sized to comfortably hold any single benchmark datagram.
+    let mut buf = [0u8; 65_535];
+    loop {
+        match sock.recv_from(&mut buf) {
+            Ok((n, src)) => {
+                sock.send_to(&buf[..n], src)?;
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// Connect to `addr`, warm up, then measure `cfg.iterations` round trips,
+/// returning one elapsed-nanosecond sample per measured round trip.
+pub fn client(addr: SocketAddr, cfg: &Config) -> io::Result<Vec<u64>> {
+    let sock = UdpSocket::bind(bind_addr_for(addr))?;
+    sock.connect(addr)?;
     // Timeout = hard error (see module docs); 1s per the design.
     sock.set_read_timeout(Some(Duration::from_secs(1)))?;
 
@@ -82,6 +58,15 @@ fn client_loop(server_addr: std::net::SocketAddr, cfg: &Config) -> io::Result<Ve
     Ok(samples)
 }
 
+/// Pick a wildcard bind address in the same family as the responder so the
+/// connected socket can reach it (`0.0.0.0:0` for v4, `[::]:0` for v6).
+fn bind_addr_for(addr: SocketAddr) -> SocketAddr {
+    match addr {
+        SocketAddr::V4(_) => SocketAddr::from(([0, 0, 0, 0], 0)),
+        SocketAddr::V6(_) => SocketAddr::from(([0u16; 8], 0)),
+    }
+}
+
 /// One ping-pong datagram: send the payload, recv the echo, assert equality.
 #[inline]
 fn round_trip(sock: &UdpSocket, send: &[u8], recv: &mut [u8]) -> io::Result<()> {
@@ -90,7 +75,7 @@ fn round_trip(sock: &UdpSocket, send: &[u8], recv: &mut [u8]) -> io::Result<()> 
         if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
             io::Error::new(
                 io::ErrorKind::TimedOut,
-                "udp recv timed out (loopback loss)",
+                "udp recv timed out (datagram loss)",
             )
         } else {
             e

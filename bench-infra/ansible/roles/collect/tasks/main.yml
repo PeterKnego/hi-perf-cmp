@@ -1,0 +1,60 @@
+---
+- name: Compute run timestamp (once)
+  ansible.builtin.command: date +%Y%m%dT%H%M%SZ
+  register: run_ts
+  run_once: true
+  changed_when: false
+
+- name: Discover instance type from EC2 metadata (best effort, node0)
+  ansible.builtin.shell: |
+    token="$(curl -sf -X PUT 'http://169.254.169.254/latest/api/token' \
+      -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 2>/dev/null || true)"
+    curl -sf -H "X-aws-ec2-metadata-token: ${token}" \
+      'http://169.254.169.254/latest/meta-data/instance-type' 2>/dev/null || echo unknown
+  register: instance_type_detect
+  changed_when: false
+  failed_when: false
+  when: node_role == "node0"
+
+- name: Read persisted source provenance (node0)
+  ansible.builtin.shell: "cat {{ src_dir }}/.bench-provenance 2>/dev/null || echo n/a"
+  register: src_provenance_file
+  changed_when: false
+  when: node_role == "node0"
+
+- name: Write provenance manifest on node0
+  ansible.builtin.copy:
+    dest: "{{ remote_results_dir }}/manifest.txt"
+    mode: "0644"
+    content: |
+      timestamp={{ run_ts.stdout }}
+      instance_type={{ instance_type_detect.stdout | default('unknown') | trim }}
+      vcpus={{ ansible_processor_vcpus | default('?') }}
+      mem_mb={{ ansible_memtotal_mb | default('?') }}
+      kernel={{ ansible_kernel }}
+      rtt_payload_bytes={{ rtt_payload_bytes }}
+      rtt_warmup={{ rtt_warmup }}
+      rtt_iterations={{ rtt_iterations }}
+      rtt_tcp_port={{ rtt_tcp_port }}
+      rtt_udp_port={{ rtt_udp_port }}
+      languages={{ languages | join(',') }}
+      focus_areas={{ focus_areas | map(attribute='name') | join(',') }}
+      git_sha={{ src_provenance_file.stdout | default('n/a') | trim }}
+      node0_role=node0 (client/driver + single-host benches)
+      node1_role=node1 (network-rtt responder)
+  when: node_role == "node0"
+
+- name: Fetch results to local bench-out/dist/<ts>
+  ansible.posix.synchronize:
+    mode: pull
+    src: "{{ remote_results_dir }}/"
+    dest: "{{ results_local_dir }}/{{ hostvars[groups['node0'][0]].run_ts.stdout }}/"
+    rsync_opts:
+      - "--mkpath"   # create dest parent dirs (rsync only makes the leaf otherwise)
+  when: node_role == "node0"
+  changed_when: true
+
+- name: Report collected location
+  ansible.builtin.debug:
+    msg: "Results pulled to {{ results_local_dir }}/{{ hostvars[groups['node0'][0]].run_ts.stdout }}/results.jsonl"
+  run_once: true

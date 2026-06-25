@@ -1,0 +1,31 @@
+---
+# --- Benchmark matrix ---
+languages: [rust, go, java]
+focus_areas:
+  - { name: network-rtt,      kind: cross_host }
+  - { name: filesystem-write, kind: local }
+  - { name: thread-handoff,   kind: local }
+
+# --- network-rtt cross-host params (exported into every client run so all three
+#     languages use identical parameters for a fair comparison) ---
+rtt_payload_bytes: 64
+rtt_warmup: 10000
+rtt_iterations: 100000
+rtt_tcp_port: 9100
+rtt_udp_port: 9101
+
+# --- Toolchain versions ---
+jdk_version: "21"
+go_version: "1.22.5"   # official tarball: go<ver>.linux-amd64.tar.gz
+
+# --- Build source (rsync the local working tree = repo root) ---
+src_local_path: "{{ playbook_dir }}/../.."   # the hi-perf-cmp repo root
+
+# --- Layout on hosts ---
+remote_home: "/opt/bench"
+src_dir: "/opt/bench/src"
+go_root: "/usr/local/go"
+
+# --- Results ---
+results_local_dir: "{{ playbook_dir }}/../../bench-out/dist"
+remote_results_dir: "{{ remote_home }}/results"

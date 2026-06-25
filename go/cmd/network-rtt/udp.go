@@ -7,30 +7,23 @@ import (
 	"time"
 )
 
-// udpReadTimeout is the per-recv deadline. Loopback UDP is effectively
-// lossless; a timeout is treated as a hard error, not a retransmit.
+// udpReadTimeout is the per-recv deadline. The link under test is expected to
+// be effectively lossless; a timeout is treated as a hard error, not a
+// retransmit.
 const udpReadTimeout = time.Second
 
-// measureUDP starts an in-process UDP echo server on loopback, dials one
-// connected client socket, runs warmup then cfg.Iterations strict ping-pong
-// round trips, and returns the per-round-trip elapsed nanoseconds.
-func measureUDP(cfg Config) ([]int64, error) {
-	srvAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+// udpClient dials a connected UDP socket to addr, runs warmup then
+// cfg.Iterations strict ping-pong round trips, and returns the per-round-trip
+// elapsed nanoseconds. Each recv carries a 1s deadline; a timeout is a hard
+// error. The echoed bytes are asserted equal to the sent bytes.
+func udpClient(addr string, cfg Config) ([]int64, error) {
+	raddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("udp: resolve: %w", err)
 	}
-	srvConn, err := net.ListenUDP("udp", srvAddr)
-	if err != nil {
-		return nil, fmt.Errorf("udp: listen: %w", err)
-	}
-	defer srvConn.Close()
-
-	srvErr := make(chan error, 1)
-	stop := make(chan struct{})
-	go udpEchoServer(srvConn, cfg.PayloadBytes, stop, srvErr)
 
 	// DialUDP connects the socket so plain Read/Write work.
-	cliConn, err := net.DialUDP("udp", nil, srvConn.LocalAddr().(*net.UDPAddr))
+	cliConn, err := net.DialUDP("udp", nil, raddr)
 	if err != nil {
 		return nil, fmt.Errorf("udp: dial: %w", err)
 	}
@@ -76,38 +69,21 @@ func measureUDP(cfg Config) ([]int64, error) {
 		samples[i] = time.Since(start).Nanoseconds()
 	}
 
-	// Stop the server and surface any server-side error.
-	close(stop)
-	srvConn.Close()
-	if err := <-srvErr; err != nil {
-		return nil, err
-	}
 	return samples, nil
 }
 
-// udpEchoServer reads datagrams and echoes them back to the sender until
-// stopped (signalled by closing stop, then closing the conn).
-func udpEchoServer(conn *net.UDPConn, payloadBytes int, stop <-chan struct{}, errc chan<- error) {
+// udpServe reads datagrams on conn and echoes them back to the sender,
+// serving until conn is closed. It returns only when a read fails (e.g. the
+// conn was closed).
+func udpServe(conn *net.UDPConn, payloadBytes int) error {
 	buf := make([]byte, payloadBytes)
 	for {
 		n, addr, err := conn.ReadFromUDP(buf)
 		if err != nil {
-			select {
-			case <-stop:
-				errc <- nil // expected shutdown
-			default:
-				errc <- fmt.Errorf("udp echo: read: %w", err)
-			}
-			return
+			return err
 		}
 		if _, err := conn.WriteToUDP(buf[:n], addr); err != nil {
-			select {
-			case <-stop:
-				errc <- nil
-			default:
-				errc <- fmt.Errorf("udp echo: write: %w", err)
-			}
-			return
+			logf("udp echo: write: %v", err)
 		}
 	}
 }

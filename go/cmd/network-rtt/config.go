@@ -6,17 +6,50 @@ import (
 	"strconv"
 )
 
+// Mode selects the role this process plays.
+type Mode string
+
+const (
+	// ModeLoopback runs an in-process echo server on an ephemeral 127.0.0.1
+	// port plus a client, emitting the six result lines. This is the default.
+	ModeLoopback Mode = "loopback"
+	// ModeServer binds TCP and UDP echo responders on 0.0.0.0 and serves until
+	// killed, emitting nothing to stdout.
+	ModeServer Mode = "server"
+	// ModeClient connects to RTT_HOST on both ports, measures, and emits the
+	// six result lines.
+	ModeClient Mode = "client"
+)
+
 // Config holds the benchmark parameters, sourced from env vars with defaults.
 type Config struct {
+	Mode         Mode
+	Host         string
+	TCPPort      int
+	UDPPort      int
 	PayloadBytes int
 	Warmup       int
 	Iterations   int
 }
 
-// loadConfig reads RTT_PAYLOAD_BYTES, RTT_WARMUP and RTT_ITERATIONS from the
-// environment, applying defaults. Each value must be a positive integer;
-// invalid or non-positive values yield an error.
+// loadConfig reads RTT_MODE, RTT_HOST, RTT_TCP_PORT, RTT_UDP_PORT,
+// RTT_PAYLOAD_BYTES, RTT_WARMUP and RTT_ITERATIONS from the environment,
+// applying defaults. Invalid values, or a missing RTT_HOST in client mode,
+// yield an error.
 func loadConfig() (Config, error) {
+	mode, err := loadMode("RTT_MODE", ModeLoopback)
+	if err != nil {
+		return Config{}, err
+	}
+
+	tcpPort, err := positiveEnv("RTT_TCP_PORT", 9100)
+	if err != nil {
+		return Config{}, err
+	}
+	udpPort, err := positiveEnv("RTT_UDP_PORT", 9101)
+	if err != nil {
+		return Config{}, err
+	}
 	payload, err := positiveEnv("RTT_PAYLOAD_BYTES", 64)
 	if err != nil {
 		return Config{}, err
@@ -29,11 +62,36 @@ func loadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+
+	host := os.Getenv("RTT_HOST")
+	if mode == ModeClient && host == "" {
+		return Config{}, fmt.Errorf("RTT_HOST: required in client mode")
+	}
+
 	return Config{
+		Mode:         mode,
+		Host:         host,
+		TCPPort:      tcpPort,
+		UDPPort:      udpPort,
 		PayloadBytes: payload,
 		Warmup:       warmup,
 		Iterations:   iterations,
 	}, nil
+}
+
+// loadMode parses env var name as a Mode, returning def when unset/empty.
+// Returns an error for any unrecognized value.
+func loadMode(name string, def Mode) (Mode, error) {
+	s := os.Getenv(name)
+	if s == "" {
+		return def, nil
+	}
+	switch Mode(s) {
+	case ModeLoopback, ModeServer, ModeClient:
+		return Mode(s), nil
+	default:
+		return "", fmt.Errorf("%s: %q is not a valid mode (want loopback, server or client)", name, s)
+	}
 }
 
 // positiveEnv parses env var name as a positive integer, returning def when

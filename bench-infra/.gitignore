@@ -1,0 +1,24 @@
+# Credentials
+.env
+
+# Generated inventory & SSH
+inventory/hosts.yml
+*.pem
+
+# Terraform state & local provider cache
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+
+# tfvars carry secrets/IPs — keep only the example templates
+*.tfvars
+!example.tfvars
+terraform.tfvars
+
+# Ansible
+ansible/*.retry
+
+# Results
+bench-out/
