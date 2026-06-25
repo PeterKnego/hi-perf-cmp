@@ -21,7 +21,7 @@ import net.knego.hiperf.common.Measure;
 final class UdpRtt {
 
     private static final int SO_TIMEOUT_MS = 1000;
-    private static final int SPIN_BUDGET = 1000;
+    private static final int SPIN_BUDGET = 4000;
 
     private UdpRtt() {}
 
