@@ -4,12 +4,19 @@ Comparing high-performance code artifacts across **Rust**, **Java** and **Go**.
 
 An exploration of high-performance code where the point is the *comparison*: the
 same problem, solved with the same methodology in each language, measured under
-identical conditions, so the numbers are apples-to-apples. Work is organized as a
-grid of **experiment × language** within three focus areas:
+identical conditions, so the numbers are apples-to-apples.
 
-- **network-rtt** — request/response round-trip time. Experiments: `tcp`, `udp`, `quic`.
-- **filesystem-write** — filesystem write throughput / latency _(stub)_.
-- **thread-handoff** — latency of handing work between threads _(stub)_.
+**Direction:** the focus areas are the performance-critical paths of
+**state-machine-replication (SMR)** systems (Raft/Paxos-style replicated logs).
+The goal is to choose and optimize the code for each path. Work is organized as a
+grid of **experiment × language** within four focus areas:
+
+- **network-rtt** — minimize RTT for leader→follower→leader communication when
+  replicating log entries. Experiments: `tcp`, `udp`, `quic`.
+- **filesystem-write** — fast, durable command-log persistence _(stub)_.
+- **thread-handoff** — thread-to-thread data passing, including thread
+  sleep/wakeup _(stub)_.
+- **shared-memory-ipc** — shared-memory inter-process communication _(planned)_.
 
 ## Features
 
@@ -62,7 +69,7 @@ aligns on `(focus_area, experiment, language, metric)`, and tracks them over tim
 
 `network-rtt` is implemented for `tcp`, `udp`, and `quic` (cross-host capable —
 see below). `filesystem-write` and `thread-handoff` are still stubs that emit a
-placeholder line.
+placeholder line. `shared-memory-ipc` is a planned focus area (not yet scaffolded).
 
 ## Building & running
 

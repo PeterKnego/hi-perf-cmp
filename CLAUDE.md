@@ -4,13 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A comparison of high-performance code artifacts across **Rust**, **Java**, and **Go**, over three focus areas:
-**network-rtt** (request/response round-trip time), **filesystem-write** (write throughput/latency), and
-**thread-handoff** (latency of passing work between threads). Each focus area has one or more **experiments**
-(variants) compared on a grid of **experiment × language**.
+A comparison of high-performance code artifacts across **Rust**, **Java**, and **Go**. The focus areas are the
+performance-critical paths of **state-machine-replication (SMR)** systems (Raft/Paxos-style replicated logs);
+the goal is to choose and optimize the code for each path. Each focus area has one or more **experiments**
+(variants) compared on a grid of **experiment × language**:
+
+- **network-rtt** — minimize RTT for leader→follower→leader communication when replicating log entries.
+- **filesystem-write** — fast, durable command-log persistence.
+- **thread-handoff** — thread-to-thread data passing, including thread sleep/wakeup.
+- **shared-memory-ipc** — shared-memory inter-process communication _(planned focus area)_.
 
 **Status:** `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (cross-host capable).
-`filesystem-write` and `thread-handoff` are still stubs that emit a placeholder line.
+`filesystem-write` and `thread-handoff` are stubs that emit a placeholder line; `shared-memory-ipc` is not yet
+scaffolded.
 
 ## Architecture: the result contract is the only coupling
 
@@ -99,9 +105,9 @@ Keep experiment-specific dependencies in that artifact only (e.g. QUIC's quinn/q
 
 To turn a stub focus area real: replace its placeholder emit (`experiment: "placeholder"`, `metric:
 "placeholder"`, `notes: "stub"`) with real measurement. Keep focus-area names exact (`network-rtt`,
-`filesystem-write`, `thread-handoff`), `language` matching the directory, and always emit the `experiment`
-field — the `tools/journal` CLI aligns on `(focus_area, experiment, language, metric)`. For the Rust release
-profile and workspace conventions, see below.
+`filesystem-write`, `thread-handoff`, and the planned `shared-memory-ipc`), `language` matching the directory,
+and always emit the `experiment` field — the `tools/journal` CLI aligns on `(focus_area, experiment, language,
+metric)`. For the Rust release profile and workspace conventions, see below.
 
 ## Rust workspace conventions
 
