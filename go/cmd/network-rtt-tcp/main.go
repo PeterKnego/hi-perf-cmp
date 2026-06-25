@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"syscall"
 
 	"github.com/peterknego/hi-perf-cmp/go/internal/bench"
 )
@@ -110,6 +111,11 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 		return nil, fmt.Errorf("tcp: set nodelay: %w", err)
 	}
 
+	rc, err := tcpConn.SyscallConn()
+	if err != nil {
+		return nil, fmt.Errorf("tcp: syscallconn: %w", err)
+	}
+
 	send := cfg.Payload()
 	recv := make([]byte, cfg.PayloadBytes)
 
@@ -117,8 +123,32 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 		if _, err := tcpConn.Write(send); err != nil {
 			return fmt.Errorf("tcp: write: %w", err)
 		}
-		if _, err := io.ReadFull(tcpConn, recv); err != nil {
-			return fmt.Errorf("tcp: read: %w", err)
+		off := 0
+		var rerr error
+		ctrlErr := rc.Read(func(fd uintptr) bool {
+			for off < len(recv) {
+				n, e := syscall.Read(int(fd), recv[off:])
+				if e == syscall.EAGAIN || e == syscall.EINTR {
+					// busy-poll / retry; do NOT return false (would park in netpoller)
+					continue
+				}
+				if e != nil {
+					rerr = e
+					return true
+				}
+				if n == 0 {
+					rerr = io.ErrUnexpectedEOF
+					return true
+				}
+				off += n
+			}
+			return true
+		})
+		if ctrlErr != nil {
+			return fmt.Errorf("tcp: read: %w", ctrlErr)
+		}
+		if rerr != nil {
+			return fmt.Errorf("tcp: read: %w", rerr)
 		}
 		if !bytes.Equal(recv, send) {
 			return fmt.Errorf("tcp: echo mismatch")
