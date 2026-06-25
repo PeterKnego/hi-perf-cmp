@@ -1,2 +1,3 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
 39858e1	36310	62799	36443	keep	baseline (unmodified cell, median-of-5)
+ae3bf86	18930	42140	20308	keep	raw-fd busy-poll client read via SyscallConn+syscall.Read; -48% p50, -33% p99 (median-of-5)
