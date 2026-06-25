@@ -1,3 +1,4 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
 6750573	26469	56159	27344	keep	baseline (unmodified cell, median-of-5)
 14e4d73	13630	30070	14307	keep	nonblocking client busy-poll recv, 1s deadline preserves loss-timeout error; -49% p50, -46% p99 (median-of-7)
+39b6da1	5940	14420	6233	keep	bounded-spin(2048)-then-block responder recv_from; -56% p50, -52% p99 (median-of-7)
