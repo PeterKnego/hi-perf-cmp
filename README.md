@@ -1,2 +1,2 @@
 # hi-perf-cmp
-Comparing high performance artifact accross Rust, Java and Go
+Comparing high performance code artifacts accross Rust, Java and Go
