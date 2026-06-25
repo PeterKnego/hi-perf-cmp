@@ -15,11 +15,18 @@ per-language knowledge.
 |--------------|---------|----------|---------------------------------------------------------------|
 | `language`   | string  | yes      | `rust` \| `java` \| `go`                                      |
 | `focus_area` | string  | yes      | `network-rtt` \| `filesystem-write` \| `thread-handoff`       |
+| `experiment` | string  | yes      | the variant under the focus area, e.g. `tcp` \| `udp` \| `quic`; `placeholder` for stubs |
 | `metric`     | string  | yes      | what was measured, e.g. `rtt_p50`, `write_throughput`         |
 | `value`      | number  | yes      | the measured value                                            |
 | `unit`       | string  | yes      | unit of `value`, e.g. `ns`, `us`, `ms`, `bytes_per_sec`, `ops_per_sec` |
 | `samples`    | integer | yes      | number of samples behind `value`                              |
 | `notes`      | string  | no       | free-form context (config, caveats); `"stub"` for placeholders |
+
+The comparison grid is **`experiment` × `language`** within a `focus_area`: align
+results on `(focus_area, experiment, metric)` to compare languages, or on
+`(focus_area, language, metric)` to compare experiments. The transport/variant
+lives in `experiment`, NOT baked into `metric` (so `network-rtt`/`tcp`/`rtt_p50`,
+never `tcp_rtt_p50`).
 
 ### Rules
 
@@ -32,18 +39,22 @@ per-language knowledge.
 ## Example
 
 ```json
-{"language":"rust","focus_area":"network-rtt","metric":"rtt_p50","value":42000,"unit":"ns","samples":100000}
-{"language":"rust","focus_area":"network-rtt","metric":"rtt_p99","value":81000,"unit":"ns","samples":100000}
+{"language":"rust","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_p50","value":42000,"unit":"ns","samples":100000}
+{"language":"rust","focus_area":"network-rtt","experiment":"tcp","metric":"rtt_p99","value":81000,"unit":"ns","samples":100000}
 ```
 
 ## Current state
 
-All benchmarks are **stubs** that emit a single placeholder line
-(`metric: "placeholder"`, `notes: "stub"`) so the trees build and run today.
-Real measurement logic replaces the placeholder per focus area in later work.
+`network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (each a
+separate runnable artifact named `network-rtt-<experiment>`). `filesystem-write`
+and `thread-handoff` remain **stubs** that emit a single placeholder line
+(`experiment: "placeholder"`, `metric: "placeholder"`, `notes: "stub"`).
 
 ## Reference emitters
 
-- **Rust** — hand-rendered `println!` in each `src/main.rs` (zero deps).
-- **Go** — `internal/result` package (`result.Emit`).
-- **Java** — `net.knego.hiperf.common.Result#emit` in the `:common` subproject.
+Each language has a shared **bench-common** library that owns Stats, env-config
+parsing, the timed measurement loop, and result emission (including
+`experiment`); experiment artifacts are thin and call into it.
+- **Rust** — `bench-common` crate (`result::emit`).
+- **Go** — `internal/bench` package (`bench.Emit`).
+- **Java** — `net.knego.hiperf.common` (`Result#emit`) in the `:common` subproject.

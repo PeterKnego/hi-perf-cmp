@@ -1,0 +1,10 @@
+[package]
+name = "bench-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "bench_common"
+path = "src/lib.rs"

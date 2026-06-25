@@ -1,7 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "network-rtt",
+    "bench-common",
+    "network-rtt/tcp",
+    "network-rtt/udp",
+    "network-rtt/quic",
     "filesystem-write",
     "thread-handoff",
 ]
@@ -13,8 +16,13 @@ license = "Apache-2.0"
 authors = ["Peter Knego"]
 
 # Shared dependencies inherited by member crates via `dep.workspace = true`.
-# Benchmarks are std-only for now; add shared deps here as they appear.
+# Most benchmarks are std-only; the QUIC experiment crate is the only consumer
+# of the quinn/rustls/rcgen/tokio stack below.
 [workspace.dependencies]
+quinn = "0.11"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rcgen = "0.13"
+tokio = { version = "1", features = ["rt", "net", "io-util", "macros", "sync"] }
 
 [profile.release]
 lto = "thin"

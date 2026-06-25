@@ -12,6 +12,6 @@ public final class Main {
     public static void main(String[] args) {
         // Placeholder result. Replace metric/value/unit/samples once the real
         // thread-handoff benchmark is implemented.
-        new Result("thread-handoff", "placeholder", 0, "ns", 0, "stub").emit();
+        new Result("thread-handoff", "placeholder", "placeholder", 0, "ns", 0, "stub").emit();
     }
 }

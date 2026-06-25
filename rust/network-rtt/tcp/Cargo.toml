@@ -1,0 +1,13 @@
+[package]
+name = "network-rtt-tcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "network-rtt-tcp"
+path = "src/main.rs"
+
+[dependencies]
+bench-common = { path = "../../bench-common" }

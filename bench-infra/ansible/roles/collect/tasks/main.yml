@@ -37,8 +37,9 @@
       rtt_iterations={{ rtt_iterations }}
       rtt_tcp_port={{ rtt_tcp_port }}
       rtt_udp_port={{ rtt_udp_port }}
+      rtt_quic_port={{ rtt_quic_port }}
       languages={{ languages | join(',') }}
-      focus_areas={{ focus_areas | map(attribute='name') | join(',') }}
+      experiments={{ experiments | map(attribute='focus_area') | zip(experiments | map(attribute='experiment')) | map('join', '/') | join(',') }}
       git_sha={{ src_provenance_file.stdout | default('n/a') | trim }}
       node0_role=node0 (client/driver + single-host benches)
       node1_role=node1 (network-rtt responder)

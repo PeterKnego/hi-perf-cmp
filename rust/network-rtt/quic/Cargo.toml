@@ -1,0 +1,17 @@
+[package]
+name = "network-rtt-quic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "network-rtt-quic"
+path = "src/main.rs"
+
+[dependencies]
+bench-common = { path = "../../bench-common" }
+quinn.workspace = true
+rustls.workspace = true
+rcgen.workspace = true
+tokio.workspace = true

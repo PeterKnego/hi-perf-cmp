@@ -4,11 +4,14 @@ package net.knego.hiperf.common;
  * One benchmark measurement in the shared cross-language format, plus a helper
  * to emit it as a single JSON line on stdout. See docs/result-contract.md.
  *
- * <p>{@code language} is fixed to {@code "java"}. JSON is hand-rendered to keep
- * the skeleton dependency-free.
+ * <p>{@code language} is fixed to {@code "java"}. {@code experiment} is the
+ * variant under the focus area (e.g. {@code tcp}, {@code udp}, {@code quic}, or
+ * {@code placeholder} for stubs). JSON is hand-rendered to keep the skeleton
+ * dependency-free.
  */
 public record Result(
         String focusArea,
+        String experiment,
         String metric,
         double value,
         String unit,
@@ -17,10 +20,11 @@ public record Result(
 
     /** Writes this result as a single JSON line to stdout. */
     public void emit() {
-        StringBuilder sb = new StringBuilder(128);
+        StringBuilder sb = new StringBuilder(160);
         sb.append('{')
                 .append("\"language\":\"java\",")
                 .append("\"focus_area\":").append(quote(focusArea)).append(',')
+                .append("\"experiment\":").append(quote(experiment)).append(',')
                 .append("\"metric\":").append(quote(metric)).append(',')
                 .append("\"value\":").append(value).append(',')
                 .append("\"unit\":").append(quote(unit)).append(',')

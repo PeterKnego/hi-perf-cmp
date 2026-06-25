@@ -19,11 +19,13 @@
 
 # Kill any stray benchmark processes left from a previous run on BOTH nodes.
 # Bracket trick on the pattern so it doesn't match pkill's own command line.
+# Patterns are prefixes, so they cover every per-experiment artifact
+# (network-rtt-tcp/udp/quic) and the java networkrtt.<exp>.Main main classes.
 - name: Clean stale benchmark processes (all nodes)
   ansible.builtin.shell: |
     pkill -9 -f '[t]arget/release/network-rtt' || true
     pkill -9 -f '[b]in/network-rtt' || true
-    pkill -9 -f '[n]etworkrtt.Main' || true
+    pkill -9 -f '[n]etworkrtt\.' || true
   changed_when: false
 
 - name: Ship run_bench.sh to every node
@@ -37,23 +39,27 @@
   register: java_home
   changed_when: false
 
-# --- cross_host focus areas: server on node1, client on node0, per language ---
-- name: Run cross_host focus areas (network-rtt) per language, sequentially
+# --- cross_host experiments: server on node1, client on node0, per language ---
+# One (language, experiment) pair at a time, sequentially, so the fixed RTT
+# ports are never contended across experiments.
+- name: Run cross_host experiments per language, sequentially
   ansible.builtin.include_tasks: cross_host.yml
-  loop: "{{ languages | product(focus_areas | selectattr('kind', 'equalto', 'cross_host') | list) | list }}"
+  loop: "{{ languages | product(experiments | selectattr('kind', 'equalto', 'cross_host') | list) | list }}"
   loop_control:
     loop_var: combo
   vars:
     language: "{{ combo.0 }}"
-    focus_area: "{{ combo.1.name }}"
+    focus_area: "{{ combo.1.focus_area }}"
+    experiment: "{{ combo.1.experiment }}"
 
-# --- local focus areas: run on node0 only ---
-- name: Run local focus areas per language (node0 only)
+# --- local experiments: run on node0 only ---
+- name: Run local experiments per language (node0 only)
   ansible.builtin.include_tasks: local.yml
-  loop: "{{ languages | product(focus_areas | selectattr('kind', 'equalto', 'local') | list) | list }}"
+  loop: "{{ languages | product(experiments | selectattr('kind', 'equalto', 'local') | list) | list }}"
   loop_control:
     loop_var: combo
   vars:
     language: "{{ combo.0 }}"
-    focus_area: "{{ combo.1.name }}"
+    focus_area: "{{ combo.1.focus_area }}"
+    experiment: "{{ combo.1.experiment }}"
   when: node_role == "node0"

@@ -1,21 +1,21 @@
 ---
-# Run ONE (language, local focus_area) pair on node0 only. fs-write writes under
+# Run ONE (language, local experiment) pair on node0 only. fs-write writes under
 # the NVMe-backed remote_home (CWD = a scratch dir there); thread-handoff ignores
 # CWD. Result lines append to results.jsonl. Included only on node0 (guarded by
 # the caller's `when: node_role == "node0"`).
-- name: "{{ language }}/{{ focus_area }}: ensure NVMe scratch dir exists"
+- name: "{{ language }}/{{ focus_area }}/{{ experiment }}: ensure NVMe scratch dir exists"
   ansible.builtin.file:
     path: "{{ remote_home }}/scratch"
     state: directory
     owner: "{{ ansible_user_id }}"
     mode: "0755"
 
-- name: "{{ language }}/{{ focus_area }}: run on node0, append results"
+- name: "{{ language }}/{{ focus_area }}/{{ experiment }}: run on node0, append results"
   ansible.builtin.shell: |
     export JAVA_HOME="{{ java_home.stdout }}"
     export SRC_DIR="{{ src_dir }}"
     cd {{ remote_home }}/scratch
-    {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} loopback \
+    {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} loopback \
       >> {{ remote_results_dir }}/results.jsonl
   args:
     executable: /bin/bash

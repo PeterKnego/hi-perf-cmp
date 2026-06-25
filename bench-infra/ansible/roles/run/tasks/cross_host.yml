@@ -1,44 +1,46 @@
 ---
-# Run ONE (language, cross_host focus_area) pair: start the responder on node1,
+# Run ONE (language, cross_host experiment) pair: start the responder on node1,
 # run the client on node0, append its result lines to results.jsonl, then always
-# kill the node1 responder. Included once per (language, focus_area) combo so
+# kill the node1 responder. Included once per (language, experiment) combo so
 # runs never overlap on the fixed RTT ports.
 #
 # run_once + delegate_to keep this from re-executing per host in the play loop.
-- name: "{{ language }}/{{ focus_area }}: server + client + teardown"
+- name: "{{ language }}/{{ focus_area }}/{{ experiment }}: server + client + teardown"
   run_once: true
   block:
-    - name: "{{ language }}/{{ focus_area }}: start responder on node1"
+    - name: "{{ language }}/{{ focus_area }}/{{ experiment }}: start responder on node1"
       ansible.builtin.shell: |
         export JAVA_HOME="{{ hostvars[groups['node1'][0]].java_home.stdout }}"
         export SRC_DIR="{{ src_dir }}"
         export RTT_TCP_PORT="{{ rtt_tcp_port }}"
         export RTT_UDP_PORT="{{ rtt_udp_port }}"
+        export RTT_QUIC_PORT="{{ rtt_quic_port }}"
         export RTT_PAYLOAD_BYTES="{{ rtt_payload_bytes }}"
         export RTT_WARMUP="{{ rtt_warmup }}"
         export RTT_ITERATIONS="{{ rtt_iterations }}"
-        setsid {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} server \
-          > {{ remote_home }}/rtt-server-{{ language }}.out 2>&1 < /dev/null &
+        setsid {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} server \
+          > {{ remote_home }}/rtt-server-{{ language }}-{{ experiment }}.out 2>&1 < /dev/null &
       args:
         executable: /bin/bash
       delegate_to: "{{ groups['node1'][0] }}"
       changed_when: false
 
-    - name: "{{ language }}/{{ focus_area }}: wait for responder to bind"
+    - name: "{{ language }}/{{ focus_area }}/{{ experiment }}: wait for responder to bind"
       ansible.builtin.pause:
         seconds: 3
 
-    - name: "{{ language }}/{{ focus_area }}: run client on node0, append results"
+    - name: "{{ language }}/{{ focus_area }}/{{ experiment }}: run client on node0, append results"
       ansible.builtin.shell: |
         export JAVA_HOME="{{ hostvars[groups['node0'][0]].java_home.stdout }}"
         export SRC_DIR="{{ src_dir }}"
         export RTT_HOST="{{ hostvars[groups['node1'][0]].private_ip }}"
         export RTT_TCP_PORT="{{ rtt_tcp_port }}"
         export RTT_UDP_PORT="{{ rtt_udp_port }}"
+        export RTT_QUIC_PORT="{{ rtt_quic_port }}"
         export RTT_PAYLOAD_BYTES="{{ rtt_payload_bytes }}"
         export RTT_WARMUP="{{ rtt_warmup }}"
         export RTT_ITERATIONS="{{ rtt_iterations }}"
-        {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} client \
+        {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} client \
           >> {{ remote_results_dir }}/results.jsonl
       args:
         executable: /bin/bash
@@ -46,11 +48,11 @@
       changed_when: true
 
   always:
-    - name: "{{ language }}/{{ focus_area }}: stop node1 responder (always)"
+    - name: "{{ language }}/{{ focus_area }}/{{ experiment }}: stop node1 responder (always)"
       ansible.builtin.shell: |
-        pkill -9 -f '[t]arget/release/{{ focus_area }}' || true
-        pkill -9 -f '[b]in/{{ focus_area }}' || true
-        pkill -9 -f '[n]etworkrtt.Main' || true
+        pkill -9 -f '[t]arget/release/{{ focus_area }}-{{ experiment }}' || true
+        pkill -9 -f '[b]in/{{ focus_area }}-{{ experiment }}' || true
+        pkill -9 -f '[n]etworkrtt\.{{ experiment }}\.' || true
       args:
         executable: /bin/bash
       delegate_to: "{{ groups['node1'][0] }}"

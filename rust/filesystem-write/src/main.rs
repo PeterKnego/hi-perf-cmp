@@ -7,6 +7,6 @@ fn main() {
     // Placeholder result. Replace `metric`/`value`/`unit`/`samples` once the
     // real filesystem-write benchmark is implemented.
     println!(
-        r#"{{"language":"rust","focus_area":"filesystem-write","metric":"placeholder","value":0,"unit":"ns","samples":0,"notes":"stub"}}"#
+        r#"{{"language":"rust","focus_area":"filesystem-write","experiment":"placeholder","metric":"placeholder","value":0,"unit":"ns","samples":0,"notes":"stub"}}"#
     );
 }
