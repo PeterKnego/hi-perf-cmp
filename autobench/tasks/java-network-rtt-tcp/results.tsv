@@ -2,3 +2,4 @@ commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
 39858e1	31119	64430	32142	keep	baseline (unmodified cell, median-of-5)
 0b0ee8d	9302	25280	10044	keep	NIO SocketChannel non-blocking: client hot-spins read, responder bounded-spin(1000)-then-block; -70% p50, -61% p99 (median-of-5)
 14247f6	9280	25099	9986	keep	ByteBuffer.mismatch verify replaces byte-by-byte loop -- perf wash vs 9302 (within noise), kept for simplicity (median-of-9)
+0f7957f	9590	24171	10744	discard	SPIN_BUDGET=4000 sweep: wash vs 1000 (responder catches mid-spin before budget) -- knee confirmed (median-of-7)
