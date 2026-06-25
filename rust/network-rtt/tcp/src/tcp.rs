@@ -57,6 +57,8 @@ fn serve_conn(mut conn: TcpStream) -> io::Result<()> {
 pub fn client(addr: SocketAddr, cfg: &Config) -> io::Result<Vec<u64>> {
     let mut stream = TcpStream::connect(addr)?;
     stream.set_nodelay(true)?;
+    // Busy-poll the socket to avoid kernel park/unpark on each round trip.
+    stream.set_nonblocking(true)?;
 
     let send = vec![0xABu8; cfg.payload_bytes];
     // The closure owns the stream and recv buffer mutably; `measure::run` calls
@@ -67,10 +69,41 @@ pub fn client(addr: SocketAddr, cfg: &Config) -> io::Result<Vec<u64>> {
 }
 
 /// One ping-pong: write the full payload, read the full echo, assert equality.
+/// The socket is nonblocking; spin on WouldBlock/Interrupted instead of sleeping.
 #[inline]
 fn round_trip(stream: &mut TcpStream, send: &[u8], recv: &mut [u8]) -> io::Result<()> {
-    stream.write_all(send)?;
-    stream.read_exact(recv)?;
+    // Write: advance offset until the full payload is sent.
+    let mut off = 0;
+    while off < send.len() {
+        match stream.write(&send[off..]) {
+            Ok(n) => off += n,
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock
+                   || e.kind() == io::ErrorKind::Interrupted => {
+                std::hint::spin_loop();
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    // Read: busy-poll until the echo buffer is full.
+    let mut filled = 0;
+    while filled < recv.len() {
+        match stream.read(&mut recv[filled..]) {
+            Ok(0) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "tcp echo: peer closed connection",
+                ));
+            }
+            Ok(n) => filled += n,
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock
+                   || e.kind() == io::ErrorKind::Interrupted => {
+                std::hint::spin_loop();
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
     if recv != send {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
