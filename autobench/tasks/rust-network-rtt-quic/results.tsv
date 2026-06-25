@@ -1,2 +1,3 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
 a9a8ebe	47329	118350	49216	keep	baseline (unmodified cell, median-of-5)
+0b541b1	45430	134321	51891	discard	TransportConfig ack_eliciting_threshold=0 (immediate ACKs): p50 within noise, p99/mean +13% (extra ACK packets, ACK already piggybacked) -- baseline stays (median-of-7 x2)
