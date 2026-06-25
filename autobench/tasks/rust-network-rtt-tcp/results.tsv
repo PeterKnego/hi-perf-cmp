@@ -1,1 +1,8 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
+30d959e	30770	79372	33170	keep	baseline (unmodified cell, median-of-5)
+ab42ec1	21499	48060	24474	keep	busy-poll client RTT on nonblocking socket; -30% p50, -39% p99 (median-of-5)
+a042e57	9820	2167545	150200	discard	responder busy-poll: p50 -54% but p99 +45x (2.17ms), mean +6x -- double-spin tail regression on 4-core box (median-of-5)
+6d3d3b5	7841	19720	8639	keep	hybrid bounded-spin(4000)-then-block responder; -64% p50, -59% p99, no tail regression (median-of-5)
+32a9863	7980	19461	8602	keep	factor shared read_bounded helper; client read now bounded too -- perf wash vs 7841 (within noise), kept for dedup+symmetry (median-of-7)
+28c46c9	7950	20730	8553	discard	SPIN_BUDGET=8000 sweep: no p50 gain vs 4000, p99 slightly worse -- 4000 is at/past the knee (median-of-7)
+6a8730b	7970	21090	8695	discard	SPIN_BUDGET=2000 sweep: no p50 gain, p99 slightly worse -- knee mapped (2000/4000/8000 all ~7950-7980); 4000 best p99 (median-of-7)
