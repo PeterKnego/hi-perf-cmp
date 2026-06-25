@@ -166,7 +166,13 @@ final class TcpRtt {
         ByteBuffer recvBuf = ByteBuffer.allocateDirect(n);
         // recvBuf: position=0, limit=n — clear() on first iteration leaves it ready to fill
 
-        return Measure.run(cfg, () -> roundTrip(ch, sendBuf, recvBuf, payload, n));
+        // Build a read-only expected buffer once; never mutated, stays reusable across iterations
+        ByteBuffer expectedBuf = ByteBuffer.allocateDirect(n);
+        expectedBuf.put(payload);
+        expectedBuf.flip();
+        // expectedBuf: position=0, limit=n (read-only view for mismatch comparisons)
+
+        return Measure.run(cfg, () -> roundTrip(ch, sendBuf, recvBuf, expectedBuf, n));
     }
 
     /**
@@ -179,7 +185,7 @@ final class TcpRtt {
      * </ul>
      */
     private static void roundTrip(SocketChannel ch, ByteBuffer sendBuf, ByteBuffer recvBuf,
-            byte[] expectedPayload, int n) throws IOException {
+            ByteBuffer expectedBuf, int n) throws IOException {
         // flip(): position=0, limit=n — drain entire payload into the channel
         sendBuf.flip();
         while (sendBuf.hasRemaining()) {
@@ -200,13 +206,13 @@ final class TcpRtt {
         }
         // recvBuf: position=n, limit=n
 
-        // Verify echo equality (strict: every byte must match, equivalent to Arrays.equals)
-        recvBuf.flip(); // position=0, limit=n
-        for (int i = 0; i < n; i++) {
-            if (recvBuf.get() != expectedPayload[i]) {
-                throw new IOException("TCP echo mismatch: received bytes differ from sent");
-            }
+        // Verify echo equality via intrinsified bulk compare; mismatch() does not advance either
+        // buffer's position, so expectedBuf stays reusable across iterations.
+        recvBuf.flip(); // position=0, limit=n — prepare for comparison
+        if (recvBuf.mismatch(expectedBuf) >= 0) {
+            throw new IOException("TCP echo mismatch: received bytes differ from sent");
         }
+        recvBuf.position(n); // restore pos=n, limit=n invariant for next iteration's clear()
         // recvBuf: position=n, limit=n (invariant restored)
     }
 }
