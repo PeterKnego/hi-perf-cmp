@@ -1,1 +1,2 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
+a9a8ebe	194332	1520580	NA	crash	baseline FLAKY: ~20% of runs fail mid-bench (Kwik StreamClosedException "Connection closed"); p99 ~1.4ms stalls; smoke passes. Pre-existing Kwik robustness issue at bench counts; no cell-level knob found -- blocks the optimization loop.
