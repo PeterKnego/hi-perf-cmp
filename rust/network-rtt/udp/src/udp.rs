@@ -13,6 +13,10 @@ use std::time::{Duration, Instant};
 use bench_common::config::Config;
 use bench_common::measure;
 
+/// How many nonblocking `recv_from` misses the responder spins before
+/// falling back to a single blocking call so an idle server yields the CPU.
+const SPIN_BUDGET: u32 = 2048;
+
 /// Echo responder: bind `addr`, then bounce every datagram back to its sender
 /// until the process is killed. Runs forever; never returns `Ok`.
 pub fn serve(addr: SocketAddr) -> io::Result<()> {
@@ -21,17 +25,46 @@ pub fn serve(addr: SocketAddr) -> io::Result<()> {
 
 /// Echo responder over an already-bound socket (used by loopback mode, which
 /// binds an ephemeral port up front to learn its address). Runs forever.
+///
+/// Uses a bounded nonblocking spin on each receive; after `SPIN_BUDGET`
+/// misses falls back to one blocking `recv_from` so an idle server yields
+/// the CPU rather than burning it.
 pub fn serve_socket(sock: UdpSocket) -> io::Result<()> {
     // Sized to comfortably hold any single benchmark datagram.
     let mut buf = [0u8; 65_535];
+    sock.set_nonblocking(true)?;
     loop {
-        match sock.recv_from(&mut buf) {
-            Ok((n, src)) => {
-                sock.send_to(&buf[..n], src)?;
+        // Acquire one datagram with a bounded spin, then fall back to blocking.
+        let (n, src) = {
+            let mut spins: u32 = 0;
+            loop {
+                match sock.recv_from(&mut buf) {
+                    Ok(pair) => break pair,
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        spins += 1;
+                        if spins >= SPIN_BUDGET {
+                            // Spin budget exhausted — switch to blocking to yield the CPU.
+                            sock.set_nonblocking(false)?;
+                            let result = loop {
+                                match sock.recv_from(&mut buf) {
+                                    Ok(pair) => break Ok(pair),
+                                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                                    Err(e) => break Err(e),
+                                }
+                            };
+                            // Always restore nonblocking before propagating any error.
+                            sock.set_nonblocking(true)?;
+                            break result?;
+                        } else {
+                            std::hint::spin_loop();
+                        }
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(e) => return Err(e),
+                }
             }
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e),
-        }
+        };
+        sock.send_to(&buf[..n], src)?;
     }
 }
 
