@@ -10,6 +10,11 @@
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 
+/// Number of nonblocking poll attempts before the responder falls back to a
+/// blocking read. Keeps the hot path spin-tight while bounding CPU waste when
+/// the next request is delayed (contention, slow client, etc.).
+const SPIN_BUDGET: u32 = 4000;
+
 use bench_common::config::Config;
 use bench_common::measure;
 
@@ -39,15 +44,59 @@ pub fn serve_listener(listener: TcpListener) -> io::Result<()> {
 /// Echo every payload on a single accepted connection until the peer closes.
 fn serve_conn(mut conn: TcpStream) -> io::Result<()> {
     conn.set_nodelay(true)?;
+    conn.set_nonblocking(true)?;
     // The responder echoes whatever it reads, so it does not need to know the
     // payload size up front; a fixed buffer streams bytes straight back.
     let mut buf = [0u8; 8192];
     loop {
-        match conn.read(&mut buf) {
-            Ok(0) => return Ok(()), // clean EOF
-            Ok(n) => conn.write_all(&buf[..n])?,
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e),
+        // Bounded-spin read: poll nonblocking up to SPIN_BUDGET times, then
+        // fall back to blocking so the thread yields under contention.
+        let n = {
+            let mut tries = 0u32;
+            loop {
+                match conn.read(&mut buf) {
+                    Ok(0) => return Ok(()), // clean EOF
+                    Ok(n) => break n,
+                    Err(e)
+                        if e.kind() == io::ErrorKind::WouldBlock
+                            || e.kind() == io::ErrorKind::Interrupted =>
+                    {
+                        if tries < SPIN_BUDGET {
+                            tries += 1;
+                            std::hint::spin_loop();
+                        } else {
+                            // Budget exhausted: switch to blocking to yield CPU.
+                            conn.set_nonblocking(false)?;
+                            let nb = loop {
+                                match conn.read(&mut buf) {
+                                    Ok(0) => return Ok(()),
+                                    Ok(n) => break n,
+                                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                                    Err(e) => return Err(e),
+                                }
+                            };
+                            conn.set_nonblocking(true)?;
+                            break nb;
+                        }
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+        };
+
+        // Nonblocking write: spin until all bytes are echoed.
+        let mut off = 0;
+        while off < n {
+            match conn.write(&buf[off..n]) {
+                Ok(m) => off += m,
+                Err(e)
+                    if e.kind() == io::ErrorKind::WouldBlock
+                        || e.kind() == io::ErrorKind::Interrupted =>
+                {
+                    std::hint::spin_loop();
+                }
+                Err(e) => return Err(e),
+            }
         }
     }
 }
