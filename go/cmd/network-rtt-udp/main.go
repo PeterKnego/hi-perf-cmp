@@ -36,6 +36,10 @@ const experiment = "udp"
 // error, not a retransmit.
 const udpReadTimeout = time.Second
 
+// serveSpinBudget is the maximum number of EAGAIN spins in the raw-fd read
+// loop before yielding back to the netpoller.
+const serveSpinBudget = 2048
+
 func main() {
 	cfg, err := bench.LoadConfig()
 	if err != nil {
@@ -177,13 +181,40 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 // closed).
 func serve(conn *net.UDPConn, payloadBytes int) error {
 	buf := make([]byte, payloadBytes)
+	rc, err := conn.SyscallConn()
+	if err != nil {
+		return err
+	}
 	for {
-		n, addr, err := conn.ReadFromUDP(buf)
+		var rerr error
+		err := rc.Read(func(fd uintptr) bool {
+			for spins := 0; ; spins++ {
+				n, from, e := syscall.Recvfrom(int(fd), buf, 0)
+				if e == syscall.EINTR {
+					continue
+				}
+				if e == syscall.EAGAIN {
+					if spins >= serveSpinBudget {
+						return false // park on netpoller; re-invoked when readable
+					}
+					continue
+				}
+				if e != nil {
+					rerr = e
+					return true
+				}
+				// echo straight back to sender
+				if se := syscall.Sendto(int(fd), buf[:n], 0, from); se != nil {
+					bench.Logf(prog(), "udp echo: write: %v", se)
+				}
+				return true
+			}
+		})
 		if err != nil {
 			return err
 		}
-		if _, err := conn.WriteToUDP(buf[:n], addr); err != nil {
-			bench.Logf(prog(), "udp echo: write: %v", err)
+		if rerr != nil {
+			return rerr
 		}
 	}
 }
