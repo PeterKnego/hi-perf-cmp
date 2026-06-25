@@ -6,10 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A comparison of high-performance code artifacts across **Rust**, **Java**, and **Go**, over three focus areas:
 **network-rtt** (request/response round-trip time), **filesystem-write** (write throughput/latency), and
-**thread-handoff** (latency of passing work between threads).
+**thread-handoff** (latency of passing work between threads). Each focus area has one or more **experiments**
+(variants) compared on a grid of **experiment × language**.
 
-The repo is at the **skeleton stage**: every benchmark is a stub that builds, runs, and emits a placeholder
-result line. Real measurement logic is added per focus area later.
+**Status:** `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (cross-host capable).
+`filesystem-write` and `thread-handoff` are still stubs that emit a placeholder line.
 
 ## Architecture: the result contract is the only coupling
 
@@ -31,30 +32,37 @@ rather than hand-rolling JSON:
 
 ## Layout is language-first
 
-Top-level dirs are the languages, each a self-contained idiomatic workspace with one runnable unit per focus
-area. This keeps each toolchain (Cargo workspace / single Go module / single Gradle build) intact — do not
-fragment a language's build across focus-area dirs. Cross-language/experiment comparison is the
-`tools/journal` CLI's job, not the directory layout's.
+Top-level dirs are the languages, each a self-contained idiomatic workspace. Each experiment is its own
+runnable artifact named `<focus_area>-<experiment>` (e.g. `network-rtt-tcp`) built over a shared per-language
+bench library; the stub focus areas have a single artifact named just `<focus_area>`. This keeps each toolchain
+(Cargo workspace / single Go module / single Gradle build) intact — do not fragment a language's build across
+dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not the directory layout's.
 
 ## Build & run
 
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write`, `thread-handoff`.
+
 ```sh
-# Rust — Cargo workspace, crate per focus area
-cd rust && cargo build --release
-cargo run --release -p network-rtt          # | filesystem-write | thread-handoff
+# Rust — Cargo workspace: bench-common + network-rtt/{tcp,udp,quic} + stubs
+cd rust && cargo build --release && cargo test && cargo clippy --all-targets && cargo fmt --check
+cargo run --release -p network-rtt-tcp        # -p network-rtt-udp | -p network-rtt-quic | -p filesystem-write | ...
 
-# Go — single module, cmd/ binary per area
-cd go && go build ./... && go vet ./...
-go run ./cmd/network-rtt                     # | filesystem-write | thread-handoff
+# Go — single module: internal/bench + cmd/network-rtt-{tcp,udp,quic} + stubs
+cd go && go build ./... && go vet ./... && go test ./...
+go run ./cmd/network-rtt-tcp
 
-# Java — single Gradle build, app subproject per area + :common, JDK 21 toolchain
-cd java && ./gradlew build
-./gradlew :network-rtt:run -q                # | :filesystem-write:run | :thread-handoff:run
+# Java — single Gradle build: :common + :network-rtt-{tcp,udp,quic} + stubs, JDK 21 toolchain
+cd java && ./gradlew build        # runs tests too (StatsTest under :common)
+./gradlew :network-rtt-tcp:run -q
+
+# Journal CLI (separate Rust crate; not in the rust/ workspace)
+cd tools/journal && cargo build --release && cargo test
 ```
 
 The Gradle **wrapper is checked in** (`java/gradlew`, `java/gradle/wrapper/`); always invoke Gradle via
-`./gradlew`, not a system `gradle`. There are no tests yet — when adding them, use each language's standard
-runner (`cargo test`, `go test ./...`, `./gradlew test`).
+`./gradlew`, not a system `gradle`. Tests exist for the comparability-critical `Stats` (each language) and the
+journal CLI; keep them green. Java emits `value` as a double (e.g. `34151.0`) and always includes `notes` — both
+are valid contract JSON.
 
 ## Toolchain versions
 
@@ -73,21 +81,37 @@ single-host benchmarks; node1 = the `network-rtt` cross-host responder. Instance
 plus `RTT_HOST`/`RTT_TCP_PORT`/`RTT_UDP_PORT`. Real network RTT is **cross-host only**; loopback is a
 local-dev convenience, never a reported result.
 
-## Adding a real benchmark
+## Tracking performance over time
 
-Replace a stub's placeholder emit (`metric: "placeholder"`, `notes: "stub"`) with real measurement that emits
-the same contract. Keep the focus-area names exact (`network-rtt`, `filesystem-write`, `thread-handoff`) and
-`language` matching the directory, and emit the `experiment` field — the `tools/journal` CLI aligns results on
-`(focus_area, experiment, language, metric)`. For the Rust release profile and workspace conventions, see below.
+Runs are recorded in `journal/` (committed) and compared with the `tools/journal` CLI: `record` ingests a
+`bench-out/dist/<ts>/` run into `journal/runs/<ts>-<sha>/`, `compare` prints per-cell deltas and flags
+regressions (direction-aware by unit; default 10%), `set-baseline` sets the reference. Confirmed regressions
+go in `journal/REGRESSIONS.md`. Each run is committed, so results are correlated with the producing commit.
+First *real* journal entries should come from genuine cross-host AWS runs, not loopback.
+
+## Adding an experiment or a real benchmark
+
+To add an experiment to a focus area (e.g. a new transport for `network-rtt`): add an artifact
+`<focus_area>-<experiment>` in each language over the shared bench library (Rust crate under
+`rust/<focus_area>/<exp>/`; Go `go/cmd/<focus_area>-<exp>/`; Java `:<focus_area>-<exp>` subproject), emit
+`experiment: "<exp>"`, and add a row to `bench-infra/ansible/group_vars/all.yml`'s `experiments` matrix.
+Keep experiment-specific dependencies in that artifact only (e.g. QUIC's quinn/quic-go/Kwik).
+
+To turn a stub focus area real: replace its placeholder emit (`experiment: "placeholder"`, `metric:
+"placeholder"`, `notes: "stub"`) with real measurement. Keep focus-area names exact (`network-rtt`,
+`filesystem-write`, `thread-handoff`), `language` matching the directory, and always emit the `experiment`
+field — the `tools/journal` CLI aligns on `(focus_area, experiment, language, metric)`. For the Rust release
+profile and workspace conventions, see below.
 
 ## Rust workspace conventions
 
 Mirrors the sibling `../ultima_cluster` project: `rust/rust-toolchain.toml` pins
 stable + `rustfmt`/`clippy`; the workspace uses **edition 2024** and a
 `[workspace.package]` block that member crates inherit via `field.workspace =
-true`; shared deps go in `[workspace.dependencies]` (empty for now — benchmarks
-are std-only). Release profile: `lto = "thin"`, `codegen-units = 1`, `debug = 1`.
-Keep the workspace **clippy- and rustfmt-clean** (`cargo clippy --all-targets`,
-`cargo fmt --check`).
+true`; shared deps go in `[workspace.dependencies]` (the tcp/udp experiments and
+stubs are std-only; the quic experiment is the only consumer of the
+quinn/rustls/rcgen/tokio stack declared there). Release profile: `lto = "thin"`,
+`codegen-units = 1`, `debug = 1`. Keep the workspace **clippy- and rustfmt-clean**
+(`cargo clippy --all-targets`, `cargo fmt --check`).
 
 Design rationale lives in `docs/superpowers/specs/`.
