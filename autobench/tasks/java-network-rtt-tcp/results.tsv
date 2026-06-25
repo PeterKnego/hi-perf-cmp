@@ -1,1 +1,2 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
+39858e1	31119	64430	32142	keep	baseline (unmodified cell, median-of-5)
