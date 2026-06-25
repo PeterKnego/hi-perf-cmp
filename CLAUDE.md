@@ -63,7 +63,17 @@ Rust 1.96 · Go 1.22 · Java 21 · Gradle 8.10.2 (via wrapper).
 
 Replace a stub's placeholder emit (`metric: "placeholder"`, `notes: "stub"`) with real measurement that emits
 the same contract. Keep the focus-area names exact (`network-rtt`, `filesystem-write`, `thread-handoff`) and
-`language` matching the directory — the harness aligns results on these strings. The Rust release profile is
-tuned for benchmarking (fat LTO, `codegen-units = 1`, `panic = "abort"`) in `rust/Cargo.toml`.
+`language` matching the directory — the harness aligns results on these strings. For the Rust release profile
+and workspace conventions, see below.
+
+## Rust workspace conventions
+
+Mirrors the sibling `../ultima_cluster` project: `rust/rust-toolchain.toml` pins
+stable + `rustfmt`/`clippy`; the workspace uses **edition 2024** and a
+`[workspace.package]` block that member crates inherit via `field.workspace =
+true`; shared deps go in `[workspace.dependencies]` (empty for now — benchmarks
+are std-only). Release profile: `lto = "thin"`, `codegen-units = 1`, `debug = 1`.
+Keep the workspace **clippy- and rustfmt-clean** (`cargo clippy --all-targets`,
+`cargo fmt --check`).
 
 Design rationale lives in `docs/superpowers/specs/`.

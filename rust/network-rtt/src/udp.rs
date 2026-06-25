@@ -53,7 +53,7 @@ pub fn run(cfg: &Config) -> io::Result<Vec<u64>> {
     let _ = done_tx.send(());
     server
         .join()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "udp echo server thread panicked"))??;
+        .map_err(|_| io::Error::other("udp echo server thread panicked"))??;
 
     result
 }
@@ -88,7 +88,10 @@ fn round_trip(sock: &UdpSocket, send: &[u8], recv: &mut [u8]) -> io::Result<()> 
     sock.send(send)?;
     let n = sock.recv(recv).map_err(|e| {
         if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut {
-            io::Error::new(io::ErrorKind::TimedOut, "udp recv timed out (loopback loss)")
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                "udp recv timed out (loopback loss)",
+            )
         } else {
             e
         }

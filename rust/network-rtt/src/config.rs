@@ -37,9 +37,9 @@ fn parse_positive(name: &str, default: usize) -> Result<usize, String> {
         Err(_) => Ok(default),
         Ok(raw) => {
             let trimmed = raw.trim();
-            let value: usize = trimmed
-                .parse()
-                .map_err(|_| format!("{name}: invalid value {raw:?} (expected a positive integer)"))?;
+            let value: usize = trimmed.parse().map_err(|_| {
+                format!("{name}: invalid value {raw:?} (expected a positive integer)")
+            })?;
             if value == 0 {
                 return Err(format!("{name}: must be positive, got 0"));
             }

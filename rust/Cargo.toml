@@ -6,10 +6,17 @@ members = [
     "thread-handoff",
 ]
 
-# Shared profile tuned for benchmarking: full optimization, single codegen unit,
-# fat LTO so the comparison reflects what the compiler can actually do.
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "Apache-2.0"
+authors = ["Peter Knego"]
+
+# Shared dependencies inherited by member crates via `dep.workspace = true`.
+# Benchmarks are std-only for now; add shared deps here as they appear.
+[workspace.dependencies]
+
 [profile.release]
-opt-level = 3
-lto = "fat"
+lto = "thin"
 codegen-units = 1
-panic = "abort"
+debug = 1

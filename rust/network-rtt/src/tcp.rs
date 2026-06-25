@@ -38,7 +38,7 @@ pub fn run(cfg: &Config) -> io::Result<Vec<u64>> {
     // server side; join surfaces any server-side IO error.
     server
         .join()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "tcp echo server thread panicked"))??;
+        .map_err(|_| io::Error::other("tcp echo server thread panicked"))??;
 
     result
 }
