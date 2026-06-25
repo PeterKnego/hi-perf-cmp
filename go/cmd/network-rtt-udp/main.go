@@ -20,9 +20,11 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/peterknego/hi-perf-cmp/go/internal/bench"
@@ -33,6 +35,10 @@ const experiment = "udp"
 // udpReadTimeout is the per-recv deadline. A timeout is treated as a hard
 // error, not a retransmit.
 const udpReadTimeout = time.Second
+
+// serveSpinBudget is the maximum number of EAGAIN spins in the raw-fd read
+// loop before yielding back to the netpoller.
+const serveSpinBudget = 2048
 
 func main() {
 	cfg, err := bench.LoadConfig()
@@ -122,6 +128,12 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 	}
 	defer conn.Close()
 
+	rc, err := conn.SyscallConn()
+	if err != nil {
+		return nil, fmt.Errorf("udp: rawconn: %w", err)
+	}
+	errRecvTimeout := errors.New("udp recv timed out (datagram loss)")
+
 	send := cfg.Payload()
 	recv := make([]byte, cfg.PayloadBytes)
 
@@ -129,12 +141,31 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 		if _, err := conn.Write(send); err != nil {
 			return fmt.Errorf("udp: write: %w", err)
 		}
-		if err := conn.SetReadDeadline(time.Now().Add(udpReadTimeout)); err != nil {
-			return fmt.Errorf("udp: set deadline: %w", err)
+		deadline := time.Now().Add(udpReadTimeout)
+		var n int
+		var rerr error
+		cberr := rc.Read(func(fd uintptr) bool {
+			for spins := 0; ; spins++ {
+				nn, e := syscall.Read(int(fd), recv)
+				if e == syscall.EINTR {
+					continue
+				}
+				if e == syscall.EAGAIN {
+					if spins&255 == 0 && time.Now().After(deadline) {
+						rerr = errRecvTimeout
+						return true // never park: return from rc.Read
+					}
+					continue
+				}
+				n, rerr = nn, e
+				return true
+			}
+		})
+		if cberr != nil {
+			return fmt.Errorf("udp: rawread: %w", cberr)
 		}
-		n, err := conn.Read(recv)
-		if err != nil {
-			return fmt.Errorf("udp: read: %w", err)
+		if rerr != nil {
+			return fmt.Errorf("udp: read: %w", rerr)
 		}
 		if n != len(send) || !bytes.Equal(recv[:n], send) {
 			return fmt.Errorf("udp: echo mismatch")
@@ -150,13 +181,40 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 // closed).
 func serve(conn *net.UDPConn, payloadBytes int) error {
 	buf := make([]byte, payloadBytes)
+	rc, err := conn.SyscallConn()
+	if err != nil {
+		return err
+	}
 	for {
-		n, addr, err := conn.ReadFromUDP(buf)
+		var rerr error
+		err := rc.Read(func(fd uintptr) bool {
+			for spins := 0; ; spins++ {
+				n, from, e := syscall.Recvfrom(int(fd), buf, 0)
+				if e == syscall.EINTR {
+					continue
+				}
+				if e == syscall.EAGAIN {
+					if spins >= serveSpinBudget {
+						return false // park on netpoller; re-invoked when readable
+					}
+					continue
+				}
+				if e != nil {
+					rerr = e
+					return true
+				}
+				// echo straight back to sender
+				if se := syscall.Sendto(int(fd), buf[:n], 0, from); se != nil {
+					bench.Logf(prog(), "udp echo: write: %v", se)
+				}
+				return true
+			}
+		})
 		if err != nil {
 			return err
 		}
-		if _, err := conn.WriteToUDP(buf[:n], addr); err != nil {
-			bench.Logf(prog(), "udp echo: write: %v", err)
+		if rerr != nil {
+			return rerr
 		}
 	}
 }
