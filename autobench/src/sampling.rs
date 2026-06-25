@@ -11,9 +11,38 @@
 
 use std::collections::BTreeMap;
 use std::io::Read;
-use std::net::TcpStream;
+use std::net::{TcpStream, UdpSocket};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
+
+/// Transport of a `Network` cell — selects the port env var and the
+/// server-readiness probe. TCP detects readiness by connecting to the
+/// listener; UDP (connectionless) sends a probe datagram and waits for the
+/// echo server to reflect it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Transport {
+    Tcp,
+    Udp,
+}
+
+impl Transport {
+    /// Map a TaskSpec `experiment` to a transport. Unknown experiments default
+    /// to TCP (the only other network experiment, `quic`, is not wired here).
+    pub fn from_experiment(experiment: &str) -> Self {
+        match experiment {
+            "udp" => Transport::Udp,
+            _ => Transport::Tcp,
+        }
+    }
+
+    /// The env var the cell reads for its port, per the `RTT_*_PORT` contract.
+    fn port_env(self) -> &'static str {
+        match self {
+            Transport::Tcp => "RTT_TCP_PORT",
+            Transport::Udp => "RTT_UDP_PORT",
+        }
+    }
+}
 
 /// Median of `xs`. For an even count, returns the lower-middle of the two
 /// central elements (nearest-rank style), matching the bench convention. Empty
@@ -100,6 +129,30 @@ fn wait_for_bind(port: u16, timeout: Duration) -> bool {
     false
 }
 
+/// Wait until the UDP echo server on `127.0.0.1:port` is responsive, or
+/// `timeout` elapses. UDP has no connection to probe, so we send a small probe
+/// datagram and wait for the echo server to reflect it back; datagrams sent
+/// before the server binds are simply dropped and retried. Returns true once an
+/// echo is received. This relies only on the cell's echo behavior (reflect any
+/// datagram), not on its internal protocol.
+fn wait_for_udp_echo(port: u16, timeout: Duration) -> bool {
+    let addr = format!("127.0.0.1:{port}");
+    let Ok(probe) = UdpSocket::bind("127.0.0.1:0") else {
+        return false;
+    };
+    // Short per-recv timeout so we re-send promptly while the server comes up.
+    let _ = probe.set_read_timeout(Some(Duration::from_millis(50)));
+    let deadline = Instant::now() + timeout;
+    let mut buf = [0u8; 8];
+    while Instant::now() < deadline {
+        if probe.send_to(b"PING", &addr).is_ok() && probe.recv_from(&mut buf).is_ok() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    false
+}
+
 /// Outcome of one two-process network run.
 pub struct NetworkRun {
     /// True if the client exited 0.
@@ -113,27 +166,33 @@ pub struct NetworkRun {
 /// Run one two-process network fitness sample over `127.0.0.1`.
 ///
 /// Spawns the artifact in `RTT_MODE=server` (plus `extra_env`, e.g. port and
-/// iteration counts) as a child, waits for it to bind `port`, then runs the
-/// artifact in `RTT_MODE=client RTT_HOST=127.0.0.1` (plus `extra_env`) and
-/// captures its stdout. The server child is ALWAYS killed via a drop guard,
-/// even if the client run errors.
+/// iteration counts) as a child, waits for it to become ready (TCP: connect
+/// probe; UDP: echo probe), then runs the artifact in `RTT_MODE=client
+/// RTT_HOST=127.0.0.1` (plus `extra_env`) and captures its stdout. The port is
+/// passed via the transport's env var (`RTT_TCP_PORT` / `RTT_UDP_PORT`). The
+/// server child is ALWAYS killed via a drop guard, even if the client errors.
 pub fn run_network_once(
     run: &[&str],
     run_dir: &str,
     port: u16,
     extra_env: &[(&str, &str)],
+    transport: Transport,
 ) -> std::io::Result<NetworkRun> {
     let port_s = port.to_string();
+    let port_env = transport.port_env();
     // Server env: RTT_MODE=server + the port + caller's extra env.
-    let mut server_env: Vec<(&str, &str)> = vec![("RTT_MODE", "server"), ("RTT_TCP_PORT", &port_s)];
+    let mut server_env: Vec<(&str, &str)> = vec![("RTT_MODE", "server"), (port_env, &port_s)];
     server_env.extend_from_slice(extra_env);
 
     let mut server_cmd = run_command(run, run_dir, &server_env);
     server_cmd.stdout(Stdio::null()).stderr(Stdio::piped());
     let mut guard = KillOnDrop(server_cmd.spawn()?);
 
-    let bound = wait_for_bind(port, Duration::from_secs(10));
-    if !bound {
+    let ready = match transport {
+        Transport::Tcp => wait_for_bind(port, Duration::from_secs(10)),
+        Transport::Udp => wait_for_udp_echo(port, Duration::from_secs(10)),
+    };
+    if !ready {
         // Drain whatever the server logged to help diagnose the bind failure.
         let mut server_err = String::new();
         if let Some(mut e) = guard.0.stderr.take() {
@@ -142,7 +201,9 @@ pub fn run_network_once(
         return Ok(NetworkRun {
             client_ok: false,
             stdout: String::new(),
-            stderr: format!("server did not bind 127.0.0.1:{port} within 10s\n{server_err}"),
+            stderr: format!(
+                "server did not become ready on 127.0.0.1:{port} within 10s\n{server_err}"
+            ),
         });
     }
 
@@ -150,7 +211,7 @@ pub fn run_network_once(
     let mut client_env: Vec<(&str, &str)> = vec![
         ("RTT_MODE", "client"),
         ("RTT_HOST", "127.0.0.1"),
-        ("RTT_TCP_PORT", &port_s),
+        (port_env, &port_s),
     ];
     client_env.extend_from_slice(extra_env);
 
@@ -232,5 +293,19 @@ mod tests {
     #[test]
     fn median_empty_is_zero() {
         assert_eq!(median(&[]), 0.0);
+    }
+
+    #[test]
+    fn transport_from_experiment_maps_udp_and_defaults_tcp() {
+        assert_eq!(Transport::from_experiment("udp"), Transport::Udp);
+        assert_eq!(Transport::from_experiment("tcp"), Transport::Tcp);
+        // Unknown / unwired experiments default to TCP.
+        assert_eq!(Transport::from_experiment("quic"), Transport::Tcp);
+    }
+
+    #[test]
+    fn transport_selects_port_env() {
+        assert_eq!(Transport::Tcp.port_env(), "RTT_TCP_PORT");
+        assert_eq!(Transport::Udp.port_env(), "RTT_UDP_PORT");
     }
 }

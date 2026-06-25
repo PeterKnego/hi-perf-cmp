@@ -124,6 +124,62 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
         }),
+        "rust-network-rtt-udp" => Some(TaskSpec {
+            task: "rust-network-rtt-udp",
+            language: "rust",
+            focus_area: "network-rtt",
+            experiment: "udp",
+            kind: Kind::Network,
+            build: &["cargo", "build", "--release", "-p", "network-rtt-udp"],
+            build_dir: "rust",
+            run: &["cargo", "run", "--release", "-q", "-p", "network-rtt-udp"],
+            run_dir: "rust",
+            gate_a: &["cargo", "test"],
+            gate_a_dir: "rust",
+            primary_metric: "rtt_p50",
+            direction: Direction::Minimize,
+        }),
+        "go-network-rtt-udp" => Some(TaskSpec {
+            task: "go-network-rtt-udp",
+            language: "go",
+            focus_area: "network-rtt",
+            experiment: "udp",
+            kind: Kind::Network,
+            build: &[
+                "go",
+                "build",
+                "-o",
+                "bin/network-rtt-udp",
+                "./cmd/network-rtt-udp",
+            ],
+            build_dir: "go",
+            run: &["./bin/network-rtt-udp"],
+            run_dir: "go",
+            gate_a: &["go", "test", "./..."],
+            gate_a_dir: "go",
+            primary_metric: "rtt_p50",
+            direction: Direction::Minimize,
+        }),
+        "java-network-rtt-udp" => Some(TaskSpec {
+            task: "java-network-rtt-udp",
+            language: "java",
+            focus_area: "network-rtt",
+            experiment: "udp",
+            kind: Kind::Network,
+            build: &["./gradlew", "--quiet", ":network-rtt-udp:installDist"],
+            build_dir: "java",
+            run: &["./network-rtt-udp/build/install/network-rtt-udp/bin/network-rtt-udp"],
+            run_dir: "java",
+            gate_a: &[
+                "./gradlew",
+                "--quiet",
+                ":network-rtt-udp:test",
+                ":common:test",
+            ],
+            gate_a_dir: "java",
+            primary_metric: "rtt_p50",
+            direction: Direction::Minimize,
+        }),
         _ => None,
     }
 }
@@ -182,6 +238,22 @@ mod tests {
             &["./network-rtt-tcp/build/install/network-rtt-tcp/bin/network-rtt-tcp"]
         );
         assert_eq!(s.run_dir, "java");
+    }
+
+    #[test]
+    fn udp_cells_resolve_with_udp_experiment() {
+        for (task, lang) in [
+            ("rust-network-rtt-udp", "rust"),
+            ("go-network-rtt-udp", "go"),
+            ("java-network-rtt-udp", "java"),
+        ] {
+            let s = task_spec(task).unwrap();
+            assert_eq!(s.language, lang);
+            assert_eq!(s.experiment, "udp");
+            assert_eq!(s.focus_area, "network-rtt");
+            assert_eq!(s.kind, Kind::Network);
+            assert_eq!(s.primary_metric, "rtt_p50");
+        }
     }
 
     #[test]

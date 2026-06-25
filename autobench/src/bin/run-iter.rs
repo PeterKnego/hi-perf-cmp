@@ -26,7 +26,9 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use hi_perf_autobench::sampling::{NetworkRun, median, parse_contract_metrics, run_network_once};
+use hi_perf_autobench::sampling::{
+    NetworkRun, Transport, median, parse_contract_metrics, run_network_once,
+};
 use hi_perf_autobench::task_spec::{Kind, TaskSpec, task_spec};
 use hi_perf_autobench::verdict::{Status, Verdict};
 use wait_timeout::ChildExt;
@@ -172,7 +174,7 @@ fn main() {
     let Some(spec) = task_spec(&args.task) else {
         let mut v = Verdict::new(Status::UnknownTask, "setup");
         v.stderr_tail = Some(format!(
-            "unknown task {:?}; known: rust-network-rtt-tcp, go-network-rtt-tcp, java-network-rtt-tcp",
+            "unknown task {:?}; known: {{rust,go,java}}-network-rtt-{{tcp,udp}}",
             args.task
         ));
         emit_and_exit(&v);
@@ -237,7 +239,8 @@ fn one_network_run(
     env: &[(&str, &str)],
     stage_is_smoke: bool,
 ) -> NetworkRun {
-    match run_network_once(spec.run, spec.run_dir, FITNESS_PORT, env) {
+    let transport = Transport::from_experiment(spec.experiment);
+    match run_network_once(spec.run, spec.run_dir, FITNESS_PORT, env, transport) {
         Ok(run) => run,
         Err(e) => {
             let detail = format!("two-process driver I/O error: {e}");
