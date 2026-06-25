@@ -136,8 +136,10 @@ fn round_trip(stream: &mut TcpStream, send: &[u8], recv: &mut [u8]) -> io::Resul
     while off < send.len() {
         match stream.write(&send[off..]) {
             Ok(n) => off += n,
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock
-                   || e.kind() == io::ErrorKind::Interrupted => {
+            Err(e)
+                if e.kind() == io::ErrorKind::WouldBlock
+                    || e.kind() == io::ErrorKind::Interrupted =>
+            {
                 std::hint::spin_loop();
             }
             Err(e) => return Err(e),
