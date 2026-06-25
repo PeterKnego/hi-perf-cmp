@@ -1,1 +1,6 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
+39858e1	36310	62799	36443	keep	baseline (unmodified cell, median-of-5)
+ae3bf86	18930	42140	20308	keep	raw-fd busy-poll client read via SyscallConn+syscall.Read; -48% p50, -33% p99 (median-of-5)
+7b5dc41	13931	31591	14486	keep	bounded raw-fd spin(1000)-then-park responder read (return false parks on netpoller); -26% p50, -25% p99 (median-of-7)
+337643a	12391	40471	14567	discard	GOMAXPROCS(2): p50 wash, p99 unstable (+28% in re-run), hardcodes core count (cross-host hazard) (median-of-9)
+9daafdf	13929	32360	14786	discard	spinBudget=4000 sweep: identical to 1000 (responder catches mid-spin before budget) -- knee confirmed (median-of-7)

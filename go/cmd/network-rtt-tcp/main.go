@@ -21,11 +21,14 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"syscall"
 
 	"github.com/peterknego/hi-perf-cmp/go/internal/bench"
 )
 
 const experiment = "tcp"
+
+const spinBudget = 1000 // bounded spin for responder reads before parking on netpoller
 
 func main() {
 	cfg, err := bench.LoadConfig()
@@ -110,6 +113,11 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 		return nil, fmt.Errorf("tcp: set nodelay: %w", err)
 	}
 
+	rc, err := tcpConn.SyscallConn()
+	if err != nil {
+		return nil, fmt.Errorf("tcp: syscallconn: %w", err)
+	}
+
 	send := cfg.Payload()
 	recv := make([]byte, cfg.PayloadBytes)
 
@@ -117,8 +125,32 @@ func client(addr string, cfg bench.Config) ([]int64, error) {
 		if _, err := tcpConn.Write(send); err != nil {
 			return fmt.Errorf("tcp: write: %w", err)
 		}
-		if _, err := io.ReadFull(tcpConn, recv); err != nil {
-			return fmt.Errorf("tcp: read: %w", err)
+		off := 0
+		var rerr error
+		ctrlErr := rc.Read(func(fd uintptr) bool {
+			for off < len(recv) {
+				n, e := syscall.Read(int(fd), recv[off:])
+				if e == syscall.EAGAIN || e == syscall.EINTR {
+					// busy-poll / retry; do NOT return false (would park in netpoller)
+					continue
+				}
+				if e != nil {
+					rerr = e
+					return true
+				}
+				if n == 0 {
+					rerr = io.ErrUnexpectedEOF
+					return true
+				}
+				off += n
+			}
+			return true
+		})
+		if ctrlErr != nil {
+			return fmt.Errorf("tcp: read: %w", ctrlErr)
+		}
+		if rerr != nil {
+			return fmt.Errorf("tcp: read: %w", rerr)
 		}
 		if !bytes.Equal(recv, send) {
 			return fmt.Errorf("tcp: echo mismatch")
@@ -147,20 +179,60 @@ func serve(ln net.Listener, payloadBytes int) error {
 func echoConn(conn net.Conn, payloadBytes int) {
 	defer conn.Close()
 
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		_ = tcpConn.SetNoDelay(true)
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		bench.Logf(prog(), "tcp echo: expected *net.TCPConn, got %T", conn)
+		return
+	}
+	_ = tcpConn.SetNoDelay(true)
+
+	rc, err := tcpConn.SyscallConn()
+	if err != nil {
+		bench.Logf(prog(), "tcp echo: syscallconn: %v", err)
+		return
 	}
 
 	buf := make([]byte, payloadBytes)
 	for {
-		if _, err := io.ReadFull(conn, buf); err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				return // client disconnected; normal
+		off := 0
+		var rerr error
+		var eof bool
+		ctrlErr := rc.Read(func(fd uintptr) bool {
+			spins := 0
+			for off < len(buf) {
+				n, e := syscall.Read(int(fd), buf[off:])
+				switch {
+				case e == syscall.EAGAIN:
+					spins++
+					if spins >= spinBudget {
+						return false // park on netpoller; re-invoked when readable, off preserved
+					}
+					continue
+				case e == syscall.EINTR:
+					continue // retry, do not count against budget
+				case e != nil:
+					rerr = e
+					return true
+				case n == 0:
+					eof = true
+					return true
+				}
+				off += n
 			}
-			bench.Logf(prog(), "tcp echo: read: %v", err)
+			return true
+		})
+		if eof {
+			return // client disconnected; normal
+		}
+		if ctrlErr != nil {
+			bench.Logf(prog(), "tcp echo: read: %v", ctrlErr)
 			return
 		}
-		if _, err := conn.Write(buf); err != nil {
+		if rerr != nil {
+			bench.Logf(prog(), "tcp echo: read: %v", rerr)
+			return
+		}
+		if _, err := tcpConn.Write(buf); err != nil {
 			bench.Logf(prog(), "tcp echo: write: %v", err)
 			return
 		}
