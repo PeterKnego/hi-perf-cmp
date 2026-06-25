@@ -1,2 +1,3 @@
 commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
 6750573	34091	61450	34016	keep	baseline (unmodified cell, median-of-5)
+5e22565	15260	38600	17732	keep	raw-fd busy-poll client recv (SyscallConn+syscall.Read), 1s deadline preserves loss error; -55% p50 (median-of-7)
