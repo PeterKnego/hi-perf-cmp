@@ -1,0 +1,8 @@
+[package]
+name = "thread-handoff"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "thread-handoff"
+path = "src/main.rs"

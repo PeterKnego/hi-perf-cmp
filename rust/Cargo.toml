@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "network-rtt",
+    "filesystem-write",
+    "thread-handoff",
+]
+
+# Shared profile tuned for benchmarking: full optimization, single codegen unit,
+# fat LTO so the comparison reflects what the compiler can actually do.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"

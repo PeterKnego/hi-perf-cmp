@@ -13,6 +13,21 @@ target
 # Contains mutation testing data
 **/mutants.out*/
 
+# --- Go ---
+# Test binaries and coverage
+go/**/*.test
+go/**/*.out
+
+# --- Java / Gradle ---
+.gradle/
+**/build/
+# Keep the Gradle wrapper jar (gradle/wrapper/gradle-wrapper.jar) checked in.
+
+# --- Benchmark output ---
+# results/ is tracked only via .gitkeep; everything else is generated.
+results/*
+!results/.gitkeep
+
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
