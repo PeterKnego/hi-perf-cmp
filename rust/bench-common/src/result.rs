@@ -8,16 +8,30 @@
 const LANGUAGE: &str = "rust";
 
 /// Emit a result line with an integer `value`.
-pub fn emit(focus_area: &str, experiment: &str, metric: &str, value: u64, samples: usize) {
+pub fn emit(
+    focus_area: &str,
+    experiment: &str,
+    metric: &str,
+    value: u64,
+    unit: &str,
+    samples: usize,
+) {
     println!(
-        r#"{{"language":"{LANGUAGE}","focus_area":"{focus_area}","experiment":"{experiment}","metric":"{metric}","value":{value},"unit":"ns","samples":{samples}}}"#
+        r#"{{"language":"{LANGUAGE}","focus_area":"{focus_area}","experiment":"{experiment}","metric":"{metric}","value":{value},"unit":"{unit}","samples":{samples}}}"#
     );
 }
 
 /// Emit a result line with a (possibly fractional) numeric `value`.
-pub fn emit_float(focus_area: &str, experiment: &str, metric: &str, value: f64, samples: usize) {
+pub fn emit_float(
+    focus_area: &str,
+    experiment: &str,
+    metric: &str,
+    value: f64,
+    unit: &str,
+    samples: usize,
+) {
     println!(
-        r#"{{"language":"{LANGUAGE}","focus_area":"{focus_area}","experiment":"{experiment}","metric":"{metric}","value":{value},"unit":"ns","samples":{samples}}}"#
+        r#"{{"language":"{LANGUAGE}","focus_area":"{focus_area}","experiment":"{experiment}","metric":"{metric}","value":{value},"unit":"{unit}","samples":{samples}}}"#
     );
 }
 

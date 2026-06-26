@@ -50,7 +50,7 @@ pub fn emit_rtt(experiment: &str, samples: &[u64]) {
     let p99 = stats::percentile(&sorted, 99.0);
     let mean = stats::mean(samples);
 
-    result::emit(FOCUS_AREA, experiment, "rtt_p50", p50, n);
-    result::emit(FOCUS_AREA, experiment, "rtt_p99", p99, n);
-    result::emit_float(FOCUS_AREA, experiment, "rtt_mean", mean, n);
+    result::emit(FOCUS_AREA, experiment, "rtt_p50", p50, "ns", n);
+    result::emit(FOCUS_AREA, experiment, "rtt_p99", p99, "ns", n);
+    result::emit_float(FOCUS_AREA, experiment, "rtt_mean", mean, "ns", n);
 }
