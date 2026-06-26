@@ -41,21 +41,26 @@ Four runnable artifacts per language, named `filesystem-write-<experiment>`
 | `fsync`     | append one entry, then **full `fsync`** (`sync_all`)      | strict durability *including* file metadata       |
 | `fdatasync` | append one entry (file grows), then **`fdatasync`** (`sync_data`) | size-extending WAL commit primitive       |
 | `prealloc`  | **overwrite** one entry in a pre-written region (no size change), then **`fdatasync`** | the commit primitive on a preallocated segment — a pure data barrier |
-| `batch`     | append `FSW_BATCH` entries (one coalesced write), then **one `fdatasync`** | group commit — the production path |
+| `batch`     | **overwrite** `FSW_BATCH` entries (one coalesced write) in a pre-written region, then **one `fdatasync`** | group commit on a preallocated segment — the full production path |
 
-The comparisons this grid exposes:
+The grid is an **optimization ladder** — each experiment adds exactly one thing
+on top of the previous, so every adjacent comparison is a clean single-variable
+delta:
 
-- `fsync` vs `fdatasync` — the cost of the inode-**timestamp** metadata commit.
-- `fdatasync` vs `prealloc` — the cost of the **`i_size`/extent-map** journal
-  commit that a size-extending `fdatasync` still pays. `fdatasync` appends to a
-  growing file, so each barrier commits the new file size (an ext4 journal
-  commit); `prealloc` overwrites already-allocated, already-written blocks, so the
-  same `fdatasync` is a pure data barrier. This is the big WAL win.
-- `fdatasync` vs `batch` — amortizing one barrier over many entries.
+- `fsync` → `fdatasync` — drops the inode-**timestamp** metadata commit.
+- `fdatasync` → `prealloc` — drops the **`i_size`/extent-map** journal commit a
+  size-extending `fdatasync` still pays. `fdatasync` appends to a growing file, so
+  each barrier commits the new file size (an ext4 journal commit); `prealloc`
+  overwrites already-allocated, already-written blocks, so the same `fdatasync` is
+  a pure data barrier. This is the big WAL win.
+- `prealloc` → `batch` — amortizes one barrier over `FSW_BATCH` entries, **with
+  preallocation held constant**, so it isolates *purely* the group-commit win (no
+  `i_size`-commit confound). `batch` is preallocated `prealloc` at batch size N.
 
 `prealloc` and `fdatasync` issue the **identical** per-entry operation (one
-`fdatasync`, batch size 1); they differ *only* in whether the target blocks were
-preallocated, isolating the metadata-commit cost cleanly.
+`fdatasync`, batch size 1), differing *only* in preallocation; `batch` and
+`prealloc` are identical *except* batch size — keeping every step a one-variable
+change.
 
 ## Methodology (identical across all three languages)
 
@@ -67,10 +72,10 @@ For each experiment artifact:
    overwrite). `fsync` the file *and its parent directory* once so the file's
    existence is durable before the loop. This one-time cost never enters the
    timed path.
-   - **`prealloc` only:** before timing, **preallocate by real zero-write** —
-     write `(FSW_WARMUP + FSW_ITERATIONS) × FSW_ENTRY_BYTES` bytes of zeros
-     sequentially, then one `fsync` (`sync_all`), then `seek` back to offset 0.
-     This forces the blocks allocated *and marked written* (a sparse
+   - **`prealloc` and `batch` only:** before timing, **preallocate by real
+     zero-write** — write `(FSW_WARMUP + FSW_ITERATIONS) × FSW_ENTRY_BYTES` bytes
+     of zeros sequentially, then one `fsync` (`sync_all`), then `seek` back to
+     offset 0. This forces the blocks allocated *and marked written* (a sparse
      `set_len`/`fallocate` would leave unwritten extents that re-journal on first
      overwrite — defeating the experiment, and needing non-std bindings). Every
      subsequent write overwrites a pre-written block, so no barrier extends
@@ -83,7 +88,7 @@ For each experiment artifact:
    Out of scope.)
 3. **Warmup.** Run `FSW_WARMUP` discarded durable-append operations (lets the
    filesystem journal, device write cache, and — for Java — the JIT settle).
-   `prealloc`'s warmup overwrites the first `FSW_WARMUP` entries of the
+   For `prealloc`/`batch`, warmup overwrites the first `FSW_WARMUP` entries of the
    preallocated region, so the measured loop continues overwriting already-written
    blocks.
 4. **Measure.** A single monotonic span wraps the measured loop:
@@ -141,8 +146,9 @@ a `tmpfs` (memory-backed) filesystem, where "durable" writes never touch a devic
 and the numbers are meaningless. Unset `FSW_DIR` → descriptive message on stderr +
 non-zero exit. The directory must be a real disk; the bench fleet points it at the
 NVMe-backed bench home. `FSW_BATCH` is parsed by all four artifacts (uniform
-config type) but only consumed by `batch`. `prealloc` needs no extra config: it
-sizes its preallocation from `(FSW_WARMUP + FSW_ITERATIONS) × FSW_ENTRY_BYTES`.
+config type) but only consumed by `batch`. The preallocating experiments
+(`prealloc`, `batch`) need no extra config: they size the preallocation from
+`(FSW_WARMUP + FSW_ITERATIONS) × FSW_ENTRY_BYTES`.
 
 Invalid/non-positive numeric values → message on stderr + non-zero exit, exactly
 like the `RTT_*` config. The harness sets the same env vars for all three
@@ -208,7 +214,7 @@ The per-experiment parameter triples:
 | `fsync`     | `Full`    | `1`         | no          |
 | `fdatasync` | `Data`    | `1`         | no          |
 | `prealloc`  | `Data`    | `1`         | **yes**     |
-| `batch`     | `Data`    | `FSW_BATCH` | no          |
+| `batch`     | `Data`    | `FSW_BATCH` | **yes**     |
 
 A small sync-kind selector keeps the primitive choice declarative:
 `Full` → `fsync`, `Data` → `fdatasync`.
@@ -269,19 +275,21 @@ In `bench-infra/ansible/group_vars/all.yml`:
   comparability-critical percentile/mean logic shared with `network-rtt`).
 - Each artifact is verified by **running** it (against a real-disk `FSW_DIR`)
   and confirming four well-formed contract lines per experiment with plausible
-  values: `sync_p99 ≥ sync_p50`, throughput > 0, `batch` throughput materially
-  above `fdatasync` (group commit must win), and `prealloc` sync latency no worse
+  values: `sync_p99 ≥ sync_p50`, throughput > 0, `prealloc` sync latency no worse
   than `fdatasync` (removing the `i_size` commit should not slow it down — on
-  ext4 it should be visibly faster).
+  ext4 it should be visibly faster), and `batch` throughput materially above
+  `prealloc` (group commit must win, with preallocation held constant). The
+  expected throughput ladder is `fsync ≤ fdatasync ≤ prealloc ≤ batch`.
 - Durability correctness is implicit: each operation only records its sample
   after the sync call returns success; a sync error aborts.
 - A short smoke run (small `FSW_ITERATIONS`) keeps the verification fast.
 
 ## Out of scope (YAGNI / future experiments)
 
-- A **preallocated `batch`** variant (group commit *and* a pre-written segment —
-  the full `ultima_journal` production path). Natural once the four core
-  experiments land; deferred to avoid a 2×2 explosion now.
+- A **naive non-preallocated `batch`** (group commit on a *growing* file). `batch`
+  here is preallocated, so it stacks cleanly on `prealloc`; a non-preallocated
+  group-commit would reintroduce the `i_size`-commit confound and isn't the
+  production path. Dropped to keep the ladder one-variable-per-step.
 - A **write-only** (page-cache, no durability) baseline.
 - A `fallocate`-based preallocation (vs the portable real zero-write) to compare
   unwritten-extent conversion cost — Linux-only, needs non-std bindings.
