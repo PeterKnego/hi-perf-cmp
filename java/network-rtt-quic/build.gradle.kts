@@ -26,5 +26,8 @@ tasks.withType<JavaCompile>().configureEach {
 
 application {
     mainClass.set("net.knego.hiperf.networkrtt.quic.Main")
-    applicationDefaultJvmArgs = certExports
+    applicationDefaultJvmArgs = certExports + listOf(
+        "-XX:+UseZGC", "-XX:+ZGenerational",
+        "-Xms512m", "-Xmx512m", "-XX:+AlwaysPreTouch",
+    )
 }
