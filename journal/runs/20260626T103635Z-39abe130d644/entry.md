@@ -3,6 +3,9 @@
 - commit: 39abe130d6440a81f3d324f9e99afabf046ea665 dirty
 - instance: c6id.2xlarge, 8 vCPU, kernel 6.17.0-1017-aws
 - params: payload=64B warmup=10000 iterations=100000
+- placement: VERIFIED both nodes in one `cluster` placement group
+  (`hi-perf-cmp-bench-pg`), single AZ us-east-1a — instances bind
+  `placement_group = aws_placement_group.bench.id` and were created after the PG.
 
 ## What changed
 First real cross-host AWS run (c6id.2xlarge x2, us-east-1, same-AZ cluster placement group): network-rtt tcp/udp/quic across rust/go/java
