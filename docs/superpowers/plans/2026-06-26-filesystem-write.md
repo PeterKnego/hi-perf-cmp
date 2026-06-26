@@ -980,14 +980,17 @@ git commit -m "go: implement filesystem-write fsync/fdatasync/prealloc/batch art
 ## Task 6: Java — durable-append harness in :common
 
 **Files:**
-- Create: `java/common/src/main/java/net/knego/hiperf/common/FsConfig.java`
+- Create: `java/common/src/main/java/net/knego/hiperf/common/Env.java`
 - Create: `java/common/src/main/java/net/knego/hiperf/common/SyncKind.java`
+- Create: `java/common/src/main/java/net/knego/hiperf/common/FsConfig.java`
 - Create: `java/common/src/main/java/net/knego/hiperf/common/DurableAppend.java`
+- Modify: `java/common/src/main/java/net/knego/hiperf/common/Config.java` (use shared `Env`)
 - Create: `java/common/src/test/java/net/knego/hiperf/common/DurableAppendTest.java`
 
 **Interfaces:**
 - Consumes: `Result` (record ctor `(focusArea, experiment, metric, value, unit, samples, notes)`), `Stats.percentile(long[], double)`, `Stats.mean(long[])`.
 - Produces:
+  - `Env` (package-private) with `static String trimmedOrNull(String)` and `static int readPositiveInt(String name, int def)` — shared by `Config` and `FsConfig`.
   - `FsConfig` record `(String dir, int entryBytes, int warmup, int iterations, int batch)` + `FsConfig.fromEnv()`.
   - `enum SyncKind { FULL, DATA }`.
   - `DurableAppend.Outcome` record `(long[] syncSamples, double throughput)`; `DurableAppend.run(FsConfig, String experiment, SyncKind, int batchSize, boolean prealloc)`; `DurableAppend.emit(String experiment, long[] syncSamples, double throughput, int iterations)`.
@@ -1007,34 +1010,19 @@ public enum SyncKind {
 }
 ```
 
-- [ ] **Step 2: Create FsConfig**
+- [ ] **Step 2: Extract a shared `Env` helper and refactor `Config` to use it**
 
-Create `java/common/src/main/java/net/knego/hiperf/common/FsConfig.java`:
+Create `java/common/src/main/java/net/knego/hiperf/common/Env.java` (these two helpers were private to `Config`; `FsConfig` reuses them, so they move to a shared package-private utility):
 ```java
 package net.knego.hiperf.common;
 
-/**
- * filesystem-write configuration from the {@code FSW_*} env vars. {@code FSW_DIR}
- * is required (no default) to avoid silently benchmarking a tmpfs; numeric values
- * must be positive integers.
- */
-public record FsConfig(String dir, int entryBytes, int warmup, int iterations, int batch) {
+/** Shared env-var parsing helpers used by the per-focus-area config types. */
+final class Env {
 
-    public static FsConfig fromEnv() {
-        String dir = trimmedOrNull(System.getenv("FSW_DIR"));
-        if (dir == null) {
-            throw new IllegalArgumentException(
-                    "FSW_DIR is required (set FSW_DIR=<dir on a real disk, not tmpfs>)");
-        }
-        return new FsConfig(
-                dir,
-                readPositiveInt("FSW_ENTRY_BYTES", 256),
-                readPositiveInt("FSW_WARMUP", 5000),
-                readPositiveInt("FSW_ITERATIONS", 50000),
-                readPositiveInt("FSW_BATCH", 32));
-    }
+    private Env() {}
 
-    private static String trimmedOrNull(String raw) {
+    /** The trimmed value of an env var, or {@code null} if unset/blank. */
+    static String trimmedOrNull(String raw) {
         if (raw == null) {
             return null;
         }
@@ -1042,7 +1030,11 @@ public record FsConfig(String dir, int entryBytes, int warmup, int iterations, i
         return t.isEmpty() ? null : t;
     }
 
-    private static int readPositiveInt(String name, int def) {
+    /**
+     * Parse env var {@code name} as a positive integer, returning {@code def}
+     * when unset/empty. Non-numeric or non-positive values are a hard error.
+     */
+    static int readPositiveInt(String name, int def) {
         String raw = System.getenv(name);
         if (raw == null || raw.isEmpty()) {
             return def;
@@ -1061,7 +1053,38 @@ public record FsConfig(String dir, int entryBytes, int warmup, int iterations, i
 }
 ```
 
-- [ ] **Step 3: Write the failing test**
+Then refactor `java/common/src/main/java/net/knego/hiperf/common/Config.java`: delete its `private static String trimmedOrNull(...)` and `private static int readPositiveInt(...)` methods, and update the call sites in `fromEnv()`/`readMode()` to call `Env.trimmedOrNull(...)` / `Env.readPositiveInt(...)`. The four `readPositiveInt("RTT_...", ...)` calls become `Env.readPositiveInt("RTT_...", ...)`; the two `trimmedOrNull(System.getenv("RTT_..."))` calls become `Env.trimmedOrNull(...)`. No behavior change — verified by the network-rtt build/run staying green.
+
+- [ ] **Step 3: Create FsConfig (using `Env`)**
+
+Create `java/common/src/main/java/net/knego/hiperf/common/FsConfig.java`:
+```java
+package net.knego.hiperf.common;
+
+/**
+ * filesystem-write configuration from the {@code FSW_*} env vars. {@code FSW_DIR}
+ * is required (no default) to avoid silently benchmarking a tmpfs; numeric values
+ * must be positive integers.
+ */
+public record FsConfig(String dir, int entryBytes, int warmup, int iterations, int batch) {
+
+    public static FsConfig fromEnv() {
+        String dir = Env.trimmedOrNull(System.getenv("FSW_DIR"));
+        if (dir == null) {
+            throw new IllegalArgumentException(
+                    "FSW_DIR is required (set FSW_DIR=<dir on a real disk, not tmpfs>)");
+        }
+        return new FsConfig(
+                dir,
+                Env.readPositiveInt("FSW_ENTRY_BYTES", 256),
+                Env.readPositiveInt("FSW_WARMUP", 5000),
+                Env.readPositiveInt("FSW_ITERATIONS", 50000),
+                Env.readPositiveInt("FSW_BATCH", 32));
+    }
+}
+```
+
+- [ ] **Step 4: Write the failing test**
 
 Create `java/common/src/test/java/net/knego/hiperf/common/DurableAppendTest.java`:
 ```java
@@ -1099,7 +1122,7 @@ class DurableAppendTest {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it fails**
+- [ ] **Step 5: Run the test to verify it fails**
 
 Run:
 ```bash
@@ -1107,7 +1130,7 @@ cd java && ./gradlew :common:test --tests '*DurableAppendTest*' 2>&1 | tail -8
 ```
 Expected: compilation failure — `DurableAppend` does not exist.
 
-- [ ] **Step 5: Implement DurableAppend**
+- [ ] **Step 6: Implement DurableAppend**
 
 Create `java/common/src/main/java/net/knego/hiperf/common/DurableAppend.java`:
 ```java
@@ -1222,22 +1245,24 @@ public final class DurableAppend {
 }
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [ ] **Step 7: Run the test to verify it passes (and network-rtt stays green)**
 
 Run:
 ```bash
-cd java && ./gradlew :common:test --tests '*DurableAppendTest*' 2>&1 | tail -8
+cd java && ./gradlew :common:test 2>&1 | tail -8
 ```
-Expected: BUILD SUCCESSFUL; the test passes.
+Expected: BUILD SUCCESSFUL; `DurableAppendTest` and the existing `StatsTest` both pass (the `Config` refactor is behavior-preserving).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add java/common/src/main/java/net/knego/hiperf/common/FsConfig.java \
+git add java/common/src/main/java/net/knego/hiperf/common/Env.java \
         java/common/src/main/java/net/knego/hiperf/common/SyncKind.java \
+        java/common/src/main/java/net/knego/hiperf/common/FsConfig.java \
         java/common/src/main/java/net/knego/hiperf/common/DurableAppend.java \
+        java/common/src/main/java/net/knego/hiperf/common/Config.java \
         java/common/src/test/java/net/knego/hiperf/common/DurableAppendTest.java
-git commit -m "java(common): add filesystem-write durable-append harness"
+git commit -m "java(common): add filesystem-write durable-append harness + shared Env helper"
 ```
 
 ---
