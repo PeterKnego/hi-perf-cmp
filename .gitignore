@@ -24,6 +24,10 @@ go/**/*.out
 .gradle/
 **/build/
 # Keep the Gradle wrapper jar (gradle/wrapper/gradle-wrapper.jar) checked in.
+# The ansible 'build' role is source, not compile output — `**/build/` would
+# otherwise leave the whole role untracked. Re-include it.
+!bench-infra/ansible/roles/build/
+!bench-infra/ansible/roles/build/**
 
 # --- Benchmark output ---
 # results/ is tracked only via .gitkeep; everything else is generated.

@@ -1,0 +1,92 @@
+---
+- name: Ensure source dir exists
+  ansible.builtin.file:
+    path: "{{ src_dir }}"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+
+- name: Sync local working tree to host
+  ansible.posix.synchronize:
+    src: "{{ src_local_path }}/"
+    dest: "{{ src_dir }}/"
+    rsync_opts:
+      - "--exclude=target"
+      - "--exclude=.git"
+      - "--exclude=bench-out"
+      - "--exclude=bench-infra"   # don't ship .env secret or terraform state
+
+# --- Rust ---
+- name: cargo build --release (rust workspace)
+  ansible.builtin.command: "{{ remote_home }}/.cargo/bin/cargo build --release"
+  args:
+    chdir: "{{ src_dir }}/rust"
+  environment:
+    CARGO_HOME: "{{ remote_home }}/.cargo"
+    RUSTUP_HOME: "{{ remote_home }}/.rustup"
+  register: cargo_build
+  changed_when: "'Compiling' in cargo_build.stderr or 'Finished' in cargo_build.stderr"
+
+# --- Go ---
+- name: go build -o bin/ ./cmd/... (go module)
+  ansible.builtin.command: "{{ go_root }}/bin/go build -o bin/ ./cmd/..."
+  args:
+    chdir: "{{ src_dir }}/go"
+  environment:
+    PATH: "{{ go_root }}/bin:{{ ansible_env.PATH }}"
+    GOROOT: "{{ go_root }}"
+  register: go_build
+  changed_when: true
+
+# --- Java ---
+- name: Detect JAVA_HOME (for gradle)
+  ansible.builtin.shell: "dirname $(dirname $(readlink -f $(which javac)))"
+  register: java_home
+  changed_when: false
+
+- name: ./gradlew build (java)
+  ansible.builtin.command: "./gradlew build --no-daemon"
+  args:
+    chdir: "{{ src_dir }}/java"
+  environment:
+    JAVA_HOME: "{{ java_home.stdout }}"
+  register: gradle_build
+  changed_when: "'UP-TO-DATE' not in gradle_build.stdout"
+
+- name: Verify expected build artifacts exist
+  ansible.builtin.shell: |
+    set -e
+    # One artifact per experiment (<focus_area>-<experiment>) plus the
+    # single-artifact stub focus areas. Each name maps 1:1 to a rust release bin,
+    # a go bin, and a java subproject build dir.
+    for art in network-rtt-tcp network-rtt-udp network-rtt-quic \
+               filesystem-write-fsync filesystem-write-fdatasync \
+               filesystem-write-prealloc filesystem-write-batch \
+               thread-handoff; do
+      test -x {{ src_dir }}/rust/target/release/"$art"
+      test -x {{ src_dir }}/go/bin/"$art"
+      test -d {{ src_dir }}/java/"$art"/build
+    done
+  changed_when: false
+
+# The rsynced tree on the host excludes .git, so provenance is read from the
+# control host's working tree (the source of truth for what was shipped).
+- name: Record source provenance (git SHA + dirty flag) from the control host
+  ansible.builtin.shell: |
+    cd "{{ src_local_path }}"
+    sha="$(git rev-parse HEAD 2>/dev/null || echo no-git)"
+    if [ -n "$(git status --porcelain 2>/dev/null)" ]; then dirty="dirty"; else dirty="clean"; fi
+    echo "${sha} ${dirty}"
+  register: src_provenance
+  changed_when: false
+  run_once: true
+  delegate_to: localhost
+  become: false
+
+# Persist provenance into the synced tree on every node so the collect role
+# (a separate play) can read it even when `make bench` runs without `make up`.
+- name: Persist provenance to the host
+  ansible.builtin.copy:
+    dest: "{{ src_dir }}/.bench-provenance"
+    content: "{{ src_provenance.stdout | trim }}\n"
+    mode: "0644"
