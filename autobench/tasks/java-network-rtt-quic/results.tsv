@@ -2,3 +2,4 @@ commit	rtt_p50_ns	rtt_p99_ns	rtt_mean_ns	status	description
 a9a8ebe	194332	1520580	NA	crash	baseline FLAKY: ~20% of runs fail mid-bench (Kwik StreamClosedException "Connection closed"); p99 ~1.4ms stalls; smoke passes. Pre-existing Kwik robustness issue at bench counts; no cell-level knob found -- blocks the optimization loop.
 6af816f	196372	1410041	263553	keep	FLAKINESS FIXED (commit 9088abf): bounded measurement retry on Kwik connection stall + 5s idle timeout; run-iter median-of-7 now reliable. Baseline p50~196us; p99~1.4ms is Kwik spurious-PTO retransmit tail (separate latency trait). Loop now unblocked.
 207edac	197502	1404560	262895	keep	baseline (flakiness-fixed cell, median-of-5)
+2693df8	194531	1139979	245512	keep	JVM args: generational ZGC + -Xms/Xmx512m + AlwaysPreTouch; p99 -19% (1.40->1.13ms), mean -7%, p50 flat (Kwik structural floor). Only reachable lever -- no PTO knob in Kwik (median-of-7 x3)
