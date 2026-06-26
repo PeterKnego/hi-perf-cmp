@@ -15,8 +15,9 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 - **shared-memory-ipc** — shared-memory inter-process communication _(planned focus area)_.
 
 **Status:** `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (cross-host capable).
-`filesystem-write` and `thread-handoff` are stubs that emit a placeholder line; `shared-memory-ipc` is not yet
-scaffolded.
+`filesystem-write` is implemented for the `fsync`, `fdatasync`, `prealloc`, and `batch` experiments
+(single-host, local NVMe). `thread-handoff` is a stub that emits a placeholder line; `shared-memory-ipc`
+is not yet scaffolded.
 
 ## Architecture: the result contract is the only coupling
 
@@ -46,7 +47,7 @@ dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write`, `thread-handoff`.
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff`.
 
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt/{tcp,udp,quic} + stubs

@@ -68,7 +68,8 @@ aligns on `(focus_area, experiment, language, metric)`, and tracks them over tim
 ## Status
 
 `network-rtt` is implemented for `tcp`, `udp`, and `quic` (cross-host capable —
-see below). `filesystem-write` and `thread-handoff` are still stubs that emit a
+see below). `filesystem-write` is implemented for `fsync`, `fdatasync`, `prealloc`,
+and `batch` (single-host, local NVMe). `thread-handoff` is a stub that emits a
 placeholder line. `shared-memory-ipc` is a planned focus area (not yet scaffolded).
 
 ## Building & running

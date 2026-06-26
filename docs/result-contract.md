@@ -47,9 +47,10 @@ never `tcp_rtt_p50`).
 
 ## Current state
 
-`network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (each a
-separate runnable artifact named `network-rtt-<experiment>`). `filesystem-write`
-and `thread-handoff` remain **stubs** that emit a single placeholder line
+`network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments, and
+`filesystem-write` for the `fsync`, `fdatasync`, `prealloc`, and `batch`
+experiments (each a separate runnable artifact named `<focus_area>-<experiment>`).
+`thread-handoff` remains a **stub** that emits a single placeholder line
 (`experiment: "placeholder"`, `metric: "placeholder"`, `notes: "stub"`).
 
 ## Reference emitters
