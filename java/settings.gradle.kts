@@ -5,6 +5,9 @@ include(
     "network-rtt-tcp",
     "network-rtt-udp",
     "network-rtt-quic",
-    "filesystem-write",
+    "filesystem-write-fsync",
+    "filesystem-write-fdatasync",
+    "filesystem-write-prealloc",
+    "filesystem-write-batch",
     "thread-handoff",
 )

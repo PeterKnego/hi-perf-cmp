@@ -7,5 +7,5 @@ dependencies {
 }
 
 application {
-    mainClass.set("net.knego.hiperf.filesystemwrite.Main")
+    mainClass.set("net.knego.hiperf.filesystemwrite.fsync.Main")
 }
