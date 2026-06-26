@@ -103,8 +103,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "filesystem-write"
+name = "filesystem-write-batch"
 version = "0.1.0"
+dependencies = [
+ "bench-common",
+]
+
+[[package]]
+name = "filesystem-write-fdatasync"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+]
+
+[[package]]
+name = "filesystem-write-fsync"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+]
+
+[[package]]
+name = "filesystem-write-prealloc"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+]
 
 [[package]]
 name = "find-msvc-tools"
