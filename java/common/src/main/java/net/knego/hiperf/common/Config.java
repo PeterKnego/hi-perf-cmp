@@ -35,23 +35,23 @@ public record Config(
 
     public static Config fromEnv() {
         Mode mode = readMode();
-        String host = trimmedOrNull(System.getenv("RTT_HOST"));
+        String host = Env.trimmedOrNull(System.getenv("RTT_HOST"));
         if (mode == Mode.CLIENT && host == null) {
             throw new IllegalArgumentException("RTT_HOST is required in client mode");
         }
         return new Config(
                 mode,
                 host,
-                readPositiveInt("RTT_TCP_PORT", 9100),
-                readPositiveInt("RTT_UDP_PORT", 9101),
-                readPositiveInt("RTT_QUIC_PORT", 9102),
-                readPositiveInt("RTT_PAYLOAD_BYTES", 64),
-                readPositiveInt("RTT_WARMUP", 10000),
-                readPositiveInt("RTT_ITERATIONS", 100000));
+                Env.readPositiveInt("RTT_TCP_PORT", 9100),
+                Env.readPositiveInt("RTT_UDP_PORT", 9101),
+                Env.readPositiveInt("RTT_QUIC_PORT", 9102),
+                Env.readPositiveInt("RTT_PAYLOAD_BYTES", 64),
+                Env.readPositiveInt("RTT_WARMUP", 10000),
+                Env.readPositiveInt("RTT_ITERATIONS", 100000));
     }
 
     private static Mode readMode() {
-        String raw = trimmedOrNull(System.getenv("RTT_MODE"));
+        String raw = Env.trimmedOrNull(System.getenv("RTT_MODE"));
         if (raw == null) {
             return Mode.LOOPBACK;
         }
@@ -66,32 +66,5 @@ public record Config(
                 throw new IllegalArgumentException(
                         "RTT_MODE must be one of loopback|server|client, got: " + raw);
         }
-    }
-
-    private static String trimmedOrNull(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        String t = raw.trim();
-        return t.isEmpty() ? null : t;
-    }
-
-    private static int readPositiveInt(String name, int def) {
-        String raw = System.getenv(name);
-        if (raw == null || raw.isEmpty()) {
-            return def;
-        }
-        int value;
-        try {
-            value = Integer.parseInt(raw.trim());
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(
-                    name + " must be a positive integer, got: " + raw);
-        }
-        if (value <= 0) {
-            throw new IllegalArgumentException(
-                    name + " must be a positive integer, got: " + raw);
-        }
-        return value;
     }
 }
