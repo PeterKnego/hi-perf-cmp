@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -36,7 +37,7 @@ type FsConfig struct {
 // FSW_ITERATIONS and FSW_BATCH, applying defaults. A missing FSW_DIR (guards
 // against tmpfs) or any invalid value yields an error.
 func LoadFsConfig() (FsConfig, error) {
-	dir := os.Getenv("FSW_DIR")
+	dir := strings.TrimSpace(os.Getenv("FSW_DIR"))
 	if dir == "" {
 		return FsConfig{}, fmt.Errorf("FSW_DIR: required (set FSW_DIR=<dir on a real disk, not tmpfs>)")
 	}

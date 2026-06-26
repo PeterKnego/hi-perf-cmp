@@ -74,6 +74,8 @@ public final class DurableAppend {
     }
 
     private static void preallocate(FileChannel ch, long total) throws IOException {
+        // allocateDirect zero-initializes its contents (JLS/Javadoc guarantee),
+        // so this is the real zero-write the prealloc experiment requires.
         ByteBuffer zeros = ByteBuffer.allocateDirect(1024 * 1024);
         long written = 0;
         while (written < total) {
