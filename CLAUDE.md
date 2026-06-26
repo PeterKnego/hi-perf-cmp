@@ -41,7 +41,7 @@ rather than hand-rolling JSON:
 
 Top-level dirs are the languages, each a self-contained idiomatic workspace. Each experiment is its own
 runnable artifact named `<focus_area>-<experiment>` (e.g. `network-rtt-tcp`) built over a shared per-language
-bench library; the stub focus areas have a single artifact named just `<focus_area>`. This keeps each toolchain
+bench library; a stub focus area (currently `thread-handoff`) has a single artifact named just `<focus_area>`. This keeps each toolchain
 (Cargo workspace / single Go module / single Gradle build) intact — do not fragment a language's build across
 dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not the directory layout's.
 
@@ -52,7 +52,7 @@ Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt/{tcp,udp,quic} + stubs
 cd rust && cargo build --release && cargo test && cargo clippy --all-targets && cargo fmt --check
-cargo run --release -p network-rtt-tcp        # -p network-rtt-udp | -p network-rtt-quic | -p filesystem-write | ...
+cargo run --release -p network-rtt-tcp        # -p network-rtt-udp | -p filesystem-write-fsync | -p filesystem-write-batch | ...
 
 # Go — single module: internal/bench + cmd/network-rtt-{tcp,udp,quic} + stubs
 cd go && go build ./... && go vet ./... && go test ./...
