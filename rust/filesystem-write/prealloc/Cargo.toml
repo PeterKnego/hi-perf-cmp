@@ -1,10 +1,13 @@
 [package]
-name = "filesystem-write"
+name = "filesystem-write-prealloc"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "filesystem-write"
+name = "filesystem-write-prealloc"
 path = "src/main.rs"
+
+[dependencies]
+bench-common = { path = "../../bench-common" }

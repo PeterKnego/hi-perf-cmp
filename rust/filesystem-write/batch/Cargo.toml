@@ -1,0 +1,13 @@
+[package]
+name = "filesystem-write-batch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "filesystem-write-batch"
+path = "src/main.rs"
+
+[dependencies]
+bench-common = { path = "../../bench-common" }
