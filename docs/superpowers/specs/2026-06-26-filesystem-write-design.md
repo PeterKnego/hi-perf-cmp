@@ -24,23 +24,38 @@ crate, whose durable-append path this benchmark distills:
 - its writer performs **group commit**: it drains queued appends into one
   coalesced `write_all`, then issues **one `sync_data` barrier covering the whole
   batch**.
+- it **preallocates** segments (etcd-style) so a per-commit `fdatasync` on a
+  growing file does not pay an `i_size`/extent-map metadata commit — the
+  preallocation is a real zero-write (not a sparse `fallocate`, which on ext4
+  leaves *unwritten* extents that re-journal on first overwrite).
 
-The three experiments below measure exactly those choices.
+The four experiments below measure exactly those choices.
 
 ## Experiment grid
 
-Three runnable artifacts per language, named `filesystem-write-<experiment>`
+Four runnable artifacts per language, named `filesystem-write-<experiment>`
 (mirroring `network-rtt-<experiment>`):
 
 | experiment  | per timed unit                                            | models                                            |
 |-------------|-----------------------------------------------------------|---------------------------------------------------|
 | `fsync`     | append one entry, then **full `fsync`** (`sync_all`)      | strict durability *including* file metadata       |
-| `fdatasync` | append one entry, then **`fdatasync`** (`sync_data`)      | the WAL commit primitive `ultima_journal` uses    |
+| `fdatasync` | append one entry (file grows), then **`fdatasync`** (`sync_data`) | size-extending WAL commit primitive       |
+| `prealloc`  | **overwrite** one entry in a pre-written region (no size change), then **`fdatasync`** | the commit primitive on a preallocated segment — a pure data barrier |
 | `batch`     | append `FSW_BATCH` entries (one coalesced write), then **one `fdatasync`** | group commit — the production path |
 
-`fsync` vs `fdatasync` isolates the cost of the metadata/timestamp commit;
-`fdatasync` vs `batch` isolates the win from amortizing one barrier over many
-entries.
+The comparisons this grid exposes:
+
+- `fsync` vs `fdatasync` — the cost of the inode-**timestamp** metadata commit.
+- `fdatasync` vs `prealloc` — the cost of the **`i_size`/extent-map** journal
+  commit that a size-extending `fdatasync` still pays. `fdatasync` appends to a
+  growing file, so each barrier commits the new file size (an ext4 journal
+  commit); `prealloc` overwrites already-allocated, already-written blocks, so the
+  same `fdatasync` is a pure data barrier. This is the big WAL win.
+- `fdatasync` vs `batch` — amortizing one barrier over many entries.
+
+`prealloc` and `fdatasync` issue the **identical** per-entry operation (one
+`fdatasync`, batch size 1); they differ *only* in whether the target blocks were
+preallocated, isolating the metadata-commit cost cleanly.
 
 ## Methodology (identical across all three languages)
 
@@ -48,9 +63,18 @@ For each experiment artifact:
 
 1. **Setup (outside timing).** Resolve `FSW_DIR` (required — see Configuration).
    Create/truncate a fresh file `filesystem-write-<experiment>.log` in it
-   (`O_CREAT | O_WRONLY | O_TRUNC`). `fsync` the file *and its parent directory*
-   once so the file's existence is durable before the loop. This one-time cost
-   never enters the timed path.
+   (`O_CREAT | O_WRONLY | O_TRUNC`; **not** `O_APPEND`, so `prealloc` can seek and
+   overwrite). `fsync` the file *and its parent directory* once so the file's
+   existence is durable before the loop. This one-time cost never enters the
+   timed path.
+   - **`prealloc` only:** before timing, **preallocate by real zero-write** —
+     write `(FSW_WARMUP + FSW_ITERATIONS) × FSW_ENTRY_BYTES` bytes of zeros
+     sequentially, then one `fsync` (`sync_all`), then `seek` back to offset 0.
+     This forces the blocks allocated *and marked written* (a sparse
+     `set_len`/`fallocate` would leave unwritten extents that re-journal on first
+     overwrite — defeating the experiment, and needing non-std bindings). Every
+     subsequent write overwrites a pre-written block, so no barrier extends
+     `i_size`. The zero-write + its `fsync` are outside the timed path.
 2. **Entry.** An opaque `FSW_ENTRY_BYTES`-byte buffer, allocated once and
    reused. **No CRC, no seq/meta framing** — the benchmark measures the I/O +
    durability-syscall path, not record encoding. (Framing + CRC would inject
@@ -59,6 +83,9 @@ For each experiment artifact:
    Out of scope.)
 3. **Warmup.** Run `FSW_WARMUP` discarded durable-append operations (lets the
    filesystem journal, device write cache, and — for Java — the JIT settle).
+   `prealloc`'s warmup overwrites the first `FSW_WARMUP` entries of the
+   preallocated region, so the measured loop continues overwriting already-written
+   blocks.
 4. **Measure.** A single monotonic span wraps the measured loop:
    - record `t_start` (monotonic clock),
    - run `FSW_ITERATIONS` entries' worth of durable-append operations; for each
@@ -68,8 +95,8 @@ For each experiment artifact:
 5. Compute statistics and emit the result lines (below).
 
 One durable-append operation is outstanding at a time (no concurrency, no
-pipelining). For `fsync`/`fdatasync`, one operation = one entry = one sync, so
-there are `FSW_ITERATIONS` sync samples. For `batch`, the `FSW_ITERATIONS`
+pipelining). For `fsync`/`fdatasync`/`prealloc`, one operation = one entry = one
+sync, so there are `FSW_ITERATIONS` sync samples. For `batch`, the `FSW_ITERATIONS`
 entries are written in chunks of `FSW_BATCH` (a trailing short chunk is allowed),
 each chunk followed by one sync — so there are `ceil(FSW_ITERATIONS / FSW_BATCH)`
 sync samples, and exactly `FSW_ITERATIONS` entries are persisted. All sample
@@ -113,8 +140,9 @@ Reuses the existing shared `Stats` in each language (the same code that backs
 a `tmpfs` (memory-backed) filesystem, where "durable" writes never touch a device
 and the numbers are meaningless. Unset `FSW_DIR` → descriptive message on stderr +
 non-zero exit. The directory must be a real disk; the bench fleet points it at the
-NVMe-backed bench home. `FSW_BATCH` is parsed by all three artifacts (uniform
-config type) but only consumed by `batch`.
+NVMe-backed bench home. `FSW_BATCH` is parsed by all four artifacts (uniform
+config type) but only consumed by `batch`. `prealloc` needs no extra config: it
+sizes its preallocation from `(FSW_WARMUP + FSW_ITERATIONS) × FSW_ENTRY_BYTES`.
 
 Invalid/non-positive numeric values → message on stderr + non-zero exit, exactly
 like the `RTT_*` config. The harness sets the same env vars for all three
@@ -131,12 +159,13 @@ Four result-contract lines per experiment (`focus_area: "filesystem-write"`):
 | `sync_p99`                   | `ns`          | 99th-percentile barrier latency          | number of sync calls |
 | `sync_mean`                  | `ns`          | mean barrier latency                     | number of sync calls |
 
-Twelve lines per language per run (4 × 3 experiments). The grid aligns on
+Sixteen lines per language per run (4 × 4 experiments). The grid aligns on
 `(focus_area, experiment, language, metric)` exactly like `network-rtt`.
 
 Example:
 ```json
 {"language":"rust","focus_area":"filesystem-write","experiment":"fdatasync","metric":"sync_p50","value":48000,"unit":"ns","samples":50000}
+{"language":"rust","focus_area":"filesystem-write","experiment":"prealloc","metric":"sync_p50","value":31000,"unit":"ns","samples":50000}
 {"language":"rust","focus_area":"filesystem-write","experiment":"batch","metric":"durable_append_throughput","value":740000.0,"unit":"ops_per_sec","samples":50000}
 ```
 
@@ -165,40 +194,51 @@ needed to read it back while skipping inode timestamps — the same guarantee
 
 ## Per-language structure
 
-The three experiments differ only in (a) the sync primitive and (b) the batch
-size. To avoid triplicating the harness, the **shared bench library owns the
-durable-append harness**; each artifact is a thin `main` that names its
-experiment and supplies those two parameters. This mirrors `network-rtt`, where
-`bench-common` owns the timed loop and each transport crate supplies its
-operation.
+The four experiments differ only in three parameters: (a) the sync primitive,
+(b) the batch size, and (c) whether the file is preallocated. To avoid
+quadruplicating the harness, the **shared bench library owns the durable-append
+harness**; each artifact is a thin `main` that names its experiment and supplies
+those parameters. This mirrors `network-rtt`, where `bench-common` owns the timed
+loop and each transport crate supplies its operation.
+
+The per-experiment parameter triples:
+
+| experiment  | sync kind | batch size  | preallocate |
+|-------------|-----------|-------------|-------------|
+| `fsync`     | `Full`    | `1`         | no          |
+| `fdatasync` | `Data`    | `1`         | no          |
+| `prealloc`  | `Data`    | `1`         | **yes**     |
+| `batch`     | `Data`    | `FSW_BATCH` | no          |
 
 A small sync-kind selector keeps the primitive choice declarative:
 `Full` → `fsync`, `Data` → `fdatasync`.
 
-**Rust** — replace the single `filesystem-write` workspace member with three:
-`filesystem-write/{fsync,fdatasync,batch}` (binaries `filesystem-write-fsync`,
-`-fdatasync`, `-batch`). Add a `fswrite` module to **`bench-common`**:
+**Rust** — replace the single `filesystem-write` workspace member with four:
+`filesystem-write/{fsync,fdatasync,prealloc,batch}` (binaries
+`filesystem-write-fsync`, `-fdatasync`, `-prealloc`, `-batch`). Add a `fswrite`
+module to **`bench-common`**:
 - `FsConfig::from_env()` — parse `FSW_*`, validate, require `FSW_DIR`.
 - `SyncKind { Full, Data }`.
-- `run_durable_append(cfg, sync_kind, batch_size) -> io::Result<(Vec<u64>, f64)>`
-  — file setup, warmup, timed loop; returns sync-latency samples + throughput.
+- `run_durable_append(cfg, sync_kind, batch_size, prealloc) -> io::Result<(Vec<u64>, f64)>`
+  — file setup (incl. optional preallocation), warmup, timed loop; returns
+  sync-latency samples + throughput.
 - `emit_fs(experiment, samples, throughput)` — emit the four lines.
 
 Each `main.rs` is ~3 lines: build config, call the harness with its
-`(SyncKind, batch_size)`, emit. Std-only.
+`(SyncKind, batch_size, prealloc)`, emit. Std-only.
 
-**Go** — replace `cmd/filesystem-write` with `cmd/filesystem-write-{fsync,fdatasync,batch}`
-(all `package main`). Add to **`internal/bench`**: `FsConfig`, `SyncKind`,
-`RunDurableAppend(...)`, `EmitFS(...)`. Each `main.go` is thin. Uses std
-`syscall.Fdatasync` on Linux.
+**Go** — replace `cmd/filesystem-write` with
+`cmd/filesystem-write-{fsync,fdatasync,prealloc,batch}` (all `package main`). Add
+to **`internal/bench`**: `FsConfig`, `SyncKind`, `RunDurableAppend(...)`,
+`EmitFS(...)`. Each `main.go` is thin. Uses std `syscall.Fdatasync` on Linux.
 
 **Java** — replace the `:filesystem-write` subproject with
-`:filesystem-write-fsync`, `:filesystem-write-fdatasync`, `:filesystem-write-batch`
-(register all three in `settings.gradle.kts`; each a one-line `build.gradle.kts`
-applying `application` + depending on `:common`, `mainClass` =
-`net.knego.hiperf.filesystemwrite.<exp>.Main`). Add to **`:common`**
-(`net.knego.hiperf.common`): `FsConfig`, `SyncKind`, a `DurableAppend` harness,
-and an FS emit path. Each `Main` is thin.
+`:filesystem-write-fsync`, `:filesystem-write-fdatasync`,
+`:filesystem-write-prealloc`, `:filesystem-write-batch` (register all four in
+`settings.gradle.kts`; each a one-line `build.gradle.kts` applying `application` +
+depending on `:common`, `mainClass` = `net.knego.hiperf.filesystemwrite.<exp>.Main`).
+Add to **`:common`** (`net.knego.hiperf.common`): `FsConfig`, `SyncKind`, a
+`DurableAppend` harness, and an FS emit path. Each `Main` is thin.
 
 ### Shared-library change: parameterize the result unit
 
@@ -214,7 +254,7 @@ In `bench-infra/ansible/group_vars/all.yml`:
 
 - Replace the single
   `{ focus_area: filesystem-write, experiment: placeholder, kind: local }`
-  row with three `kind: local` rows: `fsync`, `fdatasync`, `batch`.
+  row with four `kind: local` rows: `fsync`, `fdatasync`, `prealloc`, `batch`.
 - Add `fsw_*` params (mirroring the `rtt_*` block) exported into the local runs
   so all three languages use identical parameters:
   `fsw_dir` (a subdir of the NVMe bench home, e.g. `{{ remote_home }}/fsw`),
@@ -229,18 +269,21 @@ In `bench-infra/ansible/group_vars/all.yml`:
   comparability-critical percentile/mean logic shared with `network-rtt`).
 - Each artifact is verified by **running** it (against a real-disk `FSW_DIR`)
   and confirming four well-formed contract lines per experiment with plausible
-  values: `sync_p99 ≥ sync_p50`, throughput > 0, and `batch` throughput
-  materially above `fdatasync` throughput (group commit must win).
+  values: `sync_p99 ≥ sync_p50`, throughput > 0, `batch` throughput materially
+  above `fdatasync` (group commit must win), and `prealloc` sync latency no worse
+  than `fdatasync` (removing the `i_size` commit should not slow it down — on
+  ext4 it should be visibly faster).
 - Durability correctness is implicit: each operation only records its sample
   after the sync call returns success; a sync error aborts.
 - A short smoke run (small `FSW_ITERATIONS`) keeps the verification fast.
 
 ## Out of scope (YAGNI / future experiments)
 
-- **Preallocated-`fdatasync`** variant (etcd-style: zero-fill + sync the file up
-  front so a per-commit `fdatasync` carries no `i_size`/extent-map metadata
-  change). The most insightful next experiment, but the preallocation is fiddly
-  and uneven across the three std libraries — deferred.
+- A **preallocated `batch`** variant (group commit *and* a pre-written segment —
+  the full `ultima_journal` production path). Natural once the four core
+  experiments land; deferred to avoid a 2×2 explosion now.
 - A **write-only** (page-cache, no durability) baseline.
+- A `fallocate`-based preallocation (vs the portable real zero-write) to compare
+  unwritten-extent conversion cost — Linux-only, needs non-std bindings.
 - `O_DIRECT` / `O_DSYNC`, CRC/record framing, multi-file segment rotation,
   concurrent writers / pipelining, and any cross-host component.
