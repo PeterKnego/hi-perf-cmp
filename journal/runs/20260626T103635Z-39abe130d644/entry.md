@@ -10,6 +10,34 @@
 ## What changed
 First real cross-host AWS run (c6id.2xlarge x2, us-east-1, same-AZ cluster placement group): network-rtt tcp/udp/quic across rust/go/java
 
+## Results
+
+Per-cell values from this run (placeholder/stub cells omitted).
+
+### network-rtt / quic
+
+| language | rtt_mean (ns) | rtt_p50 (ns) | rtt_p99 (ns) |
+|---|---|---|---|
+| go | 97342.8 | 92005 | 137507 |
+| java | 162648.9 | 160841 | 195582 |
+| rust | 65055.1 | 64625 | 100867 |
+
+### network-rtt / tcp
+
+| language | rtt_mean (ns) | rtt_p50 (ns) | rtt_p99 (ns) |
+|---|---|---|---|
+| go | 39219.9 | 37760 | 68607 |
+| java | 35538.5 | 35156 | 43960 |
+| rust | 36415.8 | 36025 | 45656 |
+
+### network-rtt / udp
+
+| language | rtt_mean (ns) | rtt_p50 (ns) | rtt_p99 (ns) |
+|---|---|---|---|
+| go | 36428.5 | 35993 | 45876 |
+| java | 35111.1 | 34740 | 43505 |
+| rust | 36903.0 | 35916 | 49931 |
+
 ## Hypothesis
 On a real two-host network the physical link RTT should dominate, so the
 busy-poll wins that mattered on loopback (6-14us p50 for tcp/udp) should largely
@@ -18,13 +46,7 @@ should shrink to a small additive cost once a fixed network RTT is added to
 every transport.
 
 ## Observations
-Cross-host p50 (rtt_p50, ns), c6id.2xlarge x2, same-AZ cluster placement group:
-
-| transport | rust | go | java |
-|-----------|-----:|-----:|-----:|
-| tcp  | 36025 | 37760 | 35156 |
-| udp  | 35916 | 35993 | 34740 |
-| quic | 64625 | 92005 | 160841 |
+(Numbers in the **Results** section above.)
 
 - **The network RTT dominates and tcp ~= udp (~35-38us) across all languages.**
   The link/kernel round-trip (~35us) swamps the transport micro-differences, so
