@@ -15,6 +15,11 @@
     export JAVA_HOME="{{ java_home.stdout }}"
     export SRC_DIR="{{ src_dir }}"
     cd {{ remote_home }}/scratch
+    export FSW_DIR="{{ remote_home }}/scratch"
+    export FSW_ENTRY_BYTES="{{ fsw_entry_bytes }}"
+    export FSW_WARMUP="{{ fsw_warmup }}"
+    export FSW_ITERATIONS="{{ fsw_iterations }}"
+    export FSW_BATCH="{{ fsw_batch }}"
     {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} loopback \
       >> {{ remote_results_dir }}/results.jsonl
   args:

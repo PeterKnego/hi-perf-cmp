@@ -20,7 +20,7 @@
 #   SRC_DIR           path to the synced repo root (required)
 #   JAVA_HOME         JDK home (required for java)
 #
-# filesystem-write / thread-handoff ignore the RTT_* vars.
+# filesystem-write consumes the FSW_* vars (below); thread-handoff ignores both.
 set -euo pipefail
 
 usage() {
@@ -58,6 +58,15 @@ export RTT_QUIC_PORT="${RTT_QUIC_PORT:-9102}"
 export RTT_PAYLOAD_BYTES="${RTT_PAYLOAD_BYTES:-64}"
 export RTT_WARMUP="${RTT_WARMUP:-10000}"
 export RTT_ITERATIONS="${RTT_ITERATIONS:-100000}"
+
+# Export the filesystem-write contract. FSW_DIR defaults to the CWD, which the
+# run role points at the NVMe-backed scratch dir. tmpfs would give meaningless
+# durability numbers, so a real-disk dir is required.
+export FSW_DIR="${FSW_DIR:-$PWD}"
+export FSW_ENTRY_BYTES="${FSW_ENTRY_BYTES:-256}"
+export FSW_WARMUP="${FSW_WARMUP:-5000}"
+export FSW_ITERATIONS="${FSW_ITERATIONS:-50000}"
+export FSW_BATCH="${FSW_BATCH:-32}"
 
 case "$LANGUAGE" in
   rust)
