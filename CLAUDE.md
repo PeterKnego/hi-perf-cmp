@@ -94,7 +94,12 @@ Runs are recorded in `journal/` (committed) and compared with the `tools/journal
 `bench-out/dist/<ts>/` run into `journal/runs/<ts>-<sha>/`, `compare` prints per-cell deltas and flags
 regressions (direction-aware by unit; default 10%), `set-baseline` sets the reference. Confirmed regressions
 go in `journal/REGRESSIONS.md`. Each run is committed, so results are correlated with the producing commit.
-First *real* journal entries should come from genuine cross-host AWS runs, not loopback.
+
+**Only journal a real benchmark run.** `record` ingests the `results.jsonl` an AWS `bench-infra` run
+produced — there is nothing to record without one, so journaling is the tail of a real run, not a separate
+step. Local-dev/loopback smoke runs are fitness checks only and are **never** journaled. The first journal
+entries therefore come from genuine AWS runs — cross-host for `network-rtt`, single-host on local NVMe for
+`filesystem-write` — not from loopback or a dev box.
 
 ## Adding an experiment or a real benchmark
 
