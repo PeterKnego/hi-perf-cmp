@@ -1,1 +1,137 @@
-{}
+{
+  "network-rtt/quic/go/rtt_mean": {
+    "value": 97342.84195,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/quic/go/rtt_p50": {
+    "value": 92005.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/quic/go/rtt_p99": {
+    "value": 137507.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/quic/java/rtt_mean": {
+    "value": 162648.8974,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/quic/java/rtt_p50": {
+    "value": 160841.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/quic/java/rtt_p99": {
+    "value": 195582.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/quic/rust/rtt_mean": {
+    "value": 65055.1012,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/quic/rust/rtt_p50": {
+    "value": 64625.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/quic/rust/rtt_p99": {
+    "value": 100867.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/tcp/go/rtt_mean": {
+    "value": 39219.92129,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/tcp/go/rtt_p50": {
+    "value": 37760.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/tcp/go/rtt_p99": {
+    "value": 68607.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/tcp/java/rtt_mean": {
+    "value": 35538.48196,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/tcp/java/rtt_p50": {
+    "value": 35156.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/tcp/java/rtt_p99": {
+    "value": 43960.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/tcp/rust/rtt_mean": {
+    "value": 36415.84534,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/tcp/rust/rtt_p50": {
+    "value": 36025.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/tcp/rust/rtt_p99": {
+    "value": 45656.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/udp/go/rtt_mean": {
+    "value": 36428.47806,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/udp/go/rtt_p50": {
+    "value": 35993.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/udp/go/rtt_p99": {
+    "value": 45876.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/udp/java/rtt_mean": {
+    "value": 35111.11107,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/udp/java/rtt_p50": {
+    "value": 34740.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/udp/java/rtt_p99": {
+    "value": 43505.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/udp/rust/rtt_mean": {
+    "value": 36902.98377,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/udp/rust/rtt_p50": {
+    "value": 35916.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  },
+  "network-rtt/udp/rust/rtt_p99": {
+    "value": 49931.0,
+    "unit": "ns",
+    "run_id": "20260626T103635Z-39abe130d644"
+  }
+}

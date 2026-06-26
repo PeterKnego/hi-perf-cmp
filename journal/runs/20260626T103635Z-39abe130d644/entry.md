@@ -1,0 +1,40 @@
+# 20260626T103635Z-39abe130d644
+
+- commit: 39abe130d6440a81f3d324f9e99afabf046ea665 dirty
+- instance: c6id.2xlarge, 8 vCPU, kernel 6.17.0-1017-aws
+- params: payload=64B warmup=10000 iterations=100000
+
+## What changed
+First real cross-host AWS run (c6id.2xlarge x2, us-east-1, same-AZ cluster placement group): network-rtt tcp/udp/quic across rust/go/java
+
+## Hypothesis
+On a real two-host network the physical link RTT should dominate, so the
+busy-poll wins that mattered on loopback (6-14us p50 for tcp/udp) should largely
+disappear, and QUIC's overhead — huge as a *multiple* on loopback (8-28x) —
+should shrink to a small additive cost once a fixed network RTT is added to
+every transport.
+
+## Observations
+Cross-host p50 (rtt_p50, ns), c6id.2xlarge x2, same-AZ cluster placement group:
+
+| transport | rust | go | java |
+|-----------|-----:|-----:|-----:|
+| tcp  | 36025 | 37760 | 35156 |
+| udp  | 35916 | 35993 | 34740 |
+| quic | 64625 | 92005 | 160841 |
+
+- **The network RTT dominates and tcp ~= udp (~35-38us) across all languages.**
+  The link/kernel round-trip (~35us) swamps the transport micro-differences, so
+  the busy-poll optimizations that drove the loopback ranking are invisible here
+  — the loopback 6-14us p50s were a kernel-park artifact, not a network number.
+  This is exactly why loopback is local fitness only, never reported.
+- **QUIC is now +30us (rust) to +126us (java) over tcp/udp — a ~1.8x (rust) /
+  2.6x (go) / 4.6x (java) multiple**, far below the loopback 8-28x. QUIC's
+  per-RTT crypto + userspace protocol cost is a fixed adder; against a real
+  ~35us network RTT it's a modest premium for rust/go, but Kwik's ~125us adder
+  makes java QUIC the clear outlier (consistent with the loopback finding that
+  Kwik's per-RTT path is ~4x quinn).
+- **Takeaway for the SMR hot path:** over a real network, transport choice
+  between tcp/udp is a wash; QUIC costs ~2x for rust/go (its features may justify
+  it) and is expensive in Kwik/java. This is the baseline; future runs compare
+  against it (`journal compare`).
