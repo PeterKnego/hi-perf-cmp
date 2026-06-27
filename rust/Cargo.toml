@@ -10,6 +10,7 @@ members = [
     "filesystem-write/prealloc",
     "filesystem-write/batch",
     "thread-handoff/spin",
+    "thread-handoff/condvar",
 ]
 
 [workspace.package]
