@@ -11,6 +11,7 @@ members = [
     "filesystem-write/batch",
     "thread-handoff/spin",
     "thread-handoff/condvar",
+    "thread-handoff/channel",
 ]
 
 [workspace.package]
