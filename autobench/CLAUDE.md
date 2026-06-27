@@ -7,8 +7,10 @@ reverts losses indefinitely until the human presses Ctrl-C. Modeled on
 `ultima_db/autobench`.
 
 A **task is a matrix cell** `(focus_area, experiment, language)`. The pilot is
-`rust-network-rtt-tcp`. Adding a cell is a data-only change (a `TaskSpec` row +
-a task overlay) — see "Adding a task".
+`rust-network-rtt-tcp`. Both `Network` (two-process `127.0.0.1`) and `Local`
+(single-host, single-process — e.g. `rust-thread-handoff-spin`,
+`rust-thread-handoff-ring`) cells are supported. Adding a cell is a data-only
+change (a `TaskSpec` row + a task overlay) — see "Adding a task".
 
 ## Starting a run
 
@@ -33,6 +35,10 @@ committed every iteration.
 
 **Columns (rust-network-rtt-tcp):**
 `commit | rtt_p50_ns | rtt_p99_ns | rtt_mean_ns | status | description`
+
+**Local cells** (`rust-thread-handoff-spin`: minimize `handoff_rtt_p50_ns`;
+`rust-thread-handoff-ring`: maximize `handoff_throughput_ops_per_sec`) run the
+artifact as a single process — no server/client — and key metrics `<metric>_<unit>`.
 
 **Champion:** the row with the best `primary` value among `status=keep` rows.
 The pilot **minimizes** `rtt_p50_ns`. The `commit` column is the git SHA —
