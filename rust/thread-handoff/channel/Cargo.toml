@@ -1,0 +1,13 @@
+[package]
+name = "thread-handoff-channel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "thread-handoff-channel"
+path = "src/main.rs"
+
+[dependencies]
+bench-common = { path = "../../bench-common" }

@@ -727,8 +727,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "thread-handoff"
+name = "thread-handoff-channel"
 version = "0.1.0"
+dependencies = [
+ "bench-common",
+]
+
+[[package]]
+name = "thread-handoff-condvar"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+]
+
+[[package]]
+name = "thread-handoff-ring"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+]
+
+[[package]]
+name = "thread-handoff-spin"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+]
 
 [[package]]
 name = "time"

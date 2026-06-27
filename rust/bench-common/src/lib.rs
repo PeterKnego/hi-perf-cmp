@@ -7,12 +7,14 @@
 //! - [`result`] — hand-rendered result-contract JSON line emission.
 //! - [`measure`] — the warmup + timed ping-pong loop into a pre-allocated buffer.
 //! - [`fswrite`] — the filesystem-write durable-append harness (config, loop, emission).
+//! - [`handoff`] — the thread-handoff harness (TH_* config, timed round-trip loop, latency + throughput emission).
 //!
 //! Std-only — zero external dependencies. See
 //! docs/superpowers/specs/2026-06-25-experiment-dimension-design.md.
 
 pub mod config;
 pub mod fswrite;
+pub mod handoff;
 pub mod measure;
 pub mod result;
 pub mod stats;

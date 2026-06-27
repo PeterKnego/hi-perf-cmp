@@ -56,13 +56,13 @@
 - name: Verify expected build artifacts exist
   ansible.builtin.shell: |
     set -e
-    # One artifact per experiment (<focus_area>-<experiment>) plus the
-    # single-artifact stub focus areas. Each name maps 1:1 to a rust release bin,
-    # a go bin, and a java subproject build dir.
+    # One artifact per experiment (<focus_area>-<experiment>). Each name maps 1:1
+    # to a rust release bin, a go bin, and a java subproject build dir.
     for art in network-rtt-tcp network-rtt-udp network-rtt-quic \
                filesystem-write-fsync filesystem-write-fdatasync \
                filesystem-write-prealloc filesystem-write-batch \
-               thread-handoff; do
+               thread-handoff-spin thread-handoff-condvar \
+               thread-handoff-channel thread-handoff-ring; do
       test -x {{ src_dir }}/rust/target/release/"$art"
       test -x {{ src_dir }}/go/bin/"$art"
       test -d {{ src_dir }}/java/"$art"/build

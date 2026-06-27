@@ -149,8 +149,8 @@ repo root `README.md` / `CLAUDE.md`): `journal record bench-out/dist/<ts>` then
 | focus_area | experiments | kind |
 |------------|-------------|------|
 | `network-rtt` | `tcp`, `udp`, `quic` | cross_host (node1 responder + node0 client) |
-| `filesystem-write` | `placeholder` (stub) | local (node0, NVMe-backed `/opt/bench`) |
-| `thread-handoff` | `placeholder` (stub) | local (node0) |
+| `filesystem-write` | `fsync`, `fdatasync`, `prealloc`, `batch` | local (node0, NVMe-backed `/opt/bench`) |
+| `thread-handoff` | `spin`, `condvar`, `channel`, `ring` | local (node0) |
 
 RTT parameters (`rtt_payload_bytes`, `rtt_warmup`, `rtt_iterations`, and the
 per-experiment ports `rtt_tcp_port`/`rtt_udp_port`/`rtt_quic_port`) come from

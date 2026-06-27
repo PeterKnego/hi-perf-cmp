@@ -9,5 +9,8 @@ include(
     "filesystem-write-fdatasync",
     "filesystem-write-prealloc",
     "filesystem-write-batch",
-    "thread-handoff",
+    "thread-handoff-spin",
+    "thread-handoff-condvar",
+    "thread-handoff-channel",
+    "thread-handoff-ring",
 )

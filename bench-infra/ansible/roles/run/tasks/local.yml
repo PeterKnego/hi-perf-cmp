@@ -20,6 +20,9 @@
     export FSW_WARMUP="{{ fsw_warmup }}"
     export FSW_ITERATIONS="{{ fsw_iterations }}"
     export FSW_BATCH="{{ fsw_batch }}"
+    export TH_WARMUP="{{ th_warmup }}"
+    export TH_ITERATIONS="{{ th_iterations }}"
+    export TH_RING_CAP="{{ th_ring_cap }}"
     {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} loopback \
       >> {{ remote_results_dir }}/results.jsonl
   args:
