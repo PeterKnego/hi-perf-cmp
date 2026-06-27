@@ -1,1 +1,2 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
+a6b00a6	1191	1191	1191	discard	LinkedBlockingQueue + bounded poll-spin then take: REGRESSED p50 475->1191 ns (+151%) on AWS c6id -- baseline SynchronousQueue p50 already fast; LBQ per-poll lock overhead dominates; baseline kept (p50 primary, median of 3 runs of 5)

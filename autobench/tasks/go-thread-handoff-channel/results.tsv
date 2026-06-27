@@ -1,1 +1,2 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
+a6b00a6	756	756	756	discard	cap-1 buffered chan + bounded select-spin then blocking recv: REGRESSED p50 320->756 ns (+136%) on AWS c6id -- cheap goroutine park makes spinning counterproductive; baseline kept (p50 primary, median of 3 runs of 5)

@@ -1,1 +1,2 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
+a6b00a6	374	374	374	keep	switch to unbounded mpsc + bounded spin try_recv (SPIN_BUDGET=256) then blocking recv: p50 22114->374 ns (~59x) on AWS c6id; parking fallback retained (p50 primary, median of 3 runs of 5)

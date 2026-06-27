@@ -1,1 +1,2 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
+a6b00a6	310	310	310	keep	bounded spin-then-park (SPIN_BUDGET=4000 on AtomicBool readiness flag, then condvar wait): p50 21625->310 ns (~70x) on AWS c6id -- spin fast-path catches the responder before the OS-thread park/unpark syscall; parking fallback retained (p50 primary, median of 3 runs of 5; p99/mean not separately captured)
