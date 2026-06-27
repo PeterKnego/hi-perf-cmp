@@ -1,3 +1,4 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
 60e7284	60	100	69.2	keep	baseline (unmodified cell, median-of-5)
 1c6f1a4	121	189	139.2	discard	cache-line pad req/resp: INCONCLUSIVE -- re-measuring identical baseline gave 60..219ns p50, so the 121 was within the dev-box noise floor, not a real regression (median-of-5)
+321f3a3	226	255	229.4	discard	cache-line pad req/resp slots: wash/slight-regress 216->226 p50 (within noise) on AWS c6id -- a strict ping-pong alternates (one token in flight), so the two slots are never written concurrently; no false sharing to remove (median-of-5)
