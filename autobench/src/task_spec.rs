@@ -57,6 +57,21 @@ pub struct TaskSpec {
     pub primary_metric: &'static str,
     /// Optimization direction for the primary metric.
     pub direction: Direction,
+    /// Env var the cell reads for the warmup count (e.g. `RTT_WARMUP`,
+    /// `TH_WARMUP`). `run-iter` sets it to the smoke/standard count per stage.
+    pub warmup_env: &'static str,
+    /// Env var the cell reads for the iteration count (e.g. `RTT_ITERATIONS`,
+    /// `TH_ITERATIONS`).
+    pub iters_env: &'static str,
+    /// Fixed extra env set on every correctness/microbench run of this cell
+    /// (e.g. `[("TH_RING_CAP","1024")]`). Empty for most cells.
+    pub extra_env: &'static [(&'static str, &'static str)],
+    /// The suffixed metric keys (`<metric>_<unit>`) the cell must emit; the
+    /// correctness/microbench floor requires all present and > 0.
+    pub expected_metrics: &'static [&'static str],
+    /// The suffixed key (`<metric>_<unit>`) of the primary metric in the parsed
+    /// map — the champion value `run-iter` reports as `primary`.
+    pub primary_key: &'static str,
 }
 
 /// Resolve a `--task` value to its [`TaskSpec`], or `None` if unregistered.
@@ -76,6 +91,11 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             gate_a_dir: "rust",
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
+            warmup_env: "RTT_WARMUP",
+            iters_env: "RTT_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"],
+            primary_key: "rtt_p50_ns",
         }),
         "go-network-rtt-tcp" => Some(TaskSpec {
             task: "go-network-rtt-tcp",
@@ -100,6 +120,11 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             gate_a_dir: "go",
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
+            warmup_env: "RTT_WARMUP",
+            iters_env: "RTT_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"],
+            primary_key: "rtt_p50_ns",
         }),
         "java-network-rtt-tcp" => Some(TaskSpec {
             task: "java-network-rtt-tcp",
@@ -123,6 +148,11 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             gate_a_dir: "java",
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
+            warmup_env: "RTT_WARMUP",
+            iters_env: "RTT_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"],
+            primary_key: "rtt_p50_ns",
         }),
         "rust-network-rtt-udp" => Some(TaskSpec {
             task: "rust-network-rtt-udp",
@@ -138,6 +168,11 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             gate_a_dir: "rust",
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
+            warmup_env: "RTT_WARMUP",
+            iters_env: "RTT_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"],
+            primary_key: "rtt_p50_ns",
         }),
         "go-network-rtt-udp" => Some(TaskSpec {
             task: "go-network-rtt-udp",
@@ -159,6 +194,11 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             gate_a_dir: "go",
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
+            warmup_env: "RTT_WARMUP",
+            iters_env: "RTT_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"],
+            primary_key: "rtt_p50_ns",
         }),
         "java-network-rtt-udp" => Some(TaskSpec {
             task: "java-network-rtt-udp",
@@ -179,6 +219,11 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             gate_a_dir: "java",
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
+            warmup_env: "RTT_WARMUP",
+            iters_env: "RTT_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"],
+            primary_key: "rtt_p50_ns",
         }),
         "rust-network-rtt-quic" => Some(TaskSpec {
             task: "rust-network-rtt-quic",
@@ -194,6 +239,11 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             gate_a_dir: "rust",
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
+            warmup_env: "RTT_WARMUP",
+            iters_env: "RTT_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"],
+            primary_key: "rtt_p50_ns",
         }),
         "go-network-rtt-quic" => Some(TaskSpec {
             task: "go-network-rtt-quic",
@@ -215,6 +265,11 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             gate_a_dir: "go",
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
+            warmup_env: "RTT_WARMUP",
+            iters_env: "RTT_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"],
+            primary_key: "rtt_p50_ns",
         }),
         "java-network-rtt-quic" => Some(TaskSpec {
             task: "java-network-rtt-quic",
@@ -235,6 +290,69 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             gate_a_dir: "java",
             primary_metric: "rtt_p50",
             direction: Direction::Minimize,
+            warmup_env: "RTT_WARMUP",
+            iters_env: "RTT_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"],
+            primary_key: "rtt_p50_ns",
+        }),
+        "rust-thread-handoff-spin" => Some(TaskSpec {
+            task: "rust-thread-handoff-spin",
+            language: "rust",
+            focus_area: "thread-handoff",
+            experiment: "spin",
+            kind: Kind::Local,
+            build: &["cargo", "build", "--release", "-p", "thread-handoff-spin"],
+            build_dir: "rust",
+            run: &[
+                "cargo",
+                "run",
+                "--release",
+                "-q",
+                "-p",
+                "thread-handoff-spin",
+            ],
+            run_dir: "rust",
+            gate_a: &["cargo", "test"],
+            gate_a_dir: "rust",
+            primary_metric: "handoff_rtt_p50",
+            direction: Direction::Minimize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns",
+            ],
+            primary_key: "handoff_rtt_p50_ns",
+        }),
+        "rust-thread-handoff-ring" => Some(TaskSpec {
+            task: "rust-thread-handoff-ring",
+            language: "rust",
+            focus_area: "thread-handoff",
+            experiment: "ring",
+            kind: Kind::Local,
+            build: &["cargo", "build", "--release", "-p", "thread-handoff-ring"],
+            build_dir: "rust",
+            run: &[
+                "cargo",
+                "run",
+                "--release",
+                "-q",
+                "-p",
+                "thread-handoff-ring",
+            ],
+            run_dir: "rust",
+            gate_a: &["cargo", "test"],
+            gate_a_dir: "rust",
+            primary_metric: "handoff_throughput",
+            direction: Direction::Maximize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[("TH_RING_CAP", "1024")],
+            expected_metrics: &["handoff_throughput_ops_per_sec"],
+            primary_key: "handoff_throughput_ops_per_sec",
         }),
         _ => None,
     }
@@ -331,5 +449,68 @@ mod tests {
     #[test]
     fn unknown_task_is_none() {
         assert!(task_spec("nope").is_none());
+    }
+
+    #[test]
+    fn network_rows_keep_ns_primary_and_expected() {
+        for t in [
+            "rust-network-rtt-tcp",
+            "go-network-rtt-udp",
+            "java-network-rtt-quic",
+        ] {
+            let s = task_spec(t).unwrap();
+            assert_eq!(s.kind, Kind::Network);
+            assert_eq!(s.primary_key, "rtt_p50_ns");
+            assert_eq!(
+                s.expected_metrics,
+                &["rtt_p50_ns", "rtt_p99_ns", "rtt_mean_ns"]
+            );
+            assert_eq!(s.warmup_env, "RTT_WARMUP");
+            assert_eq!(s.iters_env, "RTT_ITERATIONS");
+            assert!(s.extra_env.is_empty());
+        }
+    }
+
+    #[test]
+    fn thread_handoff_spin_resolves_local_minimize() {
+        let s = task_spec("rust-thread-handoff-spin").unwrap();
+        assert_eq!(s.language, "rust");
+        assert_eq!(s.focus_area, "thread-handoff");
+        assert_eq!(s.experiment, "spin");
+        assert_eq!(s.kind, Kind::Local);
+        assert_eq!(s.direction, Direction::Minimize);
+        assert_eq!(s.primary_key, "handoff_rtt_p50_ns");
+        assert_eq!(
+            s.expected_metrics,
+            &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns"
+            ]
+        );
+        assert_eq!(s.warmup_env, "TH_WARMUP");
+        assert_eq!(s.iters_env, "TH_ITERATIONS");
+        assert!(s.extra_env.is_empty());
+        assert_eq!(
+            s.run,
+            &[
+                "cargo",
+                "run",
+                "--release",
+                "-q",
+                "-p",
+                "thread-handoff-spin"
+            ]
+        );
+    }
+
+    #[test]
+    fn thread_handoff_ring_resolves_local_maximize_with_ring_cap() {
+        let s = task_spec("rust-thread-handoff-ring").unwrap();
+        assert_eq!(s.kind, Kind::Local);
+        assert_eq!(s.direction, Direction::Maximize);
+        assert_eq!(s.primary_key, "handoff_throughput_ops_per_sec");
+        assert_eq!(s.expected_metrics, &["handoff_throughput_ops_per_sec"]);
+        assert_eq!(s.extra_env, &[("TH_RING_CAP", "1024")]);
     }
 }
