@@ -62,7 +62,7 @@ pub fn median(xs: &[f64]) -> f64 {
 }
 
 /// Parse result-contract JSON lines from a captured stdout `String` into a
-/// metrics map keyed `<metric>_ns` (e.g. `rtt_p50` -> `"rtt_p50_ns"`).
+/// metrics map keyed `<metric>_<unit>` (e.g. `rtt_p50`+`ns` -> `"rtt_p50_ns"`).
 ///
 /// Lines whose `focus_area`/`experiment` do not match the task are ignored, as
 /// are non-JSON lines (diagnostics belong on stderr, but tolerate strays). The
@@ -91,10 +91,13 @@ pub fn parse_contract_metrics(
         let Some(metric) = v.get("metric").and_then(|m| m.as_str()) else {
             continue;
         };
+        let Some(unit) = v.get("unit").and_then(|u| u.as_str()) else {
+            continue;
+        };
         let Some(value) = v.get("value").and_then(serde_json::Value::as_f64) else {
             continue;
         };
-        out.insert(format!("{metric}_ns"), value);
+        out.insert(format!("{metric}_{unit}"), value);
     }
     out
 }
@@ -194,6 +197,35 @@ pub struct NetworkRun {
     pub stderr: String,
 }
 
+/// Outcome of one single-process local run (a `Local` cell emits its contract
+/// lines directly on stdout — no server child, port, or readiness probe).
+pub struct LocalRun {
+    /// True if the process exited 0.
+    pub ok: bool,
+    /// Captured stdout (the contract lines).
+    pub stdout: String,
+    /// Captured stderr.
+    pub stderr: String,
+}
+
+/// Run the artifact once with `env`, capturing its stdout/stderr and exit
+/// status. The `Local` analogue of [`run_network_once`].
+pub fn run_local_once(
+    run: &[&str],
+    run_dir: &str,
+    env: &[(&str, &str)],
+) -> std::io::Result<LocalRun> {
+    let output = run_command(run, run_dir, env)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+    Ok(LocalRun {
+        ok: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
 /// Run one two-process network fitness sample over `127.0.0.1`.
 ///
 /// Spawns the artifact in `RTT_MODE=server` (plus `extra_env`, e.g. port and
@@ -271,12 +303,35 @@ mod tests {
 "#;
 
     #[test]
-    fn parses_three_tcp_lines() {
+    fn parses_three_tcp_lines_ns_keys_unchanged() {
+        // Backward compatibility: an `ns` unit still yields the `_ns` key.
         let m = parse_contract_metrics(TCP_LINES, "network-rtt", "tcp");
         assert_eq!(m.len(), 3);
         assert_eq!(m["rtt_p50_ns"], 42000.0);
         assert_eq!(m["rtt_p99_ns"], 81000.0);
         assert_eq!(m["rtt_mean_ns"], 50000.5);
+    }
+
+    #[test]
+    fn keys_thread_handoff_latency_and_throughput_by_unit() {
+        let spin = r#"
+{"language":"rust","focus_area":"thread-handoff","experiment":"spin","metric":"handoff_rtt_p50","value":182,"unit":"ns","samples":100000}
+{"language":"rust","focus_area":"thread-handoff","experiment":"spin","metric":"handoff_rtt_mean","value":186.2,"unit":"ns","samples":100000}
+"#;
+        let m = parse_contract_metrics(spin, "thread-handoff", "spin");
+        assert_eq!(m["handoff_rtt_p50_ns"], 182.0);
+        assert_eq!(m["handoff_rtt_mean_ns"], 186.2);
+
+        let ring = r#"{"language":"rust","focus_area":"thread-handoff","experiment":"ring","metric":"handoff_throughput","value":28139265.7,"unit":"ops_per_sec","samples":100000}"#;
+        let r = parse_contract_metrics(ring, "thread-handoff", "ring");
+        assert_eq!(r["handoff_throughput_ops_per_sec"], 28139265.7);
+    }
+
+    #[test]
+    fn line_missing_unit_is_skipped() {
+        let line = r#"{"language":"rust","focus_area":"thread-handoff","experiment":"spin","metric":"handoff_rtt_p50","value":1,"samples":1}"#;
+        let m = parse_contract_metrics(line, "thread-handoff", "spin");
+        assert!(m.is_empty());
     }
 
     #[test]
@@ -341,5 +396,31 @@ mod tests {
         assert_eq!(Transport::Tcp.port_env(), "RTT_TCP_PORT");
         assert_eq!(Transport::Udp.port_env(), "RTT_UDP_PORT");
         assert_eq!(Transport::Quic.port_env(), "RTT_QUIC_PORT");
+    }
+
+    #[test]
+    fn run_local_once_captures_output_and_exit() {
+        // `.` resolves (via resolve_dir) to the repo root — a valid cwd.
+        let ok = run_local_once(
+            &["sh", "-c", "printf 'OUT\\n'; printf 'ERR\\n' 1>&2; exit 0"],
+            ".",
+            &[],
+        )
+        .unwrap();
+        assert!(ok.ok);
+        assert!(ok.stdout.contains("OUT"));
+        assert!(ok.stderr.contains("ERR"));
+
+        let bad = run_local_once(&["sh", "-c", "exit 3"], ".", &[]).unwrap();
+        assert!(!bad.ok);
+
+        // Env is passed through to the child.
+        let env = run_local_once(
+            &["sh", "-c", "printf '%s' \"$AB_TEST_VAR\""],
+            ".",
+            &[("AB_TEST_VAR", "xyz")],
+        )
+        .unwrap();
+        assert_eq!(env.stdout, "xyz");
     }
 }
