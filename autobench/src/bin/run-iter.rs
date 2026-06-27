@@ -178,7 +178,7 @@ fn main() {
         let mut v = Verdict::new(Status::UnknownTask, "setup");
         v.stderr_tail = Some(format!(
             "unknown task {:?}; known: {{rust,go,java}}-network-rtt-{{tcp,udp,quic}}, \
-             rust-thread-handoff-{{spin,ring}}",
+             {{rust,go,java}}-thread-handoff-{{spin,ring}}",
             args.task
         ));
         emit_and_exit(&v);

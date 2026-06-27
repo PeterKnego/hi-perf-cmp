@@ -354,6 +354,120 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             expected_metrics: &["handoff_throughput_ops_per_sec"],
             primary_key: "handoff_throughput_ops_per_sec",
         }),
+        "go-thread-handoff-spin" => Some(TaskSpec {
+            task: "go-thread-handoff-spin",
+            language: "go",
+            focus_area: "thread-handoff",
+            experiment: "spin",
+            kind: Kind::Local,
+            build: &[
+                "go",
+                "build",
+                "-o",
+                "bin/thread-handoff-spin",
+                "./cmd/thread-handoff-spin",
+            ],
+            build_dir: "go",
+            run: &["./bin/thread-handoff-spin"],
+            run_dir: "go",
+            gate_a: &["go", "test", "./..."],
+            gate_a_dir: "go",
+            primary_metric: "handoff_rtt_p50",
+            direction: Direction::Minimize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns",
+            ],
+            primary_key: "handoff_rtt_p50_ns",
+        }),
+        "go-thread-handoff-ring" => Some(TaskSpec {
+            task: "go-thread-handoff-ring",
+            language: "go",
+            focus_area: "thread-handoff",
+            experiment: "ring",
+            kind: Kind::Local,
+            build: &[
+                "go",
+                "build",
+                "-o",
+                "bin/thread-handoff-ring",
+                "./cmd/thread-handoff-ring",
+            ],
+            build_dir: "go",
+            run: &["./bin/thread-handoff-ring"],
+            run_dir: "go",
+            gate_a: &["go", "test", "./..."],
+            gate_a_dir: "go",
+            primary_metric: "handoff_throughput",
+            direction: Direction::Maximize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[("TH_RING_CAP", "1024")],
+            expected_metrics: &["handoff_throughput_ops_per_sec"],
+            primary_key: "handoff_throughput_ops_per_sec",
+        }),
+        "java-thread-handoff-spin" => Some(TaskSpec {
+            task: "java-thread-handoff-spin",
+            language: "java",
+            focus_area: "thread-handoff",
+            experiment: "spin",
+            kind: Kind::Local,
+            build: &["./gradlew", "--quiet", ":thread-handoff-spin:installDist"],
+            build_dir: "java",
+            run: &[
+                "./thread-handoff-spin/build/install/thread-handoff-spin/bin/thread-handoff-spin",
+            ],
+            run_dir: "java",
+            gate_a: &[
+                "./gradlew",
+                "--quiet",
+                ":thread-handoff-spin:test",
+                ":common:test",
+            ],
+            gate_a_dir: "java",
+            primary_metric: "handoff_rtt_p50",
+            direction: Direction::Minimize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns",
+            ],
+            primary_key: "handoff_rtt_p50_ns",
+        }),
+        "java-thread-handoff-ring" => Some(TaskSpec {
+            task: "java-thread-handoff-ring",
+            language: "java",
+            focus_area: "thread-handoff",
+            experiment: "ring",
+            kind: Kind::Local,
+            build: &["./gradlew", "--quiet", ":thread-handoff-ring:installDist"],
+            build_dir: "java",
+            run: &[
+                "./thread-handoff-ring/build/install/thread-handoff-ring/bin/thread-handoff-ring",
+            ],
+            run_dir: "java",
+            gate_a: &[
+                "./gradlew",
+                "--quiet",
+                ":thread-handoff-ring:test",
+                ":common:test",
+            ],
+            gate_a_dir: "java",
+            primary_metric: "handoff_throughput",
+            direction: Direction::Maximize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[("TH_RING_CAP", "1024")],
+            expected_metrics: &["handoff_throughput_ops_per_sec"],
+            primary_key: "handoff_throughput_ops_per_sec",
+        }),
         _ => None,
     }
 }
@@ -512,5 +626,51 @@ mod tests {
         assert_eq!(s.primary_key, "handoff_throughput_ops_per_sec");
         assert_eq!(s.expected_metrics, &["handoff_throughput_ops_per_sec"]);
         assert_eq!(s.extra_env, &[("TH_RING_CAP", "1024")]);
+    }
+
+    #[test]
+    fn go_thread_handoff_cells_resolve_local() {
+        let spin = task_spec("go-thread-handoff-spin").unwrap();
+        assert_eq!(spin.language, "go");
+        assert_eq!(spin.focus_area, "thread-handoff");
+        assert_eq!(spin.kind, Kind::Local);
+        assert_eq!(spin.direction, Direction::Minimize);
+        assert_eq!(spin.primary_key, "handoff_rtt_p50_ns");
+        assert_eq!(spin.run, &["./bin/thread-handoff-spin"]);
+        assert_eq!(spin.gate_a, &["go", "test", "./..."]);
+        assert_eq!(spin.warmup_env, "TH_WARMUP");
+        assert_eq!(spin.iters_env, "TH_ITERATIONS");
+        assert!(spin.extra_env.is_empty());
+
+        let ring = task_spec("go-thread-handoff-ring").unwrap();
+        assert_eq!(ring.kind, Kind::Local);
+        assert_eq!(ring.direction, Direction::Maximize);
+        assert_eq!(ring.primary_key, "handoff_throughput_ops_per_sec");
+        assert_eq!(ring.run, &["./bin/thread-handoff-ring"]);
+        assert_eq!(ring.extra_env, &[("TH_RING_CAP", "1024")]);
+    }
+
+    #[test]
+    fn java_thread_handoff_cells_resolve_local() {
+        let spin = task_spec("java-thread-handoff-spin").unwrap();
+        assert_eq!(spin.language, "java");
+        assert_eq!(spin.kind, Kind::Local);
+        assert_eq!(spin.direction, Direction::Minimize);
+        assert_eq!(spin.primary_key, "handoff_rtt_p50_ns");
+        assert_eq!(
+            spin.build,
+            &["./gradlew", "--quiet", ":thread-handoff-spin:installDist"]
+        );
+        assert_eq!(
+            spin.run,
+            &["./thread-handoff-spin/build/install/thread-handoff-spin/bin/thread-handoff-spin"]
+        );
+        assert_eq!(spin.warmup_env, "TH_WARMUP");
+
+        let ring = task_spec("java-thread-handoff-ring").unwrap();
+        assert_eq!(ring.kind, Kind::Local);
+        assert_eq!(ring.direction, Direction::Maximize);
+        assert_eq!(ring.primary_key, "handoff_throughput_ops_per_sec");
+        assert_eq!(ring.extra_env, &[("TH_RING_CAP", "1024")]);
     }
 }
