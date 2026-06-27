@@ -360,7 +360,13 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             focus_area: "thread-handoff",
             experiment: "disruptor",
             kind: Kind::Local,
-            build: &["cargo", "build", "--release", "-p", "thread-handoff-disruptor"],
+            build: &[
+                "cargo",
+                "build",
+                "--release",
+                "-p",
+                "thread-handoff-disruptor",
+            ],
             build_dir: "rust",
             run: &[
                 "cargo",
@@ -494,6 +500,210 @@ pub fn task_spec(task: &str) -> Option<TaskSpec> {
             extra_env: &[("TH_RING_CAP", "1024")],
             expected_metrics: &["handoff_throughput_ops_per_sec"],
             primary_key: "handoff_throughput_ops_per_sec",
+        }),
+        "rust-thread-handoff-condvar" => Some(TaskSpec {
+            task: "rust-thread-handoff-condvar",
+            language: "rust",
+            focus_area: "thread-handoff",
+            experiment: "condvar",
+            kind: Kind::Local,
+            build: &[
+                "cargo",
+                "build",
+                "--release",
+                "-p",
+                "thread-handoff-condvar",
+            ],
+            build_dir: "rust",
+            run: &[
+                "cargo",
+                "run",
+                "--release",
+                "-q",
+                "-p",
+                "thread-handoff-condvar",
+            ],
+            run_dir: "rust",
+            gate_a: &["cargo", "test"],
+            gate_a_dir: "rust",
+            primary_metric: "handoff_rtt_p50",
+            direction: Direction::Minimize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns",
+            ],
+            primary_key: "handoff_rtt_p50_ns",
+        }),
+        "go-thread-handoff-condvar" => Some(TaskSpec {
+            task: "go-thread-handoff-condvar",
+            language: "go",
+            focus_area: "thread-handoff",
+            experiment: "condvar",
+            kind: Kind::Local,
+            build: &[
+                "go",
+                "build",
+                "-o",
+                "bin/thread-handoff-condvar",
+                "./cmd/thread-handoff-condvar",
+            ],
+            build_dir: "go",
+            run: &["./bin/thread-handoff-condvar"],
+            run_dir: "go",
+            gate_a: &["go", "test", "./..."],
+            gate_a_dir: "go",
+            primary_metric: "handoff_rtt_p50",
+            direction: Direction::Minimize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns",
+            ],
+            primary_key: "handoff_rtt_p50_ns",
+        }),
+        "java-thread-handoff-condvar" => Some(TaskSpec {
+            task: "java-thread-handoff-condvar",
+            language: "java",
+            focus_area: "thread-handoff",
+            experiment: "condvar",
+            kind: Kind::Local,
+            build: &[
+                "./gradlew",
+                "--quiet",
+                ":thread-handoff-condvar:installDist",
+            ],
+            build_dir: "java",
+            run: &[
+                "./thread-handoff-condvar/build/install/thread-handoff-condvar/bin/thread-handoff-condvar",
+            ],
+            run_dir: "java",
+            gate_a: &[
+                "./gradlew",
+                "--quiet",
+                ":thread-handoff-condvar:test",
+                ":common:test",
+            ],
+            gate_a_dir: "java",
+            primary_metric: "handoff_rtt_p50",
+            direction: Direction::Minimize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns",
+            ],
+            primary_key: "handoff_rtt_p50_ns",
+        }),
+        "rust-thread-handoff-channel" => Some(TaskSpec {
+            task: "rust-thread-handoff-channel",
+            language: "rust",
+            focus_area: "thread-handoff",
+            experiment: "channel",
+            kind: Kind::Local,
+            build: &[
+                "cargo",
+                "build",
+                "--release",
+                "-p",
+                "thread-handoff-channel",
+            ],
+            build_dir: "rust",
+            run: &[
+                "cargo",
+                "run",
+                "--release",
+                "-q",
+                "-p",
+                "thread-handoff-channel",
+            ],
+            run_dir: "rust",
+            gate_a: &["cargo", "test"],
+            gate_a_dir: "rust",
+            primary_metric: "handoff_rtt_p50",
+            direction: Direction::Minimize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns",
+            ],
+            primary_key: "handoff_rtt_p50_ns",
+        }),
+        "go-thread-handoff-channel" => Some(TaskSpec {
+            task: "go-thread-handoff-channel",
+            language: "go",
+            focus_area: "thread-handoff",
+            experiment: "channel",
+            kind: Kind::Local,
+            build: &[
+                "go",
+                "build",
+                "-o",
+                "bin/thread-handoff-channel",
+                "./cmd/thread-handoff-channel",
+            ],
+            build_dir: "go",
+            run: &["./bin/thread-handoff-channel"],
+            run_dir: "go",
+            gate_a: &["go", "test", "./..."],
+            gate_a_dir: "go",
+            primary_metric: "handoff_rtt_p50",
+            direction: Direction::Minimize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns",
+            ],
+            primary_key: "handoff_rtt_p50_ns",
+        }),
+        "java-thread-handoff-channel" => Some(TaskSpec {
+            task: "java-thread-handoff-channel",
+            language: "java",
+            focus_area: "thread-handoff",
+            experiment: "channel",
+            kind: Kind::Local,
+            build: &[
+                "./gradlew",
+                "--quiet",
+                ":thread-handoff-channel:installDist",
+            ],
+            build_dir: "java",
+            run: &[
+                "./thread-handoff-channel/build/install/thread-handoff-channel/bin/thread-handoff-channel",
+            ],
+            run_dir: "java",
+            gate_a: &[
+                "./gradlew",
+                "--quiet",
+                ":thread-handoff-channel:test",
+                ":common:test",
+            ],
+            gate_a_dir: "java",
+            primary_metric: "handoff_rtt_p50",
+            direction: Direction::Minimize,
+            warmup_env: "TH_WARMUP",
+            iters_env: "TH_ITERATIONS",
+            extra_env: &[],
+            expected_metrics: &[
+                "handoff_rtt_p50_ns",
+                "handoff_rtt_p99_ns",
+                "handoff_rtt_mean_ns",
+            ],
+            primary_key: "handoff_rtt_p50_ns",
         }),
         _ => None,
     }
@@ -699,5 +909,22 @@ mod tests {
         assert_eq!(ring.direction, Direction::Maximize);
         assert_eq!(ring.primary_key, "handoff_throughput_ops_per_sec");
         assert_eq!(ring.extra_env, &[("TH_RING_CAP", "1024")]);
+    }
+
+    #[test]
+    fn condvar_and_channel_cells_resolve_local_minimize() {
+        for lang in ["rust", "go", "java"] {
+            for exp in ["condvar", "channel"] {
+                let s = task_spec(&format!("{lang}-thread-handoff-{exp}")).unwrap();
+                assert_eq!(s.language, lang);
+                assert_eq!(s.experiment, exp);
+                assert_eq!(s.focus_area, "thread-handoff");
+                assert_eq!(s.kind, Kind::Local);
+                assert_eq!(s.direction, Direction::Minimize);
+                assert_eq!(s.primary_key, "handoff_rtt_p50_ns");
+                assert_eq!(s.warmup_env, "TH_WARMUP");
+                assert!(s.extra_env.is_empty());
+            }
+        }
     }
 }
