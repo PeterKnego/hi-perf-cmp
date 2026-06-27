@@ -72,7 +72,8 @@ make status                    # cost guard: lists instances + uptime
 Defined in `ansible/group_vars/all.yml` (`languages` × `experiments`). Currently:
 `network-rtt` × {`tcp`, `udp`, `quic`} cross-host (node1 responder + node0
 client, real private-network RTT — never loopback), plus the `filesystem-write`
-and `thread-handoff` local stubs. RTT params (`rtt_payload_bytes`, `rtt_warmup`,
+(`fsync`/`fdatasync`/`prealloc`/`batch`) and `thread-handoff`
+(`spin`/`condvar`/`channel`/`ring`) local experiments. RTT params (`rtt_payload_bytes`, `rtt_warmup`,
 `rtt_iterations`, the per-experiment ports) are identical across languages for a
 fair comparison. Each cell's artifact is `<focus_area>-<experiment>` (e.g.
 `network-rtt-tcp`): Rust/Go exec the prebuilt release binary, Java runs
