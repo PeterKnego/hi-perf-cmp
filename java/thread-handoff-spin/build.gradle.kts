@@ -7,5 +7,5 @@ dependencies {
 }
 
 application {
-    mainClass.set("net.knego.hiperf.threadhandoff.Main")
+    mainClass.set("net.knego.hiperf.threadhandoff.spin.Main")
 }
