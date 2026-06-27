@@ -1,2 +1,3 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
 60e7284	60	100	69.2	keep	baseline (unmodified cell, median-of-5)
+1c6f1a4	121	189	139.2	discard	cache-line pad req/resp: +102% p50 (60->121); false sharing not the bottleneck on a 2-thread box -- padding spreads the bounce over two lines (median-of-5)
