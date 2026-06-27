@@ -1,1 +1,2 @@
 commit	handoff_throughput_ops_per_sec	status	description
+0f6de6d	77590000	keep	baseline (unmodified); throughput noise-dominated on this shared dev box: 46-142M ops/s across identical-code runs (median-of-5), 49-108M even at median-of-21 -- per-process core-placement variance swamps any optimization signal; real number requires AWS graduation
