@@ -1,0 +1,2 @@
+commit	handoff_throughput_ops_per_sec	status	description
+755aa36	148000000	keep	disruptor-rs v4.3 (BusySpin) single-producer SPSC, same harness/box as ring: ~148.0M ops/s on AWS c6id (median-of-5, stable 139-148M). Reference point: our hand-rolled ring is ~367.6M (~2.5x faster) -- the Disruptor framework pays per-event handler dispatch + sequence-barrier + multi-consumer overhead a bare u64 SPSC does not
