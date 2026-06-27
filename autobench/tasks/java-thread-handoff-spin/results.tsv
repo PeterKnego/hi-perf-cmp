@@ -1,1 +1,2 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
+763f314	298	3150	497.7	discard	VarHandle padded slots: REGRESSED (p50 283->298 wash but p99 tail 255->3150, mean ->497) on AWS c6id -- no win; plateau (median-of-5)

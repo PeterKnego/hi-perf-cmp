@@ -1,1 +1,2 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
+42b4cd3	242	257	236.6	discard	cache-line pad slots: REGRESSED 178->242 p50 (+36%) on AWS c6id -- padding adds cache pressure with no false-sharing benefit in a strict ping-pong; plateau (median-of-5)
