@@ -3,12 +3,10 @@
 
 mod spsc;
 
-use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
 use bench_common::handoff::{self, HandoffConfig};
-use spsc::Spsc;
 
 const EXPERIMENT: &str = "ring";
 
@@ -22,30 +20,27 @@ fn main() {
     };
     let total = cfg.warmup + cfg.iterations;
 
-    let ring = Arc::new(Spsc::new(cfg.ring_cap));
+    let (mut producer, mut consumer_handle) = spsc::channel(cfg.ring_cap);
 
-    let consumer = {
-        let ring = Arc::clone(&ring);
-        thread::spawn(move || {
-            for _ in 0..total {
-                let _ = ring.pop();
-            }
-        })
-    };
+    let consumer = thread::spawn(move || {
+        for _ in 0..total {
+            let _ = consumer_handle.pop();
+        }
+    });
 
     // Warmup pushes, then a drain barrier so timing excludes warmup.
     for _ in 0..cfg.warmup {
-        ring.push(1);
+        producer.push(1);
     }
-    while ring.consumed() < cfg.warmup {
+    while producer.consumed() < cfg.warmup {
         std::hint::spin_loop();
     }
 
     let t_start = Instant::now();
     for _ in 0..cfg.iterations {
-        ring.push(1);
+        producer.push(1);
     }
-    while ring.consumed() < total {
+    while producer.consumed() < total {
         std::hint::spin_loop();
     }
     let elapsed = t_start.elapsed();

@@ -1,2 +1,3 @@
 commit	handoff_throughput_ops_per_sec	status	description
 0f6de6d	77590000	keep	baseline (unmodified); throughput noise-dominated on this shared dev box: 46-142M ops/s across identical-code runs (median-of-5), 49-108M even at median-of-21 -- per-process core-placement variance swamps any optimization signal; real number requires AWS graduation
+c589717	393300000	keep	cache-line pad head/tail (separate 64B lines) + producer/consumer-cached opposite-index (LMAX SPSC): 26.5M->393M ops/s (+1384%) on AWS c6id, stable 390-414M over 3 runs; SPSC order+count test green (median-of-5)
