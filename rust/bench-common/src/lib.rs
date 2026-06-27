@@ -13,6 +13,7 @@
 
 pub mod config;
 pub mod fswrite;
+pub mod handoff;
 pub mod measure;
 pub mod result;
 pub mod stats;
