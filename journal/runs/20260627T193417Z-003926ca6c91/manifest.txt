@@ -1,0 +1,16 @@
+timestamp=20260627T193417Z
+instance_type=c6id.2xlarge
+vcpus=8
+mem_mb=15701
+kernel=6.17.0-1019-aws
+rtt_payload_bytes=64
+rtt_warmup=10000
+rtt_iterations=100000
+rtt_tcp_port=9100
+rtt_udp_port=9101
+rtt_quic_port=9102
+languages=rust,go,java
+experiments=network-rtt/tcp,network-rtt/udp,network-rtt/quic,filesystem-write/fsync,filesystem-write/fdatasync,filesystem-write/prealloc,filesystem-write/batch,thread-handoff/spin,thread-handoff/condvar,thread-handoff/channel,thread-handoff/ring
+git_sha=003926ca6c91256453ace803c15bc88ea0196ae5 clean
+node0_role=node0 (client/driver + single-host benches)
+node1_role=node1 (network-rtt responder)
