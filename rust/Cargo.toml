@@ -9,7 +9,7 @@ members = [
     "filesystem-write/fdatasync",
     "filesystem-write/prealloc",
     "filesystem-write/batch",
-    "thread-handoff",
+    "thread-handoff/spin",
 ]
 
 [workspace.package]
