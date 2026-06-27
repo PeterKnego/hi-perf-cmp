@@ -197,6 +197,35 @@ pub struct NetworkRun {
     pub stderr: String,
 }
 
+/// Outcome of one single-process local run (a `Local` cell emits its contract
+/// lines directly on stdout — no server child, port, or readiness probe).
+pub struct LocalRun {
+    /// True if the process exited 0.
+    pub ok: bool,
+    /// Captured stdout (the contract lines).
+    pub stdout: String,
+    /// Captured stderr.
+    pub stderr: String,
+}
+
+/// Run the artifact once with `env`, capturing its stdout/stderr and exit
+/// status. The `Local` analogue of [`run_network_once`].
+pub fn run_local_once(
+    run: &[&str],
+    run_dir: &str,
+    env: &[(&str, &str)],
+) -> std::io::Result<LocalRun> {
+    let output = run_command(run, run_dir, env)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+    Ok(LocalRun {
+        ok: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
 /// Run one two-process network fitness sample over `127.0.0.1`.
 ///
 /// Spawns the artifact in `RTT_MODE=server` (plus `extra_env`, e.g. port and
@@ -367,5 +396,31 @@ mod tests {
         assert_eq!(Transport::Tcp.port_env(), "RTT_TCP_PORT");
         assert_eq!(Transport::Udp.port_env(), "RTT_UDP_PORT");
         assert_eq!(Transport::Quic.port_env(), "RTT_QUIC_PORT");
+    }
+
+    #[test]
+    fn run_local_once_captures_output_and_exit() {
+        // `.` resolves (via resolve_dir) to the repo root — a valid cwd.
+        let ok = run_local_once(
+            &["sh", "-c", "printf 'OUT\\n'; printf 'ERR\\n' 1>&2; exit 0"],
+            ".",
+            &[],
+        )
+        .unwrap();
+        assert!(ok.ok);
+        assert!(ok.stdout.contains("OUT"));
+        assert!(ok.stderr.contains("ERR"));
+
+        let bad = run_local_once(&["sh", "-c", "exit 3"], ".", &[]).unwrap();
+        assert!(!bad.ok);
+
+        // Env is passed through to the child.
+        let env = run_local_once(
+            &["sh", "-c", "printf '%s' \"$AB_TEST_VAR\""],
+            ".",
+            &[("AB_TEST_VAR", "xyz")],
+        )
+        .unwrap();
+        assert_eq!(env.stdout, "xyz");
     }
 }
