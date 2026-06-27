@@ -26,8 +26,11 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
+use std::collections::BTreeMap;
+
 use hi_perf_autobench::sampling::{
-    NetworkRun, Transport, median, parse_contract_metrics, run_network_once,
+    LocalRun, NetworkRun, Transport, median, parse_contract_metrics, run_local_once,
+    run_network_once,
 };
 use hi_perf_autobench::task_spec::{Kind, TaskSpec, task_spec};
 use hi_perf_autobench::verdict::{Status, Verdict};
@@ -174,7 +177,8 @@ fn main() {
     let Some(spec) = task_spec(&args.task) else {
         let mut v = Verdict::new(Status::UnknownTask, "setup");
         v.stderr_tail = Some(format!(
-            "unknown task {:?}; known: {{rust,go,java}}-network-rtt-{{tcp,udp,quic}}",
+            "unknown task {:?}; known: {{rust,go,java}}-network-rtt-{{tcp,udp,quic}}, \
+             rust-thread-handoff-{{spin,ring}}",
             args.task
         ));
         emit_and_exit(&v);
@@ -253,19 +257,58 @@ fn one_network_run(
     }
 }
 
-/// Correctness smoke: a tiny two-process run that must exit 0 and yield exactly
-/// 3 contract lines with `experiment=<exp>` and all values > 0.
-fn correctness(v: &mut Verdict, spec: &TaskSpec) {
-    if spec.kind != Kind::Network {
-        // Local kind not yet wired; the pilot is Network.
-        correctness_fail(
-            v.clone(),
-            format!("kind {:?} correctness not implemented", spec.kind),
-        );
+/// Build the per-run env for a `Local` cell: the cell's warmup/iters env names
+/// set to the given counts, plus its fixed `extra_env`.
+fn local_env<'a>(spec: &'a TaskSpec, warmup: &'a str, iters: &'a str) -> Vec<(&'a str, &'a str)> {
+    let mut env: Vec<(&str, &str)> = vec![(spec.warmup_env, warmup), (spec.iters_env, iters)];
+    env.extend_from_slice(spec.extra_env);
+    env
+}
+
+/// Verify every `expected_metric` is present in `metrics` and strictly > 0.
+/// On any miss, fail as a correctness (smoke) or microbench failure.
+fn check_expected(
+    v: &Verdict,
+    spec: &TaskSpec,
+    metrics: &BTreeMap<String, f64>,
+    stdout: &str,
+    is_smoke: bool,
+) {
+    for key in spec.expected_metrics {
+        let detail = match metrics.get(*key) {
+            None => format!(
+                "expected metric `{key}` missing for {}/{} (got {:?})\n--- stdout ---\n{stdout}",
+                spec.focus_area,
+                spec.experiment,
+                metrics.keys().collect::<Vec<_>>(),
+            ),
+            Some(&val) if val <= 0.0 => {
+                format!("metric `{key}`={val} is not > 0\n--- stdout ---\n{stdout}")
+            }
+            Some(_) => continue,
+        };
+        if is_smoke {
+            correctness_fail(v.clone(), detail);
+        } else {
+            microbench_fail(v.clone(), detail);
+        }
     }
+}
+
+/// Correctness smoke — dispatch on cell kind.
+fn correctness(v: &mut Verdict, spec: &TaskSpec) {
+    match spec.kind {
+        Kind::Network => correctness_network(v, spec),
+        Kind::Local => correctness_local(v, spec),
+    }
+}
+
+/// Network correctness: a tiny two-process run that must exit 0 and yield the
+/// cell's expected metrics, all > 0.
+fn correctness_network(v: &mut Verdict, spec: &TaskSpec) {
     let env = [
-        ("RTT_WARMUP", SMOKE_WARMUP),
-        ("RTT_ITERATIONS", SMOKE_ITERATIONS),
+        (spec.warmup_env, SMOKE_WARMUP),
+        (spec.iters_env, SMOKE_ITERATIONS),
     ];
     let run = one_network_run(v, spec, &env, true);
     if !run.client_ok {
@@ -278,42 +321,69 @@ fn correctness(v: &mut Verdict, spec: &TaskSpec) {
         );
     }
     let metrics = parse_contract_metrics(&run.stdout, spec.focus_area, spec.experiment);
-    if metrics.len() != 3 {
+    check_expected(v, spec, &metrics, &run.stdout, true);
+}
+
+/// Local correctness: a tiny single-process run that must exit 0 and yield the
+/// cell's expected metrics, all > 0.
+fn correctness_local(v: &mut Verdict, spec: &TaskSpec) {
+    let env = local_env(spec, SMOKE_WARMUP, SMOKE_ITERATIONS);
+    let run: LocalRun = match run_local_once(spec.run, spec.run_dir, &env) {
+        Ok(r) => r,
+        Err(e) => correctness_fail(v.clone(), format!("local run I/O error: {e}")),
+    };
+    if !run.ok {
         correctness_fail(
             v.clone(),
             format!(
-                "expected exactly 3 contract lines for {}/{}, got {} ({:?})\n--- stdout ---\n{}",
-                spec.focus_area,
-                spec.experiment,
-                metrics.len(),
-                metrics.keys().collect::<Vec<_>>(),
-                run.stdout
+                "correctness run exited non-zero\n--- stderr ---\n{}\n--- stdout ---\n{}",
+                run.stderr, run.stdout
             ),
         );
     }
-    if let Some((k, val)) = metrics.iter().find(|&(_, &val)| val <= 0.0) {
-        correctness_fail(
-            v.clone(),
-            format!(
-                "contract metric {k}={val} is not > 0\n--- stdout ---\n{}",
-                run.stdout
-            ),
-        );
+    let metrics = parse_contract_metrics(&run.stdout, spec.focus_area, spec.experiment);
+    check_expected(v, spec, &metrics, &run.stdout, true);
+}
+
+/// Microbench fitness — dispatch on cell kind.
+fn microbench(v: &mut Verdict, spec: &TaskSpec, samples: usize) {
+    match spec.kind {
+        Kind::Network => microbench_network(v, spec, samples),
+        Kind::Local => microbench_local(v, spec, samples),
     }
 }
 
-/// Microbench fitness: `samples` two-process runs at standard counts; record
-/// the per-metric medians and the primary metric.
-fn microbench(v: &mut Verdict, spec: &TaskSpec, samples: usize) {
+/// Record the per-metric medians across `series` and set `primary` from the
+/// cell's `primary_key`, or fail if it is absent.
+fn finalize_metrics(
+    v: &mut Verdict,
+    spec: &TaskSpec,
+    series: &BTreeMap<String, Vec<f64>>,
+    n: usize,
+) {
+    for (k, vals) in series {
+        v.metrics.insert(k.clone(), median(vals));
+    }
+    match v.metrics.get(spec.primary_key) {
+        Some(&p) => v.primary = Some(p),
+        None => microbench_fail(
+            v.clone(),
+            format!(
+                "missing primary metric `{}` after {n} samples",
+                spec.primary_key
+            ),
+        ),
+    }
+}
+
+/// Network microbench: `samples` two-process runs at standard counts.
+fn microbench_network(v: &mut Verdict, spec: &TaskSpec, samples: usize) {
     let n = samples.max(1);
     let env = [
-        ("RTT_WARMUP", BENCH_WARMUP),
-        ("RTT_ITERATIONS", BENCH_ITERATIONS),
+        (spec.warmup_env, BENCH_WARMUP),
+        (spec.iters_env, BENCH_ITERATIONS),
     ];
-
-    // Accumulate per-metric value vectors across the N samples.
-    let mut series: std::collections::BTreeMap<String, Vec<f64>> =
-        std::collections::BTreeMap::new();
+    let mut series: BTreeMap<String, Vec<f64>> = BTreeMap::new();
     for i in 0..n {
         let run = one_network_run(v, spec, &env, false);
         if !run.client_ok {
@@ -326,33 +396,40 @@ fn microbench(v: &mut Verdict, spec: &TaskSpec, samples: usize) {
             );
         }
         let metrics = parse_contract_metrics(&run.stdout, spec.focus_area, spec.experiment);
-        if metrics.len() != 3 {
-            microbench_fail(
-                v.clone(),
-                format!(
-                    "microbench sample {i}: expected 3 contract lines, got {}\n--- stdout ---\n{}",
-                    metrics.len(),
-                    run.stdout
-                ),
-            );
-        }
+        check_expected(v, spec, &metrics, &run.stdout, false);
         for (k, val) in metrics {
             series.entry(k).or_default().push(val);
         }
     }
+    finalize_metrics(v, spec, &series, n);
+}
 
-    for (k, vals) in &series {
-        v.metrics.insert(k.clone(), median(vals));
+/// Local microbench: `samples` single-process runs at standard counts.
+fn microbench_local(v: &mut Verdict, spec: &TaskSpec, samples: usize) {
+    let n = samples.max(1);
+    let env = local_env(spec, BENCH_WARMUP, BENCH_ITERATIONS);
+    let mut series: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    for i in 0..n {
+        let run = match run_local_once(spec.run, spec.run_dir, &env) {
+            Ok(r) => r,
+            Err(e) => microbench_fail(v.clone(), format!("local run I/O error (sample {i}): {e}")),
+        };
+        if !run.ok {
+            microbench_fail(
+                v.clone(),
+                format!(
+                    "microbench run (sample {i}) exited non-zero\n--- stderr ---\n{}\n--- stdout ---\n{}",
+                    run.stderr, run.stdout
+                ),
+            );
+        }
+        let metrics = parse_contract_metrics(&run.stdout, spec.focus_area, spec.experiment);
+        check_expected(v, spec, &metrics, &run.stdout, false);
+        for (k, val) in metrics {
+            series.entry(k).or_default().push(val);
+        }
     }
-
-    let primary_key = format!("{}_ns", spec.primary_metric);
-    match v.metrics.get(&primary_key) {
-        Some(&p) => v.primary = Some(p),
-        None => microbench_fail(
-            v.clone(),
-            format!("missing primary metric `{primary_key}` after {n} samples"),
-        ),
-    }
+    finalize_metrics(v, spec, &series, n);
 }
 
 #[cfg(test)]
