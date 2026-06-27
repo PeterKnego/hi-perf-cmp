@@ -62,7 +62,7 @@ re-run before committing a KEEP.
 1. **build** — `cargo build --release -p thread-handoff-spin` (in `rust/`).
 2. **correctness** — a single-process smoke (`TH_WARMUP=20`,
    `TH_ITERATIONS=200`) that must exit 0 and yield `handoff_rtt_p50_ns` /
-   `_p99_ns` / `_mean_ns`, all > 0. (A broken handoff deadlocks → timeout.)
+   `_p99_ns` / `_mean_ns`, all > 0. (A broken handoff that fails to round-trip will hang this stage — the loop orchestrator runs `run-iter` under an external `timeout` and treats a kill as a crash/revert.)
 3. **microbench (fitness)** — median-of-N single runs at standard counts
    (`TH_WARMUP=2000`, `TH_ITERATIONS=20000`) → metrics + primary.
 4. **Gate A (tests)** — `cargo test` over the rust workspace (in `rust/`).

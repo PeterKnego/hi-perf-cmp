@@ -85,7 +85,7 @@ Run it from anywhere in the checkout; the harness resolves each stage's cwd
 |--------|-----------|---------|
 | `pass` | keep/discard | All stages ran; compare `primary`/`metrics` to decide |
 | `build_failed` | crash | The cell's build command failed |
-| `correctness_failed` | crash | The two-process smoke didn't exit 0 or didn't yield 3 positive contract lines |
+| `correctness_failed` | crash | The correctness smoke didn't exit 0, or didn't yield the cell's expected contract metrics (all > 0) |
 | `microbench_failed` | crash | A fitness sample failed to run / parse |
 | `tests_failed` | crash | Gate A (`cargo test`) failed |
 | `timeout` | crash | A stage exceeded its hard wall-clock budget |
