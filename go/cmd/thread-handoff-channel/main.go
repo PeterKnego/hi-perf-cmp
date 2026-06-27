@@ -13,7 +13,7 @@ func main() {
 	}
 	total := cfg.Warmup + cfg.Iterations
 
-	req := make(chan uint64)  // unbuffered == rendezvous
+	req := make(chan uint64) // unbuffered == rendezvous
 	resp := make(chan uint64)
 
 	done := make(chan struct{})
