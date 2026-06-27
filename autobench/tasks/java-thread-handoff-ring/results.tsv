@@ -1,1 +1,2 @@
 commit	handoff_throughput_ops_per_sec	status	description
+e1d6df1	2990000	discard	VarHandle plain-long head/tail + padding + cached opposite-index: REGRESSED 7.49M->2.99M (-60%) on AWS c6id (stable 2.95-3.08M) -- the rust(+15x)/go(+3.7x) pattern fights the JVM JIT; AtomicLong baseline is better (median-of-5)
