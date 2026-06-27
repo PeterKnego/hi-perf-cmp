@@ -1,1 +1,2 @@
 commit	handoff_throughput_ops_per_sec	status	description
+1741c86	32400000	keep	pad indices to separate 64B cache lines + producer/consumer-cached opposite-index (LMAX SPSC): 8.68M->32.4M ops/s (+273%) on AWS c6id, 26-35M over 3 runs; SPSC order+count test green under -race (median-of-5)
