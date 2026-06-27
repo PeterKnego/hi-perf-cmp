@@ -8,8 +8,9 @@ reverts losses indefinitely until the human presses Ctrl-C. Modeled on
 
 A **task is a matrix cell** `(focus_area, experiment, language)`. The pilot is
 `rust-network-rtt-tcp`. Both `Network` (two-process `127.0.0.1`) and `Local`
-(single-host, single-process — e.g. `rust-thread-handoff-spin`,
-`rust-thread-handoff-ring`) cells are supported. Adding a cell is a data-only
+(single-host, single-process) cells are supported. The `thread-handoff` `spin`
+and `ring` experiments are registered as `Local` cells for all three languages
+(`{rust,go,java}-thread-handoff-{spin,ring}`). Adding a cell is a data-only
 change (a `TaskSpec` row + a task overlay) — see "Adding a task".
 
 ## Starting a run
