@@ -16,8 +16,8 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 
 **Status:** `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (cross-host capable).
 `filesystem-write` is implemented for the `fsync`, `fdatasync`, `prealloc`, and `batch` experiments
-(single-host, local NVMe). `thread-handoff` is a stub that emits a placeholder line; `shared-memory-ipc`
-is not yet scaffolded.
+(single-host, local NVMe). `thread-handoff` is implemented for the `spin`, `condvar`, `channel`, and
+`ring` experiments (single-host). `shared-memory-ipc` is not yet scaffolded.
 
 ## Architecture: the result contract is the only coupling
 
@@ -41,24 +41,24 @@ rather than hand-rolling JSON:
 
 Top-level dirs are the languages, each a self-contained idiomatic workspace. Each experiment is its own
 runnable artifact named `<focus_area>-<experiment>` (e.g. `network-rtt-tcp`) built over a shared per-language
-bench library; a stub focus area (currently `thread-handoff`) has a single artifact named just `<focus_area>`. This keeps each toolchain
+bench library; a stub focus area would have a single artifact named just `<focus_area>` (none at present). This keeps each toolchain
 (Cargo workspace / single Go module / single Gradle build) intact — do not fragment a language's build across
 dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not the directory layout's.
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff`.
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`.
 
 ```sh
-# Rust — Cargo workspace: bench-common + network-rtt/{tcp,udp,quic} + stubs
+# Rust — Cargo workspace: bench-common + network-rtt + filesystem-write + thread-handoff experiments
 cd rust && cargo build --release && cargo test && cargo clippy --all-targets && cargo fmt --check
 cargo run --release -p network-rtt-tcp        # -p network-rtt-udp | -p filesystem-write-fsync | -p filesystem-write-batch | ...
 
-# Go — single module: internal/bench + cmd/network-rtt-{tcp,udp,quic} + stubs
+# Go — single module: internal/bench + cmd/network-rtt-* + filesystem-write-* + thread-handoff-*
 cd go && go build ./... && go vet ./... && go test ./...
 go run ./cmd/network-rtt-tcp
 
-# Java — single Gradle build: :common + :network-rtt-{tcp,udp,quic} + stubs, JDK 21 toolchain
+# Java — single Gradle build: :common + :network-rtt-* + :filesystem-write-* + :thread-handoff-*, JDK 21 toolchain
 cd java && ./gradlew build        # runs tests too (StatsTest under :common)
 ./gradlew :network-rtt-tcp:run -q
 

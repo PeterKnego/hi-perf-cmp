@@ -50,8 +50,10 @@ never `tcp_rtt_p50`).
 `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments, and
 `filesystem-write` for the `fsync`, `fdatasync`, `prealloc`, and `batch`
 experiments (each a separate runnable artifact named `<focus_area>-<experiment>`).
-`thread-handoff` remains a **stub** that emits a single placeholder line
-(`experiment: "placeholder"`, `metric: "placeholder"`, `notes: "stub"`).
+`thread-handoff` is implemented for the `spin`, `condvar`, `channel`, and `ring`
+experiments (each a runnable artifact named `thread-handoff-<experiment>`):
+`spin`/`condvar`/`channel` emit `handoff_rtt_{p50,p99,mean}` (ns), `ring` emits
+`handoff_throughput` (ops_per_sec). `shared-memory-ipc` is not yet scaffolded.
 
 ## Reference emitters
 
