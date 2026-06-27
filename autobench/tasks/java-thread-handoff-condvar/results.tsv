@@ -1,1 +1,2 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
+a6b00a6	366	366	366	keep	bounded spin (Thread.onSpinWait, SPIN_BUDGET=1000 on AtomicBoolean) then monitor wait: p50 23777->366 ns (~65x) on AWS c6id; parking fallback retained (p50 primary, median of 3 runs of 5)

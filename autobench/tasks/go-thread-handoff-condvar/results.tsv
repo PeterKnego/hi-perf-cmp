@@ -1,1 +1,2 @@
 commit	handoff_rtt_p50_ns	handoff_rtt_p99_ns	handoff_rtt_mean_ns	status	description
+a6b00a6	650	650	650	discard	spin-then-park (atomic.Bool + Gosched, budget 256) then cond.Wait: REGRESSED p50 391->650 ns (+66%) on AWS c6id -- Go parks goroutines cheaply in userspace, so the spin adds net overhead; baseline kept (p50 primary, median of 3 runs of 5)
