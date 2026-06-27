@@ -1,137 +1,527 @@
 {
-  "network-rtt/quic/go/rtt_mean": {
-    "value": 97342.84195,
+  "filesystem-write/batch/go/durable_append_throughput": {
+    "value": 361519.2020201115,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/go/sync_mean": {
+    "value": 42941.74088291747,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/go/sync_p50": {
+    "value": 42833.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/go/sync_p99": {
+    "value": 53493.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/java/durable_append_throughput": {
+    "value": 348120.7751279459,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/java/sync_mean": {
+    "value": 42666.64171465131,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/java/sync_p50": {
+    "value": 42745.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/java/sync_p99": {
+    "value": 52560.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/rust/durable_append_throughput": {
+    "value": 389088.6621392569,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/rust/sync_mean": {
+    "value": 42427.44465770953,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/rust/sync_p50": {
+    "value": 42438.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/batch/rust/sync_p99": {
+    "value": 52889.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/go/durable_append_throughput": {
+    "value": 7613.916944712651,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/go/sync_mean": {
+    "value": 128725.91122,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/go/sync_p50": {
+    "value": 126573.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/go/sync_p99": {
+    "value": 166806.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/java/durable_append_throughput": {
+    "value": 7813.403277031751,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/java/sync_mean": {
+    "value": 125304.2919,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/java/sync_p50": {
+    "value": 123175.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/java/sync_p99": {
+    "value": 160255.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/rust/durable_append_throughput": {
+    "value": 7756.355814767561,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/rust/sync_mean": {
+    "value": 126707.70136,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/rust/sync_p50": {
+    "value": 124207.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fdatasync/rust/sync_p99": {
+    "value": 166321.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/go/durable_append_throughput": {
+    "value": 7647.804985671676,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/go/sync_mean": {
+    "value": 128140.80314,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/go/sync_p50": {
+    "value": 126235.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/go/sync_p99": {
+    "value": 163079.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/java/durable_append_throughput": {
+    "value": 7825.691058213579,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/java/sync_mean": {
+    "value": 125128.53246,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/java/sync_p50": {
+    "value": 122839.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/java/sync_p99": {
+    "value": 173605.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/rust/durable_append_throughput": {
+    "value": 7755.06699772603,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/rust/sync_mean": {
+    "value": 126779.09068,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/rust/sync_p50": {
+    "value": 124164.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/fsync/rust/sync_p99": {
+    "value": 174017.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/go/durable_append_throughput": {
+    "value": 25064.361457908784,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/go/sync_mean": {
+    "value": 37060.11948,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/go/sync_p50": {
+    "value": 36579.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/go/sync_p99": {
+    "value": 47924.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/java/durable_append_throughput": {
+    "value": 25144.9428684519,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/java/sync_mean": {
+    "value": 36854.31542,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/java/sync_p50": {
+    "value": 36911.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/java/sync_p99": {
+    "value": 46508.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/rust/durable_append_throughput": {
+    "value": 25786.4787440377,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/rust/sync_mean": {
+    "value": 36293.2362,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/rust/sync_p50": {
+    "value": 36389.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "filesystem-write/prealloc/rust/sync_p99": {
+    "value": 45926.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "network-rtt/quic/go/rtt_mean": {
+    "value": 100130.5773,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/quic/go/rtt_p50": {
-    "value": 92005.0,
+    "value": 94924.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/quic/go/rtt_p99": {
-    "value": 137507.0,
+    "value": 139391.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/quic/java/rtt_mean": {
-    "value": 162648.8974,
+    "value": 159833.53548,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/quic/java/rtt_p50": {
-    "value": 160841.0,
+    "value": 157825.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/quic/java/rtt_p99": {
-    "value": 195582.0,
+    "value": 193136.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/quic/rust/rtt_mean": {
-    "value": 65055.1012,
+    "value": 78612.50907,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/quic/rust/rtt_p50": {
-    "value": 64625.0,
+    "value": 70602.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/quic/rust/rtt_p99": {
-    "value": 100867.0,
+    "value": 124883.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/tcp/go/rtt_mean": {
-    "value": 39219.92129,
+    "value": 38391.41025,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/tcp/go/rtt_p50": {
-    "value": 37760.0,
+    "value": 38013.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/tcp/go/rtt_p99": {
-    "value": 68607.0,
+    "value": 48826.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/tcp/java/rtt_mean": {
-    "value": 35538.48196,
+    "value": 39062.93334,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/tcp/java/rtt_p50": {
-    "value": 35156.0,
+    "value": 38469.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/tcp/java/rtt_p99": {
-    "value": 43960.0,
+    "value": 48866.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/tcp/rust/rtt_mean": {
-    "value": 36415.84534,
+    "value": 35050.41591,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/tcp/rust/rtt_p50": {
-    "value": 36025.0,
+    "value": 34617.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/tcp/rust/rtt_p99": {
-    "value": 45656.0,
+    "value": 44586.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/udp/go/rtt_mean": {
-    "value": 36428.47806,
+    "value": 36516.95571,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/udp/go/rtt_p50": {
-    "value": 35993.0,
+    "value": 36096.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/udp/go/rtt_p99": {
-    "value": 45876.0,
+    "value": 46161.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/udp/java/rtt_mean": {
-    "value": 35111.11107,
+    "value": 38711.79522,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/udp/java/rtt_p50": {
-    "value": 34740.0,
+    "value": 38306.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/udp/java/rtt_p99": {
-    "value": 43505.0,
+    "value": 48597.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/udp/rust/rtt_mean": {
-    "value": 36902.98377,
+    "value": 34940.00293,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/udp/rust/rtt_p50": {
-    "value": 35916.0,
+    "value": 34549.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   },
   "network-rtt/udp/rust/rtt_p99": {
-    "value": 49931.0,
+    "value": 43963.0,
     "unit": "ns",
-    "run_id": "20260626T103635Z-39abe130d644"
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/channel/go/handoff_rtt_mean": {
+    "value": 348.18904,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/channel/go/handoff_rtt_p50": {
+    "value": 309.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/channel/go/handoff_rtt_p99": {
+    "value": 518.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/channel/java/handoff_rtt_mean": {
+    "value": 8190.72385,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/channel/java/handoff_rtt_p50": {
+    "value": 417.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/channel/java/handoff_rtt_p99": {
+    "value": 24153.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/channel/rust/handoff_rtt_mean": {
+    "value": 22047.3614,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/channel/rust/handoff_rtt_p50": {
+    "value": 22152.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/channel/rust/handoff_rtt_p99": {
+    "value": 32051.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/condvar/go/handoff_rtt_mean": {
+    "value": 451.59034,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/condvar/go/handoff_rtt_p50": {
+    "value": 390.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/condvar/go/handoff_rtt_p99": {
+    "value": 952.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/condvar/java/handoff_rtt_mean": {
+    "value": 23217.80721,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/condvar/java/handoff_rtt_p50": {
+    "value": 23507.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/condvar/java/handoff_rtt_p99": {
+    "value": 33749.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/condvar/rust/handoff_rtt_mean": {
+    "value": 21420.7431,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/condvar/rust/handoff_rtt_p50": {
+    "value": 21592.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/condvar/rust/handoff_rtt_p99": {
+    "value": 31056.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/ring/go/handoff_throughput": {
+    "value": 9809154.079151437,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/ring/java/handoff_throughput": {
+    "value": 6574028.524578287,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/ring/rust/handoff_throughput": {
+    "value": 28139265.728372227,
+    "unit": "ops_per_sec",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/spin/go/handoff_rtt_mean": {
+    "value": 195.63557,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/spin/go/handoff_rtt_p50": {
+    "value": 192.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/spin/go/handoff_rtt_p99": {
+    "value": 213.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/spin/java/handoff_rtt_mean": {
+    "value": 210.73215,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/spin/java/handoff_rtt_p50": {
+    "value": 210.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/spin/java/handoff_rtt_p99": {
+    "value": 302.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/spin/rust/handoff_rtt_mean": {
+    "value": 186.17507,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/spin/rust/handoff_rtt_p50": {
+    "value": 182.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
+  },
+  "thread-handoff/spin/rust/handoff_rtt_p99": {
+    "value": 204.0,
+    "unit": "ns",
+    "run_id": "20260627T071950Z-07a4b9a872fc"
   }
 }
