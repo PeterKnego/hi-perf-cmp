@@ -13,6 +13,7 @@ members = [
     "thread-handoff/condvar",
     "thread-handoff/channel",
     "thread-handoff/ring",
+    "thread-handoff/disruptor",
 ]
 
 [workspace.package]
