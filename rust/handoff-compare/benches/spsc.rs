@@ -84,7 +84,12 @@ fn our_ring(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &st
         thread::spawn(move || {
             pin(1);
             while !stop.load(Ordering::Relaxed) {
-                cons.drain(usize::MAX, |v| sink.store(v as i64, Ordering::Release));
+                let n = cons.drain(usize::MAX, |v| {
+                    black_box(v);
+                });
+                if n > 0 {
+                    sink.fetch_add(n as i64, Ordering::Release);
+                }
             }
         })
     };
@@ -95,9 +100,9 @@ fn our_ring(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &st
             pause(*pause_ms);
             let start = Instant::now();
             for _ in 0..iters {
+                sink.store(0, Ordering::Release);
                 prod.batch_publish(*size as usize, |k| black_box(k as u64 + 1));
-                let last = black_box(*size);
-                while sink.load(Ordering::Acquire) != last {}
+                while sink.load(Ordering::Acquire) != *size {}
             }
             start.elapsed()
         })
@@ -111,7 +116,8 @@ fn disruptor(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
     let processor = {
         let sink = Arc::clone(&sink);
         move |event: &Event, _seq: i64, _eob: bool| {
-            sink.store(event.data, Ordering::Release);
+            black_box(event.data);
+            sink.fetch_add(1, Ordering::Release);
         }
     };
     let mut producer = disruptor::build_single_producer(CAP, || Event { data: 0 }, BusySpin)
@@ -123,13 +129,13 @@ fn disruptor(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
             pause(*pause_ms);
             let start = Instant::now();
             for _ in 0..iters {
+                sink.store(0, Ordering::Release);
                 producer.batch_publish(*size as usize, |iter| {
                     for (i, e) in iter.enumerate() {
                         e.data = black_box(i as i64 + 1);
                     }
                 });
-                let last = black_box(*size);
-                while sink.load(Ordering::Acquire) != last {}
+                while sink.load(Ordering::Acquire) != *size {}
             }
             start.elapsed()
         })
@@ -145,7 +151,10 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
             pin(1);
             loop {
                 match r.try_recv() {
-                    Ok(event) => sink.store(event.data, Ordering::Release),
+                    Ok(event) => {
+                        black_box(event.data);
+                        sink.fetch_add(1, Ordering::Release);
+                    }
                     Err(Empty) => continue,
                     Err(Disconnected) => break,
                 }
@@ -159,6 +168,7 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
             pause(*pause_ms);
             let start = Instant::now();
             for _ in 0..iters {
+                sink.store(0, Ordering::Release);
                 for data in 1..=*size {
                     let mut event = Event {
                         data: black_box(data),
@@ -167,8 +177,7 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
                         event = e;
                     }
                 }
-                let last = black_box(*size);
-                while sink.load(Ordering::Acquire) != last {}
+                while sink.load(Ordering::Acquire) != *size {}
             }
             start.elapsed()
         })
@@ -185,7 +194,8 @@ fn std_mpsc(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &st
         thread::spawn(move || {
             pin(1);
             while let Ok(event) = r.recv() {
-                sink.store(event.data, Ordering::Release);
+                black_box(event.data);
+                sink.fetch_add(1, Ordering::Release);
             }
         })
     };
@@ -197,6 +207,7 @@ fn std_mpsc(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &st
             pause(*pause_ms);
             let start = Instant::now();
             for _ in 0..iters {
+                sink.store(0, Ordering::Release);
                 for data in 1..=*size {
                     let mut event = Event {
                         data: black_box(data),
@@ -205,8 +216,7 @@ fn std_mpsc(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &st
                         event = e;
                     }
                 }
-                let last = black_box(*size);
-                while sink.load(Ordering::Acquire) != last {}
+                while sink.load(Ordering::Acquire) != *size {}
             }
             start.elapsed()
         })
