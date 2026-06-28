@@ -29,16 +29,6 @@ fn pause(millis: u64) {
     }
 }
 
-/// Pin the current thread to core index `idx` (modulo available cores). No-op if
-/// affinity is unavailable.
-fn pin(idx: usize) {
-    if let Some(cores) = core_affinity::get_core_ids()
-        && !cores.is_empty()
-    {
-        core_affinity::set_for_current(cores[idx % cores.len()]);
-    }
-}
-
 pub fn spsc_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("spsc");
     for burst_size in BURST_SIZES {
@@ -82,7 +72,6 @@ fn our_ring(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &st
         let sink = Arc::clone(&sink);
         let stop = Arc::clone(&stop);
         thread::spawn(move || {
-            pin(1);
             while !stop.load(Ordering::Relaxed) {
                 let n = cons.drain(usize::MAX, |v| {
                     black_box(v);
@@ -93,7 +82,6 @@ fn our_ring(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &st
             }
         })
     };
-    pin(0);
     let id = BenchmarkId::new("our-ring", param);
     group.bench_with_input(id, &inputs, |b, (size, pause_ms)| {
         b.iter_custom(|iters| {
@@ -148,7 +136,6 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
     let receiver = {
         let sink = Arc::clone(&sink);
         thread::spawn(move || {
-            pin(1);
             loop {
                 match r.try_recv() {
                     Ok(event) => {
@@ -161,7 +148,6 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
             }
         })
     };
-    pin(0);
     let id = BenchmarkId::new("crossbeam", param);
     group.bench_with_input(id, &inputs, move |b, (size, pause_ms)| {
         b.iter_custom(|iters| {
@@ -192,14 +178,12 @@ fn std_mpsc(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &st
     let receiver = {
         let sink = Arc::clone(&sink);
         thread::spawn(move || {
-            pin(1);
             while let Ok(event) = r.recv() {
                 black_box(event.data);
                 sink.fetch_add(1, Ordering::Release);
             }
         })
     };
-    pin(0);
     let id = BenchmarkId::new("std-mpsc", param);
     let s_bench = s.clone(); // clone into closure; keep `s` to signal receiver after bench
     group.bench_with_input(id, &inputs, move |b, (size, pause_ms)| {

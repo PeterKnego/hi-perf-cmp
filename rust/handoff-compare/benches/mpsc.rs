@@ -34,14 +34,6 @@ fn pause(millis: u64) {
     }
 }
 
-fn pin(idx: usize) {
-    if let Some(cores) = core_affinity::get_core_ids()
-        && !cores.is_empty()
-    {
-        core_affinity::set_for_current(cores[idx % cores.len()]);
-    }
-}
-
 /// Persistent producer thread released by a barrier each iteration, so we don't
 /// pay thread-spawn cost per sample. (From disruptor-rs benches/mpsc.rs.)
 struct BurstProducer {
@@ -51,14 +43,13 @@ struct BurstProducer {
 }
 
 impl BurstProducer {
-    fn new<P: 'static + Send + FnMut()>(core: usize, mut produce_one_burst: P) -> Self {
+    fn new<P: 'static + Send + FnMut()>(_core: usize, mut produce_one_burst: P) -> Self {
         let start_barrier = Arc::new(CachePadded::new(AtomicBool::new(false)));
         let stop = Arc::new(CachePadded::new(AtomicBool::new(false)));
         let join_handle = {
             let stop = Arc::clone(&stop);
             let start_barrier = Arc::clone(&start_barrier);
             thread::spawn(move || {
-                pin(core);
                 while !stop.load(Acquire) {
                     while start_barrier
                         .compare_exchange(true, false, Acquire, Relaxed)
@@ -162,7 +153,6 @@ fn our_mp_ring(group: &mut BenchmarkGroup<WallTime>, params: (i64, u64), desc: &
         let sink = Arc::clone(&sink);
         let stop = Arc::clone(&stop);
         thread::spawn(move || {
-            pin(0);
             while !stop.load(Relaxed) {
                 let n = cons.drain(usize::MAX, |v| {
                     black_box(v);
@@ -243,7 +233,6 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, params: (i64, u64), desc: &st
     let receiver = {
         let sink = Arc::clone(&sink);
         thread::spawn(move || {
-            pin(0);
             loop {
                 match r.try_recv() {
                     Ok(event) => {
@@ -294,7 +283,6 @@ fn std_mpsc(group: &mut BenchmarkGroup<WallTime>, params: (i64, u64), desc: &str
     let receiver = {
         let sink = Arc::clone(&sink);
         thread::spawn(move || {
-            pin(0);
             while let Ok(event) = r.recv() {
                 black_box(event.data);
                 sink.fetch_add(1, Release);

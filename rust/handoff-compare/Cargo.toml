@@ -7,11 +7,11 @@ authors.workspace = true
 
 # Library is std-only. disruptor/criterion/crossbeam/core_affinity are
 # bench-only dev-dependencies — the shipped thread-handoff cells stay std-only.
+# No thread pinning: matches disruptor-rs benchmark methodology exactly.
 [dev-dependencies]
 disruptor = "4.3"
 criterion = "0.5"
 crossbeam = "0.8"
-core_affinity = "0.8"
 
 [[bench]]
 name = "spsc"
