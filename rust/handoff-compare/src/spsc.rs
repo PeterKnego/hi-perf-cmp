@@ -83,7 +83,11 @@ impl Producer {
     /// barrier per burst instead of per element. `n` must be `<= cap`.
     pub fn batch_publish<F: Fn(usize) -> u64>(&mut self, n: usize, fill: F) {
         let shared = &*self.shared;
-        debug_assert!(n <= shared.cap, "burst exceeds ring capacity");
+        assert!(
+            n <= shared.cap,
+            "burst {n} exceeds ring capacity {}",
+            shared.cap
+        );
         // Need `n` free slots: outstanding (tail-head) + n <= cap.
         if self.tail + n - self.cached_head > shared.cap {
             loop {

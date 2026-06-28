@@ -103,9 +103,14 @@ fn disruptor(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
     let sink = Arc::new(AtomicI64::new(0));
     let processor = {
         let sink = Arc::clone(&sink);
-        move |event: &Event, _seq: i64, _eob: bool| {
+        let mut local: i64 = 0;
+        move |event: &Event, _seq: i64, end_of_batch: bool| {
             black_box(event.data);
-            sink.fetch_add(1, Ordering::Release);
+            local += 1;
+            if end_of_batch {
+                sink.fetch_add(local, Ordering::Release);
+                local = 0;
+            }
         }
     };
     let mut producer = disruptor::build_single_producer(CAP, || Event { data: 0 }, BusySpin)
@@ -136,14 +141,26 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
     let receiver = {
         let sink = Arc::clone(&sink);
         thread::spawn(move || {
+            let mut local: i64 = 0;
             loop {
                 match r.try_recv() {
                     Ok(event) => {
                         black_box(event.data);
-                        sink.fetch_add(1, Ordering::Release);
+                        local += 1;
                     }
-                    Err(Empty) => continue,
-                    Err(Disconnected) => break,
+                    Err(Empty) => {
+                        if local > 0 {
+                            sink.fetch_add(local, Ordering::Release);
+                            local = 0;
+                        }
+                        continue;
+                    }
+                    Err(Disconnected) => {
+                        if local > 0 {
+                            sink.fetch_add(local, Ordering::Release);
+                        }
+                        break;
+                    }
                 }
             }
         })
@@ -172,15 +189,35 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &s
 }
 
 fn std_mpsc(group: &mut BenchmarkGroup<WallTime>, inputs: (i64, u64), param: &str) {
-    use std::sync::mpsc::{TrySendError, sync_channel};
+    use std::sync::mpsc::{TryRecvError, TrySendError, sync_channel};
     let sink = Arc::new(AtomicI64::new(0));
+    // bounded sync_channel: closest std SPSC equivalent; std lacks a clean bounded SPMC
     let (s, r) = sync_channel::<Event>(CAP);
     let receiver = {
         let sink = Arc::clone(&sink);
         thread::spawn(move || {
-            while let Ok(event) = r.recv() {
-                black_box(event.data);
-                sink.fetch_add(1, Ordering::Release);
+            loop {
+                match r.recv() {
+                    Ok(event) => {
+                        black_box(event.data);
+                        let mut local: i64 = 1;
+                        loop {
+                            match r.try_recv() {
+                                Ok(e) => {
+                                    black_box(e.data);
+                                    local += 1;
+                                }
+                                Err(TryRecvError::Empty) => break,
+                                Err(TryRecvError::Disconnected) => {
+                                    sink.fetch_add(local, Ordering::Release);
+                                    return;
+                                }
+                            }
+                        }
+                        sink.fetch_add(local, Ordering::Release);
+                    }
+                    Err(_) => return, // channel disconnected
+                }
             }
         })
     };

@@ -43,7 +43,7 @@ struct BurstProducer {
 }
 
 impl BurstProducer {
-    fn new<P: 'static + Send + FnMut()>(_core: usize, mut produce_one_burst: P) -> Self {
+    fn new<P: 'static + Send + FnMut()>(mut produce_one_burst: P) -> Self {
         let start_barrier = Arc::new(CachePadded::new(AtomicBool::new(false)));
         let stop = Arc::new(CachePadded::new(AtomicBool::new(false)));
         let join_handle = {
@@ -123,10 +123,10 @@ fn base(group: &mut BenchmarkGroup<WallTime>, size: i64) {
     let sink = Arc::new(AtomicI64::new(0));
     let burst_size = Arc::new(AtomicI64::new(0));
     let mut producers = (0..PRODUCERS)
-        .map(|p| {
+        .map(|_| {
             let sink = Arc::clone(&sink);
             let burst_size = Arc::clone(&burst_size);
-            BurstProducer::new(p + 1, move || {
+            BurstProducer::new(move || {
                 let n = burst_size.load(Acquire);
                 for _ in 0..n {
                     sink.fetch_add(1, Release);
@@ -165,10 +165,10 @@ fn our_mp_ring(group: &mut BenchmarkGroup<WallTime>, params: (i64, u64), desc: &
     };
     let burst_size = Arc::new(AtomicI64::new(0));
     let mut producers = (0..PRODUCERS)
-        .map(|p| {
+        .map(|_| {
             let burst_size = Arc::clone(&burst_size);
             let mut pr = prod.clone();
-            BurstProducer::new(p + 1, move || {
+            BurstProducer::new(move || {
                 let n = burst_size.load(Acquire) as usize;
                 pr.batch_publish(n, |k| black_box(k as u64));
             })
@@ -192,9 +192,14 @@ fn disruptor(group: &mut BenchmarkGroup<WallTime>, params: (i64, u64), desc: &st
     let sink = Arc::new(AtomicI64::new(0));
     let processor = {
         let sink = Arc::clone(&sink);
-        move |event: &Event, _seq: i64, _eob: bool| {
+        let mut local: i64 = 0;
+        move |event: &Event, _seq: i64, end_of_batch: bool| {
             black_box(event.data);
-            sink.fetch_add(1, Release);
+            local += 1;
+            if end_of_batch {
+                sink.fetch_add(local, Release);
+                local = 0;
+            }
         }
     };
     let producer = disruptor::build_multi_producer(CAP, || Event { data: 0 }, BusySpin)
@@ -202,10 +207,10 @@ fn disruptor(group: &mut BenchmarkGroup<WallTime>, params: (i64, u64), desc: &st
         .build();
     let burst_size = Arc::new(AtomicI64::new(0));
     let mut producers = (0..PRODUCERS)
-        .map(|p| {
+        .map(|_| {
             let burst_size = Arc::clone(&burst_size);
             let mut producer = producer.clone();
-            BurstProducer::new(p + 1, move || {
+            BurstProducer::new(move || {
                 let n = burst_size.load(Acquire) as usize;
                 producer.batch_publish(n, |iter| {
                     for (i, e) in iter.enumerate() {
@@ -233,24 +238,36 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, params: (i64, u64), desc: &st
     let receiver = {
         let sink = Arc::clone(&sink);
         thread::spawn(move || {
+            let mut local: i64 = 0;
             loop {
                 match r.try_recv() {
                     Ok(event) => {
                         black_box(event.data);
-                        sink.fetch_add(1, Release);
+                        local += 1;
                     }
-                    Err(Empty) => continue,
-                    Err(Disconnected) => break,
+                    Err(Empty) => {
+                        if local > 0 {
+                            sink.fetch_add(local, Release);
+                            local = 0;
+                        }
+                        continue;
+                    }
+                    Err(Disconnected) => {
+                        if local > 0 {
+                            sink.fetch_add(local, Release);
+                        }
+                        break;
+                    }
                 }
             }
         })
     };
     let burst_size = Arc::new(AtomicI64::new(0));
     let mut producers = (0..PRODUCERS)
-        .map(|p| {
+        .map(|_| {
             let burst_size = Arc::clone(&burst_size);
             let s = s.clone();
-            BurstProducer::new(p + 1, move || {
+            BurstProducer::new(move || {
                 let n = burst_size.load(Acquire);
                 for data in 0..n {
                     let mut event = Event {
@@ -277,24 +294,44 @@ fn crossbeam(group: &mut BenchmarkGroup<WallTime>, params: (i64, u64), desc: &st
 }
 
 fn std_mpsc(group: &mut BenchmarkGroup<WallTime>, params: (i64, u64), desc: &str) {
-    use std::sync::mpsc::channel;
+    use std::sync::mpsc::{TryRecvError, channel};
     let sink = Arc::new(AtomicI64::new(0));
+    // unbounded channel: std lacks a clean bounded MPMC; std is the slow reference regardless
     let (s, r) = channel::<Event>();
     let receiver = {
         let sink = Arc::clone(&sink);
         thread::spawn(move || {
-            while let Ok(event) = r.recv() {
-                black_box(event.data);
-                sink.fetch_add(1, Release);
+            loop {
+                match r.recv() {
+                    Ok(event) => {
+                        black_box(event.data);
+                        let mut local: i64 = 1;
+                        loop {
+                            match r.try_recv() {
+                                Ok(e) => {
+                                    black_box(e.data);
+                                    local += 1;
+                                }
+                                Err(TryRecvError::Empty) => break,
+                                Err(TryRecvError::Disconnected) => {
+                                    sink.fetch_add(local, Release);
+                                    return;
+                                }
+                            }
+                        }
+                        sink.fetch_add(local, Release);
+                    }
+                    Err(_) => return, // channel disconnected
+                }
             }
         })
     };
     let burst_size = Arc::new(AtomicI64::new(0));
     let mut producers = (0..PRODUCERS)
-        .map(|p| {
+        .map(|_| {
             let burst_size = Arc::clone(&burst_size);
             let s = s.clone();
-            BurstProducer::new(p + 1, move || {
+            BurstProducer::new(move || {
                 let n = burst_size.load(Acquire);
                 for data in 0..n {
                     s.send(Event {

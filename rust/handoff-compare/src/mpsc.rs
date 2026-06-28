@@ -74,7 +74,11 @@ impl MpProducer {
     /// overwrite must already have been consumed).
     pub fn batch_publish<F: Fn(usize) -> u64>(&mut self, n: usize, fill: F) {
         let shared = &*self.shared;
-        debug_assert!(n <= shared.cap, "burst exceeds ring capacity");
+        assert!(
+            n <= shared.cap,
+            "burst {n} exceeds ring capacity {}",
+            shared.cap
+        );
         // Claim a disjoint contiguous range [seq, seq+n) (Relaxed: ordering of
         // the data is established by the availability buffer, not this counter).
         let seq = shared.claim.0.fetch_add(n, Ordering::Relaxed);
