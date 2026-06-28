@@ -193,3 +193,71 @@ confirms every cell runs and yields positive throughput before the full run.
 - Go/Java disruptor-equivalents (no mature direct analog; this study is rust-only).
 - Wiring into bench-infra/autobench or AWS.
 - Changing or re-optimizing the shipped `thread-handoff` cells.
+
+## Results
+
+Run locally (4-core dev box), criterion (~100 samples/cell), median throughput in
+**Melem/s** (elements/sec ÷ 1e6). Higher is better.
+
+**Methodology note (deviation from the original plan):** both benches use a
+**per-iteration count-and-reset** measurement (`sink.store(0)`, publish the burst,
+busy-wait `sink == burst`). disruptor-rs's *SPSC* bench instead stores the last
+value with no reset, which produced a **stale-sink early-exit artifact** here
+(physically impossible throughput, ~21,000 Melem/s at burst 1), so we adopted its
+own MPSC bench's robust pattern for both. We also **dropped `core_affinity`
+pinning**: disruptor-rs's benches don't pin (it's a library dep, not used in their
+benches), and pinning only the threads we control left disruptor's *internal*
+consumer colliding with the pinned producer (a pathological ~5.8 ms/op). criterion's
+sampling controls noise without pinning. Both fixes were approved.
+
+### SPSC (cap 128, single producer)
+
+| burst | our-ring | disruptor | crossbeam | std-mpsc |
+|---:|---:|---:|---:|---:|
+| 1   | ~7.5  | ~7.7 | ~4.6 | ~2.2 |
+| 10  | ~55   | ~31  | ~19  | ~7.4 |
+| 100 | ~125  | ~62  | ~47  | ~31  |
+
+### MPSC (cap 256, 2 producers)
+
+| burst | our-mp-ring | disruptor | crossbeam | std-mpsc |
+|---:|---:|---:|---:|---:|
+| 1   | ~4.2 | ~4.3 | ~2.9 | ~0.45 |
+| 10  | ~28  | ~19  | ~9   | ~1.7  |
+| 100 | ~68  | ~27  | ~18  | ~6.5  |
+
+(`pause` ∈ {0,1,10 ms} had little effect — both ring consumers busy-spin, so the
+idle pause only precedes the timed loop; values above are pause≈invariant.)
+
+### Analysis
+
+- **Batch amortization is the dominant factor.** At **burst 1** our ring and
+  disruptor are a statistical tie (SPSC ~7.5 vs ~7.7; MPSC ~4.2 vs ~4.3): a single
+  hand-off is dominated by one cross-core cache-line round-trip that neither design
+  can avoid. As the burst grows, both amortize that cost over more elements, and our
+  lean ring pulls ahead — **~1.7× at burst 10, ~2× at burst 100 (SPSC)**, and even
+  more in MPSC (**~1.5× at 10, ~2.5× at 100**).
+- **Why our ring wins at larger bursts:** our batch path reserves the whole range
+  and publishes with a *single* Release on the tail (or, in MPSC, one availability
+  store per slot but no per-event handler dispatch), whereas the Disruptor framework
+  pays per-event event-handler closure dispatch, sequence-barrier bookkeeping, and
+  multi-consumer-capable machinery a bare `u64` SPSC/MPSC hand-off doesn't need.
+- **Reference channels trail throughout.** `crossbeam` is ~2–3× behind our ring;
+  `std::sync::mpsc` is the slowest by a wide margin (its blocking, allocation-heavy
+  design is an order of magnitude off at MPSC — ~0.45 Melem/s at burst 1).
+- **MPSC costs vs SPSC.** Absolute throughput is lower than SPSC at equal burst
+  (e.g. our 68 vs 125 at burst 100): the `fetch_add` claim contention between the two
+  producers plus the per-slot availability publish/scan is real overhead the
+  single-producer ring avoids. Our MP ring still leads disruptor's MPSC by the widest
+  relative margin at burst 100 (~2.5×).
+- **`pause` (idle→wakeup) barely moved the busy-spin designs**, as expected: the
+  rings/disruptor keep a hot spinning consumer, so an idle gap before a burst doesn't
+  incur a park/unpark. (A blocking design like `std-mpsc` would show the wakeup cost
+  more, but its baseline is already far slower here.)
+
+**Takeaway:** for a pure single-consumer hand-off of small POD payloads, the
+minimal cache-padded + cached-index ring matches the Disruptor framework at
+single-element granularity and beats it ~2× once bursts amortize the per-element
+framework overhead — in both SPSC and MPSC. The Disruptor's richer feature set
+(multiple consumers, dependency graphs, event-poller API) is its value proposition,
+not raw small-payload hand-off throughput.
