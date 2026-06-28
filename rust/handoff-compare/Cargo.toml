@@ -1,0 +1,21 @@
+[package]
+name = "handoff-compare"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+# Library is std-only. disruptor/criterion/crossbeam are bench-only
+# dev-dependencies — the shipped thread-handoff cells stay std-only.
+[dev-dependencies]
+disruptor = "4.3"
+criterion = "0.5"
+crossbeam = "0.8"
+
+[[bench]]
+name = "spsc"
+harness = false
+
+[[bench]]
+name = "mpsc"
+harness = false

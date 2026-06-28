@@ -193,3 +193,71 @@ confirms every cell runs and yields positive throughput before the full run.
 - Go/Java disruptor-equivalents (no mature direct analog; this study is rust-only).
 - Wiring into bench-infra/autobench or AWS.
 - Changing or re-optimizing the shipped `thread-handoff` cells.
+
+## Results
+
+Run locally (4-core dev box), criterion (~100 samples/cell), median throughput in
+**Melem/s** (elements/sec ÷ 1e6). Higher is better. `pause ∈ {0,1,10 ms}` had no
+material effect (both ring designs busy-spin the consumer), so values below are
+the pause≈0 representative.
+
+**Methodology (corrected from the original plan — all approved):**
+1. **Per-iteration count-and-reset** measurement (`sink.store(0)`, publish burst,
+   busy-wait `sink == burst`). disruptor-rs's *SPSC* bench stored the last value
+   with no reset, which produced a stale-sink early-exit artifact here (impossible
+   ~21,000 Melem/s at burst 1); we adopted its own MPSC bench's robust pattern for
+   both.
+2. **No `core_affinity` pinning** — disruptor-rs's benches don't pin, and pinning
+   only the threads we control collided disruptor's *internal* consumer with the
+   pinned producer (pathological ~5.8 ms/op). criterion's sampling controls noise.
+3. **Equalized shared-`sink` accounting** — every consumer batches its counter
+   update to once per drained batch (our rings already did; disruptor batches via
+   its end-of-batch flag; crossbeam/std accumulate locally and flush per drain).
+   **This was decisive:** before equalizing, our rings updated the producer-watched
+   counter once/batch while the others hit it once/element, giving us a spurious
+   ~2× lead at burst 100. Equalizing **reversed the headline** (see below). Lesson:
+   in a busy-wait throughput microbench, the measurement counter's update cadence
+   must match across implementations or it dominates the result.
+
+### SPSC (cap 128, single producer)
+
+| burst | our-ring | disruptor | crossbeam | std-mpsc |
+|---:|---:|---:|---:|---:|
+| 1   | 7.6  | **8.9**  | 4.5 | 2.1 |
+| 10  | 54   | **71**   | 23  | 7.7 |
+| 100 | 151  | **201**  | 60  | 38  |
+
+### MPSC (cap 256, 2 producers)
+
+| burst | our-mp-ring | disruptor | crossbeam | std-mpsc |
+|---:|---:|---:|---:|---:|
+| 1   | 4.4 | 4.5 (≈tie) | 2.9 | 0.4 |
+| 10  | 28  | **32**     | 10  | 1.7 |
+| 100 | 71  | **91**     | 24  | 7.6 |
+
+### Analysis
+
+- **disruptor-rs is faster than our hand-rolled ring** on a fair measurement —
+  by ~17% (SPSC burst 1) rising to ~33% (SPSC burst 100), and ≈tie (MPSC burst 1)
+  rising to ~28% (MPSC burst 100). The gap **widens with burst size**: the
+  Disruptor's batch publish/consume internals (a single sequence claim+commit and
+  batched availability, with a tuned ring/cursor layout) amortize better than our
+  simpler per-slot scheme. In MPSC specifically, our ring writes one `available[]`
+  Release **per slot**, whereas the Disruptor commits a batch's sequence range more
+  cheaply — the likely source of the MPSC gap.
+- **At single-element granularity it's close** (SPSC ~7.6 vs 8.9; MPSC ~4.4 vs 4.5):
+  a lone hand-off is dominated by one cross-core cache-line round-trip neither design
+  avoids, so there's little room for the framework's batch machinery to help or hurt.
+- **Both ring designs comfortably beat the channel references** — our ring is
+  ~2.5× crossbeam and ~4–7× `std::sync::mpsc` throughout; disruptor's margin over
+  them is larger still. `std::sync::mpsc` is the slowest by far (blocking,
+  allocation-heavy), especially in MPSC (~0.4 Melem/s at burst 1).
+- **This corrects an earlier (artifact-driven) conclusion.** An initial run showed
+  our ring ~2× *ahead* of disruptor at burst 100; that was an unfair
+  per-batch-vs-per-element update of the producer-watched `sink` counter, not a real
+  hand-off advantage. The rigorous review caught it; equalizing the accounting
+  flipped the result. The honest finding: **a minimal cache-padded + cached-index
+  ring is competitive with the LMAX Disruptor at small bursts but does not beat its
+  mature batch path at large bursts** — while both crush ordinary channels. The
+  Disruptor's richer feature set (multiple consumers, dependency graphs, the
+  event-poller API) is additional value on top of that throughput edge.
