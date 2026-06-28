@@ -14,6 +14,7 @@ members = [
     "thread-handoff/channel",
     "thread-handoff/ring",
     "thread-handoff/disruptor",
+    "handoff-compare",
 ]
 
 [workspace.package]
