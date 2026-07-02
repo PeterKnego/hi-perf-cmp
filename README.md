@@ -69,8 +69,12 @@ aligns on `(focus_area, experiment, language, metric)`, and tracks them over tim
 
 `network-rtt` is implemented for `tcp`, `udp`, and `quic` (cross-host capable —
 see below). `filesystem-write` is implemented for `fsync`, `fdatasync`, `prealloc`,
-and `batch` (single-host, local NVMe). `thread-handoff` is a stub that emits a
-placeholder line. `shared-memory-ipc` is a planned focus area (not yet scaffolded).
+and `batch` (single-host, local NVMe). `thread-handoff` is implemented for `spin`,
+`condvar`, `channel`, and `ring` (single-host). `shared-memory-ipc` is scaffolded
+in **Rust only** for `spsc` and `mpsc` (single-host, real cross-process IPC over a
+`/dev/shm` mapping); the Go and Java artifacts and the `bench-infra` matrix rows
+are still pending, so it is not yet a cross-language cell. All implemented focus
+areas have real AWS results — see [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Building & running
 
