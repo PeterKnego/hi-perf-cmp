@@ -104,6 +104,10 @@ Benchmark runs are recorded in [`journal/`](journal/README.md) and compared with
 the `tools/journal` CLI, which flags regressions against a baseline. Results are
 committed so every measurement is correlated with the commit that produced it.
 
+A human-readable summary of all experiments and results so far — what was
+measured, the numbers, and what we learned per focus area — is in
+[docs/RESULTS.md](docs/RESULTS.md).
+
 ## Toolchain versions
 
 Rust 1.96 · Go 1.22 · Java 21 (Gradle 8.10.2 via the checked-in wrapper).
