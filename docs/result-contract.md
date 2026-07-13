@@ -55,8 +55,9 @@ experiments (each a runnable artifact named `thread-handoff-<experiment>`):
 `spin`/`condvar`/`channel` emit `handoff_rtt_{p50,p99,mean}` (ns), `ring` emits
 `handoff_throughput` (ops_per_sec). `serialization` is implemented for the
 `sbe_gen`, `aeron_sbe`, and `bincode` experiments (Rust only, single-host):
-each emits `encode_ns`/`decode_ns` (ns) and `encoded_bytes`/`decode_alloc_bytes`
-(bytes). `shared-memory-ipc` is not yet scaffolded.
+each emits `encode_{p50,p99,mean}` and `decode_{p50,p99,mean}` (ns) plus
+`encoded_bytes`/`decode_alloc_bytes` (bytes). `shared-memory-ipc` is not yet
+scaffolded.
 
 ## Reference emitters
 
