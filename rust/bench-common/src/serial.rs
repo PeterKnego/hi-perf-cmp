@@ -13,7 +13,7 @@ use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
-use crate::result;
+use crate::{result, stats};
 
 const FOCUS: &str = "serialization";
 
@@ -94,7 +94,9 @@ pub fn reset_allocated() {
 /// whole) stays serde-free and focus-neutral — the codec cell supplies the
 /// concrete builder.
 ///
-/// Emits: `encode_ns` (mean), `decode_ns` (mean), `encoded_bytes` (one record),
+/// Emits, for both `encode` and `decode`: `<op>_p50`, `<op>_p99` (integer ns)
+/// and `<op>_mean` (fractional ns) — mirroring the `network-rtt`
+/// `rtt_{p50,p99,mean}` convention — plus `encoded_bytes` (one record) and
 /// `decode_alloc_bytes` (heap bytes allocated per decode, via the counting
 /// allocator). All samples/scratch are preallocated so the allocator counter
 /// reflects codec allocation only.
@@ -163,8 +165,8 @@ pub fn run_journal<R, B, E, D>(
 
     let decode_alloc_per = (alloc_after - alloc_before) / n.max(1);
 
-    result::emit_float(FOCUS, experiment, "encode_ns", mean(&encode_ns), "ns", n);
-    result::emit_float(FOCUS, experiment, "decode_ns", mean(&decode_ns), "ns", n);
+    emit_latency(experiment, "encode", &encode_ns);
+    emit_latency(experiment, "decode", &decode_ns);
     result::emit(
         FOCUS,
         experiment,
@@ -183,11 +185,25 @@ pub fn run_journal<R, B, E, D>(
     );
 }
 
-fn mean(xs: &[u64]) -> f64 {
-    if xs.is_empty() {
-        return 0.0;
-    }
-    xs.iter().map(|&x| x as f64).sum::<f64>() / xs.len() as f64
+/// p50/p99 (integer ns) and mean (fractional ns) over `samples`. Sorts a copy
+/// (percentiles need sorted input) and delegates to the shared `stats` module;
+/// pure so it can be unit-tested without capturing stdout.
+fn latency_stats(samples: &[u64]) -> (u64, u64, f64) {
+    let mut sorted = samples.to_vec();
+    sorted.sort_unstable();
+    let p50 = stats::percentile(&sorted, 50.0);
+    let p99 = stats::percentile(&sorted, 99.0);
+    (p50, p99, stats::mean(samples))
+}
+
+/// Emit `<op>_p50`, `<op>_p99` (ns) and `<op>_mean` (ns) for one operation's
+/// per-iteration latency samples.
+fn emit_latency(experiment: &str, op: &str, samples: &[u64]) {
+    let n = samples.len();
+    let (p50, p99, mean) = latency_stats(samples);
+    result::emit(FOCUS, experiment, &format!("{op}_p50"), p50, "ns", n);
+    result::emit(FOCUS, experiment, &format!("{op}_p99"), p99, "ns", n);
+    result::emit_float(FOCUS, experiment, &format!("{op}_mean"), mean, "ns", n);
 }
 
 #[cfg(test)]
@@ -213,5 +229,20 @@ mod tests {
         let v: Vec<u8> = Vec::with_capacity(4096);
         assert!(allocated_bytes() >= before + 4096);
         drop(v);
+    }
+
+    #[test]
+    fn latency_stats_sorts_before_percentiles() {
+        // Unsorted input must yield the same result as the sorted slice through
+        // `stats` — this is the only logic `latency_stats` adds over `stats`.
+        let unsorted = vec![50u64, 10, 99, 1, 30, 70, 20, 90, 40, 60];
+        let (p50, p99, mean) = latency_stats(&unsorted);
+
+        let mut sorted = unsorted.clone();
+        sorted.sort_unstable();
+        assert_eq!(p50, stats::percentile(&sorted, 50.0));
+        assert_eq!(p99, stats::percentile(&sorted, 99.0));
+        assert_eq!(mean, stats::mean(&unsorted));
+        assert!(p50 <= p99, "p50 {p50} must not exceed p99 {p99}");
     }
 }
