@@ -10,7 +10,7 @@ same-AZ cluster placement group for the 2-node network runs. Uniform harness:
 64-byte payload, 10,000 warmup + 100,000 measured iterations, identical stats
 code in each language.
 
-**Runs recorded** (June 26–27, 2026):
+**Runs recorded** (June 26 – July 13, 2026):
 
 | run | what it measured |
 |---|---|
@@ -18,6 +18,7 @@ code in each language.
 | [20260626T213457Z](../journal/runs/20260626T213457Z-deef392a8445/entry.md) | First `filesystem-write` run on local NVMe (fsync/fdatasync/prealloc/batch) |
 | [20260627T071950Z](../journal/runs/20260627T071950Z-07a4b9a872fc/entry.md) | First `thread-handoff` run (spin/condvar/channel/ring); network + filesystem re-measured |
 | [20260627T193417Z](../journal/runs/20260627T193417Z-003926ca6c91/entry.md) | Optimized SPSC ring (Rust + Go); full matrix re-measured — **current baseline** |
+| [20260713T152911Z](../journal/runs/20260713T152911Z-23b9778538e9/entry.md) | First `serialization` run (sbe_gen/aeron_sbe/bincode); full matrix re-measured |
 
 Unless noted, tables below show the **current baseline** run (20260627T193417Z).
 
@@ -119,6 +120,58 @@ for `spin` (busy-wait), `condvar` (mutex + condition variable park/unpark), and
   (Follow-up burst-mode comparison found disruptor faster at large bursts;
   both far exceed standard channels.)
 
+## serialization — command-log record encode/decode (single host)
+
+Encode and decode of one ~500 B state-machine-replication journal record — a
+mixed block of fixed fields plus a repeating group of variable-length command
+payloads — across three Rust codecs: `sbe_gen` (zero-copy SBE via the
+`zerocopy` crate), `aeron_sbe` (the reference real-logic `sbe-tool` emitting
+Rust — the same codec Aeron itself uses), and `bincode` (serde + bincode v2,
+the ergonomic derive baseline). Rust-only, single host (node0). The harness
+encodes a stream of records into an in-memory journal then replays (decodes)
+them, timing each operation and — via a counting global allocator — reporting
+heap bytes allocated per decode. 100,000 measured iterations per codec (from
+run 20260713T152911Z, not the current baseline).
+
+| codec | encode p50 | decode p50 | decode p99 | encoded bytes | decode alloc |
+|---|---|---|---|---|---|
+| sbe_gen   | 46 ns | 408 ns | 440 ns | 502 | **0 B** |
+| aeron_sbe | 57 ns | 409 ns | 443 ns | 502 | **0 B** |
+| bincode   | 85 ns | 947 ns | 1034 ns | 482 | **536 B** |
+
+p50/p99 in ns; a `_mean` is also emitted per op (decode means: sbe_gen 415,
+aeron_sbe 416, bincode 972 ns). Uniform harness: identical record builder and
+iteration count across codecs.
+
+**What we learned:**
+
+- **Zero-copy decode wins on both latency and memory.** Both SBE codecs decode
+  by viewing the buffer in place — **0 bytes allocated per decode** — and
+  materialize every field in ~408 ns; `bincode` rebuilds an owned struct (the
+  record plus its `Vec` of command blobs) every decode, costing **536 B and
+  ~947 ns, ~2.3× the SBE decode**. This is a structural difference (proven by
+  the counting allocator, not a tuning result), and over a journal replay of
+  millions of records the allocation is the dominant cost: SBE adds no
+  allocator pressure, `bincode` adds one owned object graph per record.
+- **The two SBE toolchains are wire-identical and perform within noise.**
+  `sbe_gen` and `aeron_sbe` consume the same SBE schema and produce
+  **byte-for-byte identical** encoded bodies (conformance test over 64
+  records); decode is tied (408 vs 409 ns) and `sbe_gen`'s encode is marginally
+  cheaper (46 vs 57 ns p50). The choice between the pure-Rust generator and the
+  reference Java tool's Rust output is ergonomic, not a performance or
+  wire-format decision.
+- **`bincode` is the ergonomic baseline, not the fast path — but it is compact.**
+  Its record is actually the smallest on the wire (482 B vs SBE's 502 B)
+  because bincode varint-encodes integers; the cost is paid on the way back, in
+  the owned-graph allocation and ~2.3× decode time.
+- **The gap is a level shift, not a tail.** On the quiet benchmark host every
+  codec's decode p99 sits under 10 % above its p50 (SBE ~1.08×, bincode
+  ~1.09×) — the SBE↔bincode difference is the constant per-record allocation
+  cost at every percentile, not an allocator tail. Encode is so cheap
+  (~50–100 ns) that its p99 (~340–350 ns for all three) is dominated by timer
+  and scheduling noise rather than the codec; decode is the meaningful
+  differentiator.
+
 ## shared-memory-ipc — planned
 
 Scaffolded in Rust only (`spsc`, `mpsc`: real cross-process IPC over a
@@ -147,3 +200,9 @@ remains empty.
 4. **Language choice matters least where the kernel or device dominates**
    (network RTT, disk sync) and most where the runtime owns scheduling
    (thread parking) or the compiler owns the inner loop (SPSC ring).
+5. **Log record codec:** for the replicated-log record itself, a zero-copy SBE
+   codec decodes with **no per-record allocation** and **~2.3× faster**
+   (~408 ns vs ~947 ns) than serde+bincode, which rebuilds an owned graph
+   (536 B) every decode — the memory and latency difference an SMR replay path
+   cares about. The two SBE toolchains (pure-Rust `sbe_gen` vs the reference
+   Aeron `sbe-tool`) are wire-identical, so that choice is ergonomic.
