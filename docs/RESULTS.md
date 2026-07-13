@@ -119,6 +119,64 @@ for `spin` (busy-wait), `condvar` (mutex + condition variable park/unpark), and
   (Follow-up burst-mode comparison found disruptor faster at large bursts;
   both far exceed standard channels.)
 
+## serialization — command-log record encode/decode (single host)
+
+<!-- PENDING FIRST AWS RUN. Every `TBD` cell is filled from a journaled
+     bench-out/dist/<ts>/results.jsonl (metric keys named in each cell). The
+     structural findings below (SBE zero-alloc decode; byte-identical SBE
+     bodies) are rig-independent and already proven by tests, so they are
+     stated now; only the absolute latencies / ratios wait on the run. Remove
+     this comment and the "(pending)" note once the numbers are in. -->
+
+**(pending)** — implemented (Rust, three codecs); awaiting its first journaled
+AWS run. Structural results are stated; latency numbers are placeholders.
+
+Encode and decode of one ~500 B state-machine-replication journal record — a
+mixed block of fixed fields plus a repeating group of variable-length command
+payloads — across three Rust codecs: `sbe_gen` (zero-copy SBE via the
+`zerocopy` crate), `aeron_sbe` (the reference real-logic `sbe-tool` emitting
+Rust — the same codec Aeron itself uses), and `bincode` (serde + bincode v2,
+the ergonomic derive baseline). Rust-only. The harness encodes a stream of
+records into an in-memory journal then replays (decodes) them, timing each
+operation and — via a counting global allocator — reporting heap bytes
+allocated per decode.
+
+| codec | encode p50 | encode p99 | decode p50 | decode p99 | encoded bytes | decode alloc |
+|---|---|---|---|---|---|---|
+| sbe_gen   | TBD `encode_p50` | TBD `encode_p99` | TBD `decode_p50` | TBD `decode_p99` | TBD `encoded_bytes` | TBD `decode_alloc_bytes` (≈0) |
+| aeron_sbe | TBD `encode_p50` | TBD `encode_p99` | TBD `decode_p50` | TBD `decode_p99` | TBD `encoded_bytes` | TBD `decode_alloc_bytes` (≈0) |
+| bincode   | TBD `encode_p50` | TBD `encode_p99` | TBD `decode_p50` | TBD `decode_p99` | TBD `encoded_bytes` | TBD `decode_alloc_bytes` |
+
+p50/p99 in ns (a `_mean` is also emitted per op); sizes in bytes. Uniform
+harness: identical record builder and iteration count across codecs.
+
+**What we learned:**
+
+- **Zero-copy decode pays off twice — latency and memory.** Both SBE codecs
+  decode by casting/viewing the buffer in place and allocate **0 bytes per
+  decode**; `bincode` reconstructs an owned struct (the record plus its `Vec`
+  of command blobs) on every decode. This is a structural property, not a
+  tuning result — proven by the counting allocator (SBE `decode_alloc_bytes` =
+  0). Over a journal replay of millions of records it is the dominant
+  difference: SBE adds no allocator pressure, `bincode` adds one owned object
+  graph per record. [decode latency: SBE TBD ns vs bincode TBD ns.]
+- **The two SBE toolchains are wire-identical.** `sbe_gen` and `aeron_sbe`
+  consume the same SBE schema and produce **byte-for-byte identical** encoded
+  bodies — verified by a conformance test over 64 records. So the choice
+  between the pure-Rust generator and the reference Java tool's Rust output is
+  ergonomic, not a wire-format decision; their encode/decode costs are expected
+  to track closely [within TBD%].
+- **`bincode` is the ergonomic baseline, not the fast path.** [Its decode is
+  ~TBD× SBE's, chiefly the owned-allocation cost; its encoded record is TBD B
+  vs SBE's TBD B — bincode's varint integers are slightly more compact on the
+  wire but must be re-materialized into an owned graph on the way back.]
+- **Percentiles expose the tail the mean hides.** SBE decode is expected to be
+  near-flat (p50 ≈ p99 — no allocator involved), while `bincode`'s decode p99
+  should sit well above its p50 from allocation variance. [Confirm from the run:
+  SBE decode p99/p50 ≈ TBD; bincode ≈ TBD.]
+
+<!-- END PENDING -->
+
 ## shared-memory-ipc — planned
 
 Scaffolded in Rust only (`spsc`, `mpsc`: real cross-process IPC over a
@@ -147,3 +205,9 @@ remains empty.
 4. **Language choice matters least where the kernel or device dominates**
    (network RTT, disk sync) and most where the runtime owns scheduling
    (thread parking) or the compiler owns the inner loop (SPSC ring).
+5. **Log record codec (pending AWS numbers):** for the replicated-log record
+   itself, a zero-copy SBE codec decodes with **no per-record allocation**
+   where serde+bincode allocates an owned graph every decode — the memory
+   difference an SMR replay path cares about; the two SBE toolchains are
+   wire-identical, so that choice is ergonomic. (Latency/ratio numbers land
+   with the first journaled `serialization` run.)
