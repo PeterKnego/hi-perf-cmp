@@ -16,6 +16,7 @@ members = [
     "thread-handoff/disruptor",
     "handoff-compare",
     "serialization/common",
+    "serialization/bincode",
 ]
 
 [workspace.package]

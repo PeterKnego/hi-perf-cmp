@@ -1,0 +1,17 @@
+[package]
+name = "serialization-bincode"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "serialization-bincode"
+path = "src/main.rs"
+
+[lib]
+name = "serialization_bincode"
+path = "src/lib.rs"
+
+[dependencies]
+serialization-common = { path = "../common" }
+bench-common = { path = "../../bench-common" }
+bincode = { workspace = true }
