@@ -17,6 +17,13 @@ experiments:
   - { focus_area: thread-handoff,   experiment: condvar,     kind: local }
   - { focus_area: thread-handoff,   experiment: channel,     kind: local }
   - { focus_area: thread-handoff,   experiment: ring,        kind: local }
+  # serialization is Rust-only: the optional `languages` key restricts which
+  # languages the (language, experiment) product loop runs this row for (see
+  # ansible/roles/run/tasks/main.yml). Rows without `languages` run for all of
+  # `languages` above, unchanged.
+  - { focus_area: serialization,    experiment: sbe_gen,     kind: local, languages: [rust] }
+  - { focus_area: serialization,    experiment: aeron_sbe,   kind: local, languages: [rust] }
+  - { focus_area: serialization,    experiment: bincode,     kind: local, languages: [rust] }
 
 # --- network-rtt cross-host params (exported into every client run so all three
 #     languages use identical parameters for a fair comparison) ---
@@ -38,6 +45,15 @@ fsw_batch: 32
 th_warmup: 10000
 th_iterations: 100000
 th_ring_cap: 1024
+
+# --- serialization params (single-host, node0). Rust-only focus area: three
+#     codecs (sbe_gen, aeron_sbe, bincode) over one shared ~500-byte journal
+#     record. aeron_sbe ships a committed generated crate + vendored jar, so
+#     NO JDK is needed at bench time (only regen.sh regenerates it). ---
+ser_warmup: 1000
+ser_iterations: 100000
+ser_entries: 4
+ser_cmd_bytes: 78
 
 # --- Toolchain versions ---
 jdk_version: "21"
