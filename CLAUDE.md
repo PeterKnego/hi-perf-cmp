@@ -12,6 +12,7 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 - **network-rtt** — minimize RTT for leader→follower→leader communication when replicating log entries.
 - **filesystem-write** — fast, durable command-log persistence.
 - **thread-handoff** — thread-to-thread data passing, including thread sleep/wakeup.
+- **serialization** — encode/decode cost (latency + memory) of a command-log record; SBE vs bincode.
 - **shared-memory-ipc** — shared-memory inter-process communication _(planned focus area)_.
 
 **Status:** `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (cross-host capable).
@@ -115,7 +116,7 @@ Keep experiment-specific dependencies in that artifact only (e.g. QUIC's quinn/q
 
 To turn a stub focus area real: replace its placeholder emit (`experiment: "placeholder"`, `metric:
 "placeholder"`, `notes: "stub"`) with real measurement. Keep focus-area names exact (`network-rtt`,
-`filesystem-write`, `thread-handoff`, and the planned `shared-memory-ipc`), `language` matching the directory,
+`filesystem-write`, `thread-handoff`, `serialization`, and the planned `shared-memory-ipc`), `language` matching the directory,
 and always emit the `experiment` field — the `tools/journal` CLI aligns on `(focus_area, experiment, language,
 metric)`. For the Rust release profile and workspace conventions, see below.
 

@@ -16,7 +16,7 @@ see `journal/README.md`.
 | field        | type    | required | meaning                                                       |
 |--------------|---------|----------|---------------------------------------------------------------|
 | `language`   | string  | yes      | `rust` \| `java` \| `go`                                      |
-| `focus_area` | string  | yes      | `network-rtt` \| `filesystem-write` \| `thread-handoff`       |
+| `focus_area` | string  | yes      | `network-rtt` \| `filesystem-write` \| `thread-handoff` \| `serialization` |
 | `experiment` | string  | yes      | the variant under the focus area, e.g. `tcp` \| `udp` \| `quic`; `placeholder` for stubs |
 | `metric`     | string  | yes      | what was measured, e.g. `rtt_p50`, `write_throughput`         |
 | `value`      | number  | yes      | the measured value                                            |
