@@ -598,6 +598,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "journal-aeron-sbe"
+version = "0.1.0"
+
+[[package]]
 name = "js-sys"
 version = "0.3.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1154,6 +1158,15 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serialization-aeron_sbe"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "journal-aeron-sbe",
+ "serialization-common",
 ]
 
 [[package]]

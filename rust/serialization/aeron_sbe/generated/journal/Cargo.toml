@@ -1,0 +1,8 @@
+[package]
+name = "journal-aeron-sbe"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "journal"
+path = "src/lib.rs"

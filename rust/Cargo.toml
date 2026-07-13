@@ -18,6 +18,8 @@ members = [
     "serialization/common",
     "serialization/bincode",
     "serialization/sbe_gen",
+    "serialization/aeron_sbe",
+    "serialization/aeron_sbe/generated/journal",
 ]
 
 [workspace.package]

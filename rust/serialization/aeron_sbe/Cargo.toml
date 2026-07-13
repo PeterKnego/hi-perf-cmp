@@ -1,0 +1,17 @@
+[package]
+name = "serialization-aeron_sbe"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "serialization-aeron_sbe"
+path = "src/main.rs"
+
+[lib]
+name = "serialization_aeron_sbe"
+path = "src/lib.rs"
+
+[dependencies]
+serialization-common = { path = "../common" }
+bench-common = { path = "../../bench-common" }
+journal = { package = "journal-aeron-sbe", path = "generated/journal" }
