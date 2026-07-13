@@ -1,10 +1,9 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::all)]
 #![allow(non_camel_case_types)]
-
 #![allow(ambiguous_glob_reexports)]
 
-use ::core::{convert::TryInto};
+use ::core::convert::TryInto;
 
 pub mod event_type;
 pub mod group_size_encoding_codec;
@@ -80,7 +79,9 @@ impl<'a> ReadBuf<'a> {
 
     #[inline]
     pub(crate) fn get_bytes_at<const N: usize>(slice: &[u8], index: usize) -> [u8; N] {
-        slice[index..index+N].try_into().expect("slice with incorrect length")
+        slice[index..index + N]
+            .try_into()
+            .expect("slice with incorrect length")
     }
 
     #[inline]
@@ -135,9 +136,8 @@ impl<'a> ReadBuf<'a> {
 
     #[inline]
     pub fn get_slice_at(&self, index: usize, len: usize) -> &[u8] {
-        &self.data[index..index+len]
+        &self.data[index..index + len]
     }
-
 }
 
 #[derive(Debug, Default)]
@@ -219,4 +219,3 @@ impl<'a> From<&'a mut WriteBuf<'a>> for &'a mut [u8] {
         buf.data
     }
 }
-
