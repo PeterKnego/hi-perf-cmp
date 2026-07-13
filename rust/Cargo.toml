@@ -20,6 +20,7 @@ members = [
     "serialization/sbe_gen",
     "serialization/aeron_sbe",
     "serialization/aeron_sbe/generated/journal",
+    "serialization/conformance",
 ]
 
 [workspace.package]

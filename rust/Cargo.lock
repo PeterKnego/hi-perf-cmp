@@ -1186,6 +1186,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serialization-conformance"
+version = "0.1.0"
+dependencies = [
+ "serialization-aeron_sbe",
+ "serialization-bincode",
+ "serialization-common",
+ "serialization-sbe_gen",
+]
+
+[[package]]
 name = "serialization-sbe_gen"
 version = "0.1.0"
 dependencies = [
