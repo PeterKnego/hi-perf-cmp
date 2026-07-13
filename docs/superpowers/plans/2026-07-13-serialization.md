@@ -301,14 +301,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn config_defaults() {
-        // With no env vars set, defaults land at the ~500-byte record shape.
-        let cfg = SerialConfig {
-            warmup: 1000,
-            iterations: 100_000,
-            entries: 4,
-            cmd_bytes: 78,
-        };
+    fn config_defaults_from_env() {
+        // No SER_* vars set in the test environment → from_env yields the
+        // ~500-byte record defaults. (edition 2024 makes set_var unsafe, so we
+        // test the default path rather than mutating the environment.)
+        let cfg = SerialConfig::from_env().expect("defaults");
+        assert_eq!(cfg.warmup, 1000);
+        assert_eq!(cfg.iterations, 100_000);
         assert_eq!(cfg.entries, 4);
         assert_eq!(cfg.cmd_bytes, 78);
     }
