@@ -17,6 +17,7 @@ members = [
     "handoff-compare",
     "serialization/common",
     "serialization/bincode",
+    "serialization/sbe_gen",
 ]
 
 [workspace.package]
