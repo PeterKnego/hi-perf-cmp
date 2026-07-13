@@ -25,7 +25,7 @@ fn main() {
     // `include!(concat!(env!("OUT_DIR"), "/sbe_mod.rs"))`.
     let shim = format!(
         r#"#[allow(dead_code, non_camel_case_types, unused_imports, unused_parens, clippy::all)]
-pub mod sbe {{
+mod sbe {{
     #[path = {types:?}]
     pub mod types;
     #[path = {message_header:?}]
