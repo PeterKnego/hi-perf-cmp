@@ -23,6 +23,10 @@
     export TH_WARMUP="{{ th_warmup }}"
     export TH_ITERATIONS="{{ th_iterations }}"
     export TH_RING_CAP="{{ th_ring_cap }}"
+    export SER_WARMUP="{{ ser_warmup }}"
+    export SER_ITERS="{{ ser_iterations }}"
+    export SER_ENTRIES="{{ ser_entries }}"
+    export SER_CMD_BYTES="{{ ser_cmd_bytes }}"
     {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} loopback \
       >> {{ remote_results_dir }}/results.jsonl
   args:

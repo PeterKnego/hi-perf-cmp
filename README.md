@@ -9,13 +9,15 @@ identical conditions, so the numbers are apples-to-apples.
 **Direction:** the focus areas are the performance-critical paths of
 **state-machine-replication (SMR)** systems (Raft/Paxos-style replicated logs).
 The goal is to choose and optimize the code for each path. Work is organized as a
-grid of **experiment × language** within four focus areas:
+grid of **experiment × language** within five focus areas:
 
 - **network-rtt** — minimize RTT for leader→follower→leader communication when
   replicating log entries. Experiments: `tcp`, `udp`, `quic`.
 - **filesystem-write** — fast, durable command-log persistence _(stub)_.
 - **thread-handoff** — thread-to-thread data passing, including thread
   sleep/wakeup _(stub)_.
+- **serialization** — codec choice for the command-log record on the hot path.
+  Experiments: `sbe_gen`, `aeron_sbe`, `bincode` _(Rust only)_.
 - **shared-memory-ipc** — shared-memory inter-process communication _(planned)_.
 
 ## Features
@@ -70,11 +72,16 @@ aligns on `(focus_area, experiment, language, metric)`, and tracks them over tim
 `network-rtt` is implemented for `tcp`, `udp`, and `quic` (cross-host capable —
 see below). `filesystem-write` is implemented for `fsync`, `fdatasync`, `prealloc`,
 and `batch` (single-host, local NVMe). `thread-handoff` is implemented for `spin`,
-`condvar`, `channel`, and `ring` (single-host). `shared-memory-ipc` is scaffolded
-in **Rust only** for `spsc` and `mpsc` (single-host, real cross-process IPC over a
-`/dev/shm` mapping); the Go and Java artifacts and the `bench-infra` matrix rows
-are still pending, so it is not yet a cross-language cell. All implemented focus
-areas have real AWS results — see [docs/RESULTS.md](docs/RESULTS.md).
+`condvar`, `channel`, and `ring` (single-host). `serialization` is implemented in
+**Rust only** for `sbe_gen`, `aeron_sbe`, and `bincode` (single-host, measuring
+encode/decode latency and decode allocation for one shared journal-record
+schema); Go and Java are not planned for this focus area. `shared-memory-ipc` is
+scaffolded in **Rust only** for `spsc` and `mpsc` (single-host, real cross-process
+IPC over a `/dev/shm` mapping); the Go and Java artifacts and the `bench-infra`
+matrix rows are still pending, so it is not yet a cross-language cell.
+`network-rtt`, `filesystem-write`, and `thread-handoff` have real AWS results —
+see [docs/RESULTS.md](docs/RESULTS.md); `serialization` is now wired into the
+`bench-infra` matrix but awaits its first AWS run.
 
 ## Building & running
 

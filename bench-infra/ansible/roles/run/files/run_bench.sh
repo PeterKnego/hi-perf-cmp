@@ -20,11 +20,13 @@
 #   SRC_DIR           path to the synced repo root (required)
 #   JAVA_HOME         JDK home (required for java)
 #
-# filesystem-write consumes the FSW_* vars (below); thread-handoff ignores both.
+# filesystem-write consumes the FSW_* vars (below); thread-handoff and
+# serialization ignore RTT_*/FSW_* (their own SER_*/TH_* vars are exported
+# by the caller, not defaulted here).
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 <rust|go|java> <network-rtt|filesystem-write|thread-handoff> <experiment> <loopback|server|client>" >&2
+  echo "usage: $0 <rust|go|java> <network-rtt|filesystem-write|thread-handoff|serialization> <experiment> <loopback|server|client>" >&2
   exit 2
 }
 
@@ -37,7 +39,7 @@ MODE="$4"
 SRC_DIR="${SRC_DIR:?SRC_DIR must point at the synced repo root}"
 
 case "$FOCUS_AREA" in
-  network-rtt|filesystem-write|thread-handoff) ;;
+  network-rtt|filesystem-write|thread-handoff|serialization) ;;
   *) echo "unknown focus_area: $FOCUS_AREA" >&2; usage ;;
 esac
 

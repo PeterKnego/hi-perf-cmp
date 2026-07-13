@@ -16,7 +16,7 @@ see `journal/README.md`.
 | field        | type    | required | meaning                                                       |
 |--------------|---------|----------|---------------------------------------------------------------|
 | `language`   | string  | yes      | `rust` \| `java` \| `go`                                      |
-| `focus_area` | string  | yes      | `network-rtt` \| `filesystem-write` \| `thread-handoff`       |
+| `focus_area` | string  | yes      | `network-rtt` \| `filesystem-write` \| `thread-handoff` \| `serialization` |
 | `experiment` | string  | yes      | the variant under the focus area, e.g. `tcp` \| `udp` \| `quic`; `placeholder` for stubs |
 | `metric`     | string  | yes      | what was measured, e.g. `rtt_p50`, `write_throughput`         |
 | `value`      | number  | yes      | the measured value                                            |
@@ -53,7 +53,10 @@ experiments (each a separate runnable artifact named `<focus_area>-<experiment>`
 `thread-handoff` is implemented for the `spin`, `condvar`, `channel`, and `ring`
 experiments (each a runnable artifact named `thread-handoff-<experiment>`):
 `spin`/`condvar`/`channel` emit `handoff_rtt_{p50,p99,mean}` (ns), `ring` emits
-`handoff_throughput` (ops_per_sec). `shared-memory-ipc` is not yet scaffolded.
+`handoff_throughput` (ops_per_sec). `serialization` is implemented for the
+`sbe_gen`, `aeron_sbe`, and `bincode` experiments (Rust only, single-host):
+each emits `encode_ns`/`decode_ns` (ns) and `encoded_bytes`/`decode_alloc_bytes`
+(bytes). `shared-memory-ipc` is not yet scaffolded.
 
 ## Reference emitters
 

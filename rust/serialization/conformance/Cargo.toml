@@ -1,0 +1,13 @@
+[package]
+name = "serialization-conformance"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+serialization-common = { path = "../common" }
+serialization-bincode = { path = "../bincode" }
+serialization-sbe_gen = { path = "../sbe_gen" }
+serialization-aeron_sbe = { path = "../aeron_sbe" }

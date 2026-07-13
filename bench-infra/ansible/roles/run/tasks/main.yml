@@ -53,6 +53,9 @@
     experiment: "{{ combo.1.experiment }}"
 
 # --- local experiments: run on node0 only ---
+# A row's optional `languages` key (e.g. serialization: Rust-only) restricts
+# the (language, experiment) product to that subset; rows without it run for
+# every entry in `languages` as before.
 - name: Run local experiments per language (node0 only)
   ansible.builtin.include_tasks: local.yml
   loop: "{{ languages | product(experiments | selectattr('kind', 'equalto', 'local') | list) | list }}"
@@ -62,4 +65,4 @@
     language: "{{ combo.0 }}"
     focus_area: "{{ combo.1.focus_area }}"
     experiment: "{{ combo.1.experiment }}"
-  when: node_role == "node0"
+  when: node_role == "node0" and (combo.1.languages is not defined or combo.0 in combo.1.languages)

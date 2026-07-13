@@ -12,12 +12,16 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 - **network-rtt** — minimize RTT for leader→follower→leader communication when replicating log entries.
 - **filesystem-write** — fast, durable command-log persistence.
 - **thread-handoff** — thread-to-thread data passing, including thread sleep/wakeup.
+- **serialization** — encode/decode cost (latency + memory) of a command-log record; SBE vs bincode.
 - **shared-memory-ipc** — shared-memory inter-process communication _(planned focus area)_.
 
 **Status:** `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (cross-host capable).
 `filesystem-write` is implemented for the `fsync`, `fdatasync`, `prealloc`, and `batch` experiments
 (single-host, local NVMe). `thread-handoff` is implemented for the `spin`, `condvar`, `channel`, and
-`ring` experiments (single-host). `shared-memory-ipc` is not yet scaffolded.
+`ring` experiments (single-host). `serialization` is implemented in Rust only (three codecs —
+`sbe_gen` zerocopy SBE, `aeron_sbe` real-logic SBE-tool Rust output, `bincode` serde+bincode —
+single-host, measuring encode/decode latency + decode allocation); Go/Java are not planned for this
+focus area. `shared-memory-ipc` is not yet scaffolded.
 
 ## Architecture: the result contract is the only coupling
 
@@ -47,12 +51,13 @@ dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`.
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust only).
 
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt + filesystem-write + thread-handoff experiments
 cd rust && cargo build --release && cargo test && cargo clippy --all-targets && cargo fmt --check
 cargo run --release -p network-rtt-tcp        # -p network-rtt-udp | -p filesystem-write-fsync | -p filesystem-write-batch | ...
+cargo run --release -p serialization-bincode  # -p serialization-sbe_gen | -p serialization-aeron_sbe
 
 # Go — single module: internal/bench + cmd/network-rtt-* + filesystem-write-* + thread-handoff-*
 cd go && go build ./... && go vet ./... && go test ./...
@@ -111,7 +116,7 @@ Keep experiment-specific dependencies in that artifact only (e.g. QUIC's quinn/q
 
 To turn a stub focus area real: replace its placeholder emit (`experiment: "placeholder"`, `metric:
 "placeholder"`, `notes: "stub"`) with real measurement. Keep focus-area names exact (`network-rtt`,
-`filesystem-write`, `thread-handoff`, and the planned `shared-memory-ipc`), `language` matching the directory,
+`filesystem-write`, `thread-handoff`, `serialization`, and the planned `shared-memory-ipc`), `language` matching the directory,
 and always emit the `experiment` field — the `tools/journal` CLI aligns on `(focus_area, experiment, language,
 metric)`. For the Rust release profile and workspace conventions, see below.
 

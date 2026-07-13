@@ -15,6 +15,12 @@ members = [
     "thread-handoff/ring",
     "thread-handoff/disruptor",
     "handoff-compare",
+    "serialization/common",
+    "serialization/bincode",
+    "serialization/sbe_gen",
+    "serialization/aeron_sbe",
+    "serialization/aeron_sbe/generated/journal",
+    "serialization/conformance",
 ]
 
 [workspace.package]
@@ -31,6 +37,10 @@ quinn = "0.11"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rcgen = "0.13"
 tokio = { version = "1", features = ["rt", "net", "io-util", "macros", "sync"] }
+serde = { version = "1", features = ["derive"] }
+bincode = { version = "2", features = ["serde"] }
+zerocopy = { version = "0.8", features = ["derive"] }
+sbe_gen = "0.7.3"
 
 [profile.release]
 lto = "thin"
