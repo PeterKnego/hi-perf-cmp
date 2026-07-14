@@ -1,527 +1,637 @@
 {
   "filesystem-write/batch/go/durable_append_throughput": {
-    "value": 359294.8949786052,
+    "value": 360670.21441606205,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/go/sync_mean": {
-    "value": 43340.94305822137,
+    "value": 42759.63787587972,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/go/sync_p50": {
-    "value": 43037.0,
+    "value": 42691.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/go/sync_p99": {
-    "value": 50953.0,
+    "value": 48541.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/java/durable_append_throughput": {
-    "value": 346374.0843852201,
+    "value": 348310.3922640986,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/java/sync_mean": {
-    "value": 42830.39027511197,
+    "value": 42379.550223928345,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/java/sync_p50": {
-    "value": 43002.0,
+    "value": 42498.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/java/sync_p99": {
-    "value": 51841.0,
+    "value": 51716.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/rust/durable_append_throughput": {
-    "value": 388018.5731453541,
+    "value": 388247.27661618334,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/rust/sync_mean": {
-    "value": 42880.11580294306,
+    "value": 42197.066538707615,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/rust/sync_p50": {
-    "value": 42687.0,
+    "value": 42214.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/batch/rust/sync_p99": {
-    "value": 52318.0,
+    "value": 51387.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/go/durable_append_throughput": {
-    "value": 7138.0138770558915,
+    "value": 7665.923778653884,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/go/sync_mean": {
-    "value": 137476.59248,
+    "value": 127981.09526,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/go/sync_p50": {
-    "value": 127790.0,
+    "value": 125595.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/go/sync_p99": {
-    "value": 205140.0,
+    "value": 167143.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/java/durable_append_throughput": {
-    "value": 7285.070740548783,
+    "value": 7947.18410795109,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/java/sync_mean": {
-    "value": 134106.48228,
+    "value": 123361.0437,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/java/sync_p50": {
-    "value": 127555.0,
+    "value": 122050.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/java/sync_p99": {
-    "value": 179272.0,
+    "value": 159637.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/rust/durable_append_throughput": {
-    "value": 7224.499129965346,
+    "value": 7633.197939612099,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/rust/sync_mean": {
-    "value": 135572.35442,
+    "value": 128905.90162,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/rust/sync_p50": {
-    "value": 130076.0,
+    "value": 123224.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fdatasync/rust/sync_p99": {
-    "value": 181087.0,
+    "value": 177768.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/go/durable_append_throughput": {
-    "value": 7170.299426522793,
+    "value": 7983.446633801219,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/go/sync_mean": {
-    "value": 136331.76162,
+    "value": 122737.72394,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/go/sync_p50": {
-    "value": 129756.0,
+    "value": 123160.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/go/sync_p99": {
-    "value": 186361.0,
+    "value": 165399.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/java/durable_append_throughput": {
-    "value": 7163.118310546559,
+    "value": 7914.541241612991,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/java/sync_mean": {
-    "value": 136972.59888,
+    "value": 123903.32548,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/java/sync_p50": {
-    "value": 124617.0,
+    "value": 122331.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/java/sync_p99": {
-    "value": 206582.0,
+    "value": 171636.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/rust/durable_append_throughput": {
-    "value": 7314.460131942799,
+    "value": 7813.705723163009,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/rust/sync_mean": {
-    "value": 133944.92242,
+    "value": 125895.0794,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/rust/sync_p50": {
-    "value": 130387.0,
+    "value": 123327.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/fsync/rust/sync_p99": {
-    "value": 186140.0,
+    "value": 173689.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/go/durable_append_throughput": {
-    "value": 25203.09657039513,
+    "value": 25408.33170906338,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/go/sync_mean": {
-    "value": 36867.75452,
+    "value": 36569.97192,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/go/sync_p50": {
-    "value": 36825.0,
+    "value": 36468.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/go/sync_p99": {
-    "value": 46218.0,
+    "value": 44926.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/java/durable_append_throughput": {
-    "value": 24831.245785895484,
+    "value": 25392.422998788777,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/java/sync_mean": {
-    "value": 37291.0458,
+    "value": 36422.58212,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/java/sync_p50": {
-    "value": 37170.0,
+    "value": 36570.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/java/sync_p99": {
-    "value": 46815.0,
+    "value": 45676.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/rust/durable_append_throughput": {
-    "value": 22181.24186524304,
+    "value": 25748.70248940825,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/rust/sync_mean": {
-    "value": 42520.1776,
+    "value": 36290.83006,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/rust/sync_p50": {
-    "value": 37026.0,
+    "value": 36316.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "filesystem-write/prealloc/rust/sync_p99": {
-    "value": 198250.0,
+    "value": 46489.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/quic/go/rtt_mean": {
-    "value": 88301.86555,
+    "value": 99756.38898,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/quic/go/rtt_p50": {
-    "value": 84275.0,
+    "value": 94174.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/quic/go/rtt_p99": {
-    "value": 139017.0,
+    "value": 141253.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/quic/java/rtt_mean": {
-    "value": 156471.51644,
+    "value": 162359.90124,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/quic/java/rtt_p50": {
-    "value": 154490.0,
+    "value": 160662.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/quic/java/rtt_p99": {
-    "value": 193514.0,
+    "value": 195919.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/quic/rust/rtt_mean": {
-    "value": 62551.86492,
+    "value": 77736.95829,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/quic/rust/rtt_p50": {
-    "value": 68227.0,
+    "value": 69211.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/quic/rust/rtt_p99": {
-    "value": 100740.0,
+    "value": 117190.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/tcp/go/rtt_mean": {
-    "value": 31863.18093,
+    "value": 39894.28304,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/tcp/go/rtt_p50": {
-    "value": 31332.0,
+    "value": 39192.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/tcp/go/rtt_p99": {
-    "value": 43626.0,
+    "value": 51388.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/tcp/java/rtt_mean": {
-    "value": 29026.62972,
+    "value": 35168.28955,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/tcp/java/rtt_p50": {
-    "value": 28547.0,
+    "value": 34780.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/tcp/java/rtt_p99": {
-    "value": 37973.0,
+    "value": 44104.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/tcp/rust/rtt_mean": {
-    "value": 28889.97446,
+    "value": 36192.58874,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/tcp/rust/rtt_p50": {
-    "value": 28483.0,
+    "value": 35793.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/tcp/rust/rtt_p99": {
-    "value": 36727.0,
+    "value": 45163.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/udp/go/rtt_mean": {
-    "value": 29107.73146,
+    "value": 36316.53923,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/udp/go/rtt_p50": {
-    "value": 28628.0,
+    "value": 35784.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/udp/go/rtt_p99": {
-    "value": 39667.0,
+    "value": 46724.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/udp/java/rtt_mean": {
-    "value": 27855.17469,
+    "value": 34656.23345,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/udp/java/rtt_p50": {
-    "value": 27491.0,
+    "value": 34290.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/udp/java/rtt_p99": {
-    "value": 36140.0,
+    "value": 43185.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/udp/rust/rtt_mean": {
-    "value": 28471.95213,
+    "value": 35426.65821,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/udp/rust/rtt_p50": {
-    "value": 27928.0,
+    "value": 34989.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "network-rtt/udp/rust/rtt_p99": {
-    "value": 37476.0,
+    "value": 45332.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/aeron_sbe/rust/decode_mean": {
+    "value": 416.17123,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/aeron_sbe/rust/decode_p50": {
+    "value": 409.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/aeron_sbe/rust/decode_p99": {
+    "value": 443.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/aeron_sbe/rust/encode_mean": {
+    "value": 78.75473,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/aeron_sbe/rust/encode_p50": {
+    "value": 57.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/aeron_sbe/rust/encode_p99": {
+    "value": 341.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/aeron_sbe/rust/encoded_bytes": {
+    "value": 502.0,
+    "unit": "bytes",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/bincode/rust/decode_alloc_bytes": {
+    "value": 536.0,
+    "unit": "bytes",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/bincode/rust/decode_mean": {
+    "value": 971.67662,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/bincode/rust/decode_p50": {
+    "value": 947.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/bincode/rust/decode_p99": {
+    "value": 1034.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/bincode/rust/encode_mean": {
+    "value": 100.05258,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/bincode/rust/encode_p50": {
+    "value": 85.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/bincode/rust/encode_p99": {
+    "value": 347.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/bincode/rust/encoded_bytes": {
+    "value": 482.0,
+    "unit": "bytes",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/sbe_gen/rust/decode_mean": {
+    "value": 415.33821,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/sbe_gen/rust/decode_p50": {
+    "value": 408.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/sbe_gen/rust/decode_p99": {
+    "value": 440.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/sbe_gen/rust/encode_mean": {
+    "value": 68.88456,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/sbe_gen/rust/encode_p50": {
+    "value": 46.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/sbe_gen/rust/encode_p99": {
+    "value": 350.0,
+    "unit": "ns",
+    "run_id": "20260713T152911Z-23b9778538e9"
+  },
+  "serialization/sbe_gen/rust/encoded_bytes": {
+    "value": 502.0,
+    "unit": "bytes",
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/channel/go/handoff_rtt_mean": {
-    "value": 347.50289,
+    "value": 361.276,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/channel/go/handoff_rtt_p50": {
-    "value": 301.0,
+    "value": 323.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/channel/go/handoff_rtt_p99": {
-    "value": 576.0,
+    "value": 681.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/channel/java/handoff_rtt_mean": {
-    "value": 9371.58899,
+    "value": 6811.12463,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/channel/java/handoff_rtt_p50": {
-    "value": 446.0,
+    "value": 451.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/channel/java/handoff_rtt_p99": {
-    "value": 24602.0,
+    "value": 23675.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/channel/rust/handoff_rtt_mean": {
-    "value": 22747.24411,
+    "value": 429.57961,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/channel/rust/handoff_rtt_p50": {
-    "value": 22752.0,
+    "value": 394.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/channel/rust/handoff_rtt_p99": {
-    "value": 34384.0,
+    "value": 1131.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/condvar/go/handoff_rtt_mean": {
-    "value": 452.81032,
+    "value": 451.72919,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/condvar/go/handoff_rtt_p50": {
-    "value": 376.0,
+    "value": 389.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/condvar/go/handoff_rtt_p99": {
-    "value": 986.0,
+    "value": 899.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/condvar/java/handoff_rtt_mean": {
-    "value": 23859.35512,
+    "value": 309.01173,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/condvar/java/handoff_rtt_p50": {
-    "value": 24041.0,
+    "value": 287.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/condvar/java/handoff_rtt_p99": {
-    "value": 35350.0,
+    "value": 475.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/condvar/rust/handoff_rtt_mean": {
-    "value": 22279.70024,
+    "value": 316.79933,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/condvar/rust/handoff_rtt_p50": {
-    "value": 22243.0,
+    "value": 281.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/condvar/rust/handoff_rtt_p99": {
-    "value": 32894.0,
+    "value": 380.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/ring/go/handoff_throughput": {
-    "value": 41883606.295776166,
+    "value": 43222683.26417704,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/ring/java/handoff_throughput": {
-    "value": 7068732.395321969,
+    "value": 7770588.601883063,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/ring/rust/handoff_throughput": {
-    "value": 410790648.76167154,
+    "value": 421567387.5468994,
     "unit": "ops_per_sec",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/spin/go/handoff_rtt_mean": {
-    "value": 197.00675,
+    "value": 204.56395,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/spin/go/handoff_rtt_p50": {
-    "value": 194.0,
+    "value": 202.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/spin/go/handoff_rtt_p99": {
-    "value": 200.0,
+    "value": 208.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/spin/java/handoff_rtt_mean": {
-    "value": 220.63445,
+    "value": 291.38453,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/spin/java/handoff_rtt_p50": {
-    "value": 220.0,
+    "value": 298.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/spin/java/handoff_rtt_p99": {
-    "value": 266.0,
+    "value": 360.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/spin/rust/handoff_rtt_mean": {
-    "value": 252.61767,
+    "value": 259.38775,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/spin/rust/handoff_rtt_p50": {
-    "value": 248.0,
+    "value": 256.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   },
   "thread-handoff/spin/rust/handoff_rtt_p99": {
-    "value": 258.0,
+    "value": 261.0,
     "unit": "ns",
-    "run_id": "20260627T193417Z-003926ca6c91"
+    "run_id": "20260713T152911Z-23b9778538e9"
   }
 }

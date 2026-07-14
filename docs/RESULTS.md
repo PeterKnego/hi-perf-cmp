@@ -17,10 +17,10 @@ code in each language.
 | [20260626T103635Z](../journal/runs/20260626T103635Z-39abe130d644/entry.md) | First cross-host `network-rtt` run (tcp/udp/quic × rust/go/java) |
 | [20260626T213457Z](../journal/runs/20260626T213457Z-deef392a8445/entry.md) | First `filesystem-write` run on local NVMe (fsync/fdatasync/prealloc/batch) |
 | [20260627T071950Z](../journal/runs/20260627T071950Z-07a4b9a872fc/entry.md) | First `thread-handoff` run (spin/condvar/channel/ring); network + filesystem re-measured |
-| [20260627T193417Z](../journal/runs/20260627T193417Z-003926ca6c91/entry.md) | Optimized SPSC ring (Rust + Go); full matrix re-measured — **current baseline** |
-| [20260713T152911Z](../journal/runs/20260713T152911Z-23b9778538e9/entry.md) | First `serialization` run (sbe_gen/aeron_sbe/bincode); full matrix re-measured |
+| [20260627T193417Z](../journal/runs/20260627T193417Z-003926ca6c91/entry.md) | Optimized SPSC ring (Rust + Go); full matrix re-measured |
+| [20260713T152911Z](../journal/runs/20260713T152911Z-23b9778538e9/entry.md) | First `serialization` run (sbe_gen/aeron_sbe/bincode); full matrix re-measured — **current baseline** |
 
-Unless noted, tables below show the **current baseline** run (20260627T193417Z).
+Unless noted, tables below show the **current baseline** run (20260713T152911Z).
 
 ---
 
@@ -32,14 +32,14 @@ connected UDP, and QUIC (long-lived bidi stream).
 
 | transport | rust p50 | go p50 | java p50 | rust p99 | go p99 | java p99 |
 |---|---|---|---|---|---|---|
-| tcp | 28.5 µs | 31.3 µs | 28.5 µs | 36.7 µs | 43.6 µs | 38.0 µs |
-| udp | 27.9 µs | 28.6 µs | 27.5 µs | 37.5 µs | 39.7 µs | 36.1 µs |
-| quic | 68.2 µs | 84.3 µs | 154.5 µs | 100.7 µs | 139.0 µs | 193.5 µs |
+| tcp | 35.8 µs | 39.2 µs | 34.8 µs | 45.2 µs | 51.4 µs | 44.1 µs |
+| udp | 35.0 µs | 35.8 µs | 34.3 µs | 45.3 µs | 46.7 µs | 43.2 µs |
+| quic | 69.2 µs | 94.2 µs | 160.7 µs | 117.2 µs | 141.3 µs | 195.9 µs |
 
 **What we learned:**
 
-- **On a real network, TCP ≈ UDP and the languages are a wash** (~28–31 µs p50
-  everywhere). The physical link + kernel round trip (~28–35 µs) dominates;
+- **On a real network, TCP ≈ UDP and the languages are a wash** (~35 µs p50
+  everywhere, 34–39 µs). The physical link + kernel round trip dominates;
   the large per-language differences seen on loopback were kernel-parking
   artifacts, which is exactly why loopback numbers are never reported.
 - **QUIC carries a fixed per-RTT premium**: roughly 2× TCP for Rust (quinn) and
@@ -48,9 +48,9 @@ connected UDP, and QUIC (long-lived bidi stream).
   performance decision; adopting QUIC costs ~2× RTT in Rust/Go and is expensive
   in Java today.
 - Absolute RTTs moved ~15–25 % between fleet instantiations (e.g. tcp/rust p50
-  36.0 → 34.6 → 28.5 µs across the three runs) with unchanged code — that's
-  cross-instance cloud variance, and it's why comparisons are made against a
-  journaled baseline rather than across arbitrary runs.
+  36.0 → 34.6 → 28.5 → 35.8 µs across the four runs) with unchanged code —
+  that's cross-instance cloud variance, and it's why comparisons are made
+  against a journaled baseline rather than across arbitrary runs.
 
 ## filesystem-write — durable command-log appends (local NVMe)
 
@@ -61,13 +61,13 @@ ladder: `fsync` (write + fsync each record), `fdatasync` (data-only sync),
 
 | experiment | rust ops/s | go ops/s | java ops/s | sync p50 (rust) |
 |---|---|---|---|---|
-| fsync | 7,315 | 7,170 | 7,163 | 130 µs |
-| fdatasync | 7,225 | 7,138 | 7,285 | 130 µs |
-| prealloc | 22,181* | 25,203 | 24,831 | 37 µs |
-| batch | 388,019 | 359,295 | 346,374 | 43 µs |
+| fsync | 7,814 | 7,983 | 7,915 | 123 µs |
+| fdatasync | 7,633 | 7,666 | 7,947 | 123 µs |
+| prealloc | 25,749 | 25,408 | 25,392 | 36 µs |
+| batch | 388,247 | 360,670 | 348,310 | 42 µs |
 
-\* the Rust prealloc cell caught a slow tail this run (p99 198 µs vs ~46 µs for
-go/java); earlier runs had all three at ~25 K ops/s.
+(The Rust-prealloc slow-tail anomaly of the prior baseline did not recur — all
+three languages sit at ~25.4–25.7 K ops/s this run.)
 
 **What we learned:**
 
@@ -91,27 +91,44 @@ for `spin` (busy-wait), `condvar` (mutex + condition variable park/unpark), and
 
 | experiment | rust | go | java |
 |---|---|---|---|
-| spin p50 | 248 ns | 194 ns | 220 ns |
-| condvar p50 | 22.2 µs | **376 ns** | 24.0 µs |
-| channel p50 | 22.8 µs | **301 ns** | 446 ns (mean 9.4 µs) |
-| ring throughput | **410.8 M ops/s** | 41.9 M ops/s | 7.1 M ops/s |
+| spin p50 | 256 ns | 202 ns | 298 ns |
+| condvar p50 | 281 ns | 389 ns | 287 ns |
+| channel p50 | 394 ns | 323 ns | 451 ns (mean 6.8 µs) |
+| ring throughput | **421.6 M ops/s** | 43.2 M ops/s | 7.8 M ops/s |
+
+> **Regime note (condvar/channel).** These p50s are from a run whose Rust/Java
+> threads mostly **did not park** — the handoff stayed hot at ~280–450 ns, on
+> par with Go. When OS threads genuinely sleep, the cost is ~80× higher: the
+> prior baseline (20260627) measured Rust/Java condvar/channel at **~22–24 µs**
+> (futex syscall + scheduler round trip) vs Go's ~300–380 ns userspace park.
+> Whether threads park is scheduler/load-sensitive, so treat these two cells as
+> the *no-park* floor and the ~22 µs figure as the *parking* cost — the number
+> the focus area exists to expose. Java's channel still shows the split within
+> this run (p50 451 ns, mean 6.8 µs, p99 23.7 µs).
 
 **What we learned:**
 
-- **Busy-wait spin is a ~200 ns floor everywhere** — with no scheduler
-  involved, the three runtimes converge.
-- **The headline is parking cost: Go is ~50–60× faster at sleep/wakeup.**
-  Go parks goroutines in userspace (~300–400 ns per handoff); Rust and Java
-  park real OS threads via futex, paying a syscall + kernel scheduler round
-  trip of ~22–24 µs. This is the central thread sleep/wakeup story the focus
-  area was built to expose.
-- **Java's channel is bimodal**: `SynchronousQueue` often hands off without
-  parking (p50 446 ns) but parks on a heavy tail (p99 ~25 µs), so its mean
-  (~9 µs) sits far above its median. Rust's `mpsc` rendezvous parks every time.
+- **Busy-wait spin is a ~200–300 ns floor everywhere** — with no scheduler
+  involved, the three runtimes converge (Go ~200 ns, Rust/Java ~260–300 ns).
+- **The sleep/wakeup cost is bimodal, and this run mostly caught the no-park
+  side.** condvar/channel handoff only pays the OS-park price when the woken
+  thread actually sleeps. Here the Rust/Java threads stayed hot, so those
+  handoffs ran in ~280–450 ns — on par with Go. **When they do park, Go is
+  ~50–60× cheaper**: the prior journaled baseline measured Rust/Java at
+  ~22–24 µs (futex syscall + kernel scheduler round trip) against Go's
+  ~300–380 ns userspace goroutine park. That parking penalty — not the no-park
+  floor — is the central sleep/wakeup story the focus area was built to expose;
+  whether a given run triggers it is scheduler/load-sensitive.
+- **Java's channel stays visibly bimodal even in this run**: `SynchronousQueue`
+  hands off without parking at the median (p50 451 ns) but parks on a heavy
+  tail (p99 23.7 µs), so its mean (~6.8 µs) sits far above its median — the
+  parking cost leaking through, and why the median alone misleads for
+  wakeup-sensitive paths. Rust's `mpsc` rendezvous parked every time in the
+  prior run but mostly stayed hot here (p50 394 ns, p99 1.1 µs).
 - **The SPSC ring optimization (cache-line padding + LMAX-style cached
   opposite index) was the project's first optimization win**, graduated via
-  the journal: Rust 28.1 M → **410.8 M ops/s (+1360 %)**, Go 9.8 M → **41.9 M
-  ops/s (+327 %)**. Java kept its baseline (~7 M); the same pattern regressed
+  the journal: Rust 28.1 M → **421.6 M ops/s (+1400 %)**, Go 9.8 M → **43.2 M
+  ops/s (+341 %)**. Java kept its baseline (~7.8 M); the same pattern regressed
   its JIT'd `AtomicLong` path and was discarded.
 - **Against an external yardstick** (same box, median-of-5): the optimized Rust
   ring hit ~367.6 M ops/s vs ~148.0 M for the `disruptor` crate v4.3 (BusySpin
@@ -130,8 +147,7 @@ Rust — the same codec Aeron itself uses), and `bincode` (serde + bincode v2,
 the ergonomic derive baseline). Rust-only, single host (node0). The harness
 encodes a stream of records into an in-memory journal then replays (decodes)
 them, timing each operation and — via a counting global allocator — reporting
-heap bytes allocated per decode. 100,000 measured iterations per codec (from
-run 20260713T152911Z, not the current baseline).
+heap bytes allocated per decode. 100,000 measured iterations per codec.
 
 | codec | encode p50 | decode p50 | decode p99 | encoded bytes | decode alloc |
 |---|---|---|---|---|---|
@@ -195,8 +211,10 @@ remains empty.
 2. **Log durability:** don't sync per record — group-commit batching turns
    ~7 K durable appends/s into ~350–390 K, in every language.
 3. **In-process handoff:** if threads may sleep, Go's runtime is ~50× cheaper
-   at wakeup than OS-thread parking in Rust/Java; if you can spin, all three
-   reach ~200 ns, and a well-tuned Rust SPSC ring moves 400 M+ ops/s.
+   at wakeup than OS-thread parking in Rust/Java **when parking actually
+   happens** (~22 µs vs ~380 ns; whether it triggers is scheduler-sensitive);
+   if you can spin, all three reach ~200–300 ns, and a well-tuned Rust SPSC
+   ring moves 400 M+ ops/s.
 4. **Language choice matters least where the kernel or device dominates**
    (network RTT, disk sync) and most where the runtime owns scheduling
    (thread parking) or the compiler owns the inner loop (SPSC ring).
