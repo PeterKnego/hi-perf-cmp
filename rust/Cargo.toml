@@ -22,6 +22,7 @@ members = [
     "serialization/aeron_sbe/generated/journal",
     "serialization/conformance",
     "smr-collections/common",
+    "smr-collections/booksnap-sbe/generated/booksnap",
 ]
 
 [workspace.package]
