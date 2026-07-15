@@ -27,6 +27,13 @@
     export SER_ITERS="{{ ser_iterations }}"
     export SER_ENTRIES="{{ ser_entries }}"
     export SER_CMD_BYTES="{{ ser_cmd_bytes }}"
+    export SMRC_CAP="{{ smrc_cap }}"
+    export SMRC_LEVELS="{{ smrc_levels }}"
+    export SMRC_TICK="{{ smrc_tick }}"
+    export SMRC_PRICE_MIN="{{ smrc_price_min }}"
+    export SMRC_STEADY="{{ smrc_steady }}"
+    export SMRC_WARMUP="{{ smrc_warmup }}"
+    export SMRC_ITERS="{{ smrc_iters }}"
     {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} loopback \
       >> {{ remote_results_dir }}/results.jsonl
   args:

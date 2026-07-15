@@ -13,4 +13,8 @@ include(
     "thread-handoff-condvar",
     "thread-handoff-channel",
     "thread-handoff-ring",
+    "smr-collections-common",
+    "smr-collections-insert",
+    "smr-collections-update",
+    "smr-collections-snapshot",
 )

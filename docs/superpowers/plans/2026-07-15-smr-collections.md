@@ -138,8 +138,8 @@ update(orderId, fillQty):             // amend / partial fill; never removes
 Encode into a preallocated buffer, in this exact order (⇒ byte-identical across languages):
 
 1. SBE message header + root block: `priceMin, tickSize, nLevels, capacity, hwm, bestBid, bestAsk`. (The field is `capacity`, not `cap` — `cap` is a Go builtin the SBE Golang generator rejects.)
-2. `levels` group — walk `bids[0..NLEVELS]` then `asks[0..NLEVELS]`; emit one entry **only for occupied levels** (`head != NIL`), fields `{ side, levelTick=t, qtyTotal, count, head, tail }`, in ascending tick order within each side (bids first, then asks).
-3. `orders` group — emit `pool[slot]` for `slot in 0..hwm` (all live, ascending slot), fields `{ slot, orderId, price, qty, filled, side, next, prev }`.
+2. `levels` group — walk `bids[0..NLEVELS]` then `asks[0..NLEVELS]`; emit one entry **only for occupied levels** (`head != NIL`), fields `{ side, levelTick=t, qtyTotal, orderCount, head, tail }`, in ascending tick order within each side (bids first, then asks). (The level-count field is named `orderCount`, not `count`: a group field literally named `count` collides with the SBE-generated group-cardinality `count()` accessor in Rust and Java. The in-memory `PriceLevel.count`/`Level.Count` field keeps its name; only the SBE accessor is `order_count()`/`orderCount()`/`OrderCount`.)
+3. `orders` group — emit `pool[slot]` for `slot in 0..hwm` (all live, ascending slot), fields `{ slot, orderId, price, qty, filled, side, nextSlot, prev }`. (The link field is `nextSlot`, not `next`: a group field named `next` collides with `java.util.Iterator.next()`, which the SBE Java group decoder implements. In-memory struct fields stay `next`/`Next`; only the SBE accessor is `next_slot()`/`nextSlot()`/`NextSlot`.)
 4. Append a 4-byte little-endian **crc32c** over exactly the SBE message bytes (steps 1–3). `snapshot_bytes` = SBE length + 4.
 
 Restore (fresh book): read header → clear ladder, allocate pool; for each `orders` entry place `pool[slot]` and `idmap.put(orderId, slot)`; for each `levels` entry set `lane[levelTick] = {head,tail,qtyTotal,count}`; set `hwm/bestBid/bestAsk` from header; **verify crc32c** (mismatch ⇒ error). The id-map is the only structure rebuilt; ladder linkage and pool come straight off the wire.
@@ -190,12 +190,12 @@ Lives at `rust/smr-collections/schema/book_snapshot.xml` (canonical) and is copi
     <field name="bestAsk"  id="7" type="int32"/>
 
     <group name="levels" id="10" dimensionType="groupSizeEncoding">
-      <field name="side"      id="11" type="Side"/>
-      <field name="levelTick" id="12" type="uint32"/>
-      <field name="qtyTotal"  id="13" type="int64"/>
-      <field name="count"     id="14" type="uint32"/>
-      <field name="head"      id="15" type="uint32"/>
-      <field name="tail"      id="16" type="uint32"/>
+      <field name="side"       id="11" type="Side"/>
+      <field name="levelTick"  id="12" type="uint32"/>
+      <field name="qtyTotal"   id="13" type="int64"/>
+      <field name="orderCount" id="14" type="uint32"/>
+      <field name="head"       id="15" type="uint32"/>
+      <field name="tail"       id="16" type="uint32"/>
     </group>
 
     <group name="orders" id="20" dimensionType="groupSizeEncoding">
@@ -205,8 +205,8 @@ Lives at `rust/smr-collections/schema/book_snapshot.xml` (canonical) and is copi
       <field name="qty"     id="24" type="int64"/>
       <field name="filled"  id="25" type="int64"/>
       <field name="side"    id="26" type="Side"/>
-      <field name="next"    id="27" type="uint32"/>
-      <field name="prev"    id="28" type="uint32"/>
+      <field name="nextSlot" id="27" type="uint32"/>
+      <field name="prev"     id="28" type="uint32"/>
     </group>
   </sbe:message>
 </sbe:messageSchema>
@@ -828,7 +828,7 @@ pub fn encode(book: &Book, buf: &mut [u8]) -> usize {
         let mut enc = header.parent().expect("header parent");
         enc.price_min(book.price_min);
         enc.tick_size(book.tick);
-        enc.n_levels(book.n_levels);
+        enc.nl_evels(book.n_levels); // NB: SBE Rust generator emits `nl_evels` for schema field `nLevels`
         enc.capacity(book.pool.len() as u32);
         enc.hwm(book.hwm);
         enc.best_bid(book.best_bid);
@@ -844,7 +844,7 @@ pub fn encode(book: &Book, buf: &mut [u8]) -> usize {
                 lg.side(side_enum(side));
                 lg.level_tick(t as u32);
                 lg.qty_total(lvl.qty_total);
-                lg.count(lvl.count);
+                lg.order_count(lvl.count); // SBE field is `orderCount` (see Appendix B); struct field stays `count`
                 lg.head(lvl.head);
                 lg.tail(lvl.tail);
             }
@@ -861,7 +861,7 @@ pub fn encode(book: &Book, buf: &mut [u8]) -> usize {
             og.qty(o.qty);
             og.filled(o.filled);
             og.side(side_enum(o.side));
-            og.next(o.next);
+            og.next_slot(o.next); // SBE field `nextSlot` (Java Iterator.next() collision); struct field stays `next`
             og.prev(o.prev);
         }
         og.get_limit()
@@ -886,7 +886,7 @@ pub fn restore(bytes: &[u8], cfg: &SmrConfig) -> Result<Book, String> {
     let dec = BookSnapshotDecoder::default().header(header, 0);
     book.price_min = dec.price_min();
     book.tick = dec.tick_size();
-    book.n_levels = dec.n_levels();
+    book.n_levels = dec.nl_evels(); // NB: SBE Rust generator emits `nl_evels` for schema field `nLevels`
     book.hwm = dec.hwm();
     book.best_bid = dec.best_bid();
     book.best_ask = dec.best_ask();
@@ -897,7 +897,7 @@ pub fn restore(bytes: &[u8], cfg: &SmrConfig) -> Result<Book, String> {
         lg.advance().expect("advance").expect("level present");
         let side = side_u8(lg.side());
         let t = lg.level_tick() as usize;
-        let lvl = PriceLevel { head: lg.head(), tail: lg.tail(), qty_total: lg.qty_total(), count: lg.count() };
+        let lvl = PriceLevel { head: lg.head(), tail: lg.tail(), qty_total: lg.qty_total(), count: lg.order_count() };
         if side == 0 { book.bids[t] = lvl } else { book.asks[t] = lvl }
     }
     let dec = lg.parent().expect("levels parent");
@@ -912,7 +912,7 @@ pub fn restore(bytes: &[u8], cfg: &SmrConfig) -> Result<Book, String> {
             price: og.price(),
             qty: og.qty(),
             filled: og.filled(),
-            next: og.next(),
+            next: og.next_slot(),
             prev: og.prev(),
             side: side_u8(og.side()),
         };
@@ -1734,7 +1734,7 @@ func (s *Snapshotter) Encode(b *Book) []byte {
 			}
 			msg.Levels = append(msg.Levels, booksnap.BookSnapshotLevels{
 				Side: sideEnum(uint8(side)), LevelTick: uint32(t),
-				QtyTotal: lvl.QtyTotal, Count: lvl.Count, Head: lvl.Head, Tail: lvl.Tail,
+				QtyTotal: lvl.QtyTotal, OrderCount: lvl.Count, Head: lvl.Head, Tail: lvl.Tail,
 			})
 		}
 	}
@@ -1743,7 +1743,7 @@ func (s *Snapshotter) Encode(b *Book) []byte {
 		o := b.Pool[slot]
 		msg.Orders = append(msg.Orders, booksnap.BookSnapshotOrders{
 			Slot: slot, OrderId: o.OrderID, Price: o.Price, Qty: o.Qty, Filled: o.Filled,
-			Side: sideEnum(o.Side), Next: o.Next, Prev: o.Prev,
+			Side: sideEnum(o.Side), NextSlot: o.Next, Prev: o.Prev,
 		})
 	}
 
@@ -1773,11 +1773,13 @@ func Restore(data []byte, cfg bench.SmrConfig) (*Book, error) {
 	}
 	r := bytes.NewReader(data[:sbeLen])
 	m := booksnap.NewSbeGoMarshaller()
+	var msg booksnap.BookSnapshot
 	var hdr booksnap.MessageHeader
-	if err := hdr.Decode(m, r, hdr.SbeSchemaVersion()); err != nil {
+	// booksnap.MessageHeader has no SbeSchemaVersion(); all header fields are
+	// sinceVersion 0, so any in-range actingVersion works — use the message's.
+	if err := hdr.Decode(m, r, msg.SbeSchemaVersion()); err != nil {
 		return nil, err
 	}
-	var msg booksnap.BookSnapshot
 	if err := msg.Decode(m, r, hdr.Version, hdr.BlockLength, false); err != nil {
 		return nil, err
 	}
@@ -1795,13 +1797,13 @@ func Restore(data []byte, cfg bench.SmrConfig) (*Book, error) {
 		if sideU8(lv.Side) == 1 {
 			lane = b.Asks
 		}
-		lane[lv.LevelTick] = Level{Head: lv.Head, Tail: lv.Tail, QtyTotal: lv.QtyTotal, Count: lv.Count}
+		lane[lv.LevelTick] = Level{Head: lv.Head, Tail: lv.Tail, QtyTotal: lv.QtyTotal, Count: lv.OrderCount}
 	}
 	for i := range msg.Orders {
 		o := &msg.Orders[i]
 		b.Pool[o.Slot] = Order{
 			OrderID: o.OrderId, Price: o.Price, Qty: o.Qty, Filled: o.Filled,
-			Next: o.Next, Prev: o.Prev, Side: sideU8(o.Side),
+			Next: o.NextSlot, Prev: o.Prev, Side: sideU8(o.Side),
 		}
 	}
 	b.rebuildIDs()
@@ -2596,7 +2598,7 @@ public final class Snapshotter {
                 lg.side(sideEnum(sides[s]));
                 lg.levelTick(u32(t));
                 lg.qtyTotal(lvl.qtyTotal);
-                lg.count(u32(lvl.count));
+                lg.orderCount(u32(lvl.count)); // SBE field `orderCount` (see Appendix B); struct field stays `count`
                 lg.head(u32(lvl.head));
                 lg.tail(u32(lvl.tail));
             }
@@ -2612,7 +2614,7 @@ public final class Snapshotter {
             og.qty(o.qty);
             og.filled(o.filled);
             og.side(sideEnum(o.side));
-            og.next(u32(o.next));
+            og.nextSlot(u32(o.next)); // SBE field `nextSlot` (Iterator.next() collision); struct field stays `next`
             og.prev(u32(o.prev));
         }
 
@@ -2665,7 +2667,7 @@ public final class Snapshotter {
             int t = (int) levels.levelTick();
             Level lvl = (side == 0 ? b.bids : b.asks)[t];
             lvl.qtyTotal = levels.qtyTotal();
-            lvl.count = (int) levels.count();
+            lvl.count = (int) levels.orderCount();
             lvl.head = (int) levels.head();
             lvl.tail = (int) levels.tail();
         }
@@ -2680,7 +2682,7 @@ public final class Snapshotter {
             o.qty = orders.qty();
             o.filled = orders.filled();
             o.side = sideByte(orders.side());
-            o.next = (int) orders.next();
+            o.next = (int) orders.nextSlot();
             o.prev = (int) orders.prev();
         }
         b.rebuildIds();

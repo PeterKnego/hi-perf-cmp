@@ -1,0 +1,8 @@
+[package]
+name = "booksnap-codec"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "booksnap"
+path = "src/lib.rs"

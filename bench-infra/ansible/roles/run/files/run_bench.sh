@@ -26,7 +26,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 <rust|go|java> <network-rtt|filesystem-write|thread-handoff|serialization> <experiment> <loopback|server|client>" >&2
+  echo "usage: $0 <rust|go|java> <network-rtt|filesystem-write|thread-handoff|serialization|smr-collections> <experiment> <loopback|server|client>" >&2
   exit 2
 }
 
@@ -39,7 +39,7 @@ MODE="$4"
 SRC_DIR="${SRC_DIR:?SRC_DIR must point at the synced repo root}"
 
 case "$FOCUS_AREA" in
-  network-rtt|filesystem-write|thread-handoff|serialization) ;;
+  network-rtt|filesystem-write|thread-handoff|serialization|smr-collections) ;;
   *) echo "unknown focus_area: $FOCUS_AREA" >&2; usage ;;
 esac
 
@@ -69,6 +69,15 @@ export FSW_ENTRY_BYTES="${FSW_ENTRY_BYTES:-256}"
 export FSW_WARMUP="${FSW_WARMUP:-5000}"
 export FSW_ITERATIONS="${FSW_ITERATIONS:-50000}"
 export FSW_BATCH="${FSW_BATCH:-32}"
+
+# Export the smr-collections contract. Identical across languages.
+export SMRC_CAP="${SMRC_CAP:-262144}"
+export SMRC_LEVELS="${SMRC_LEVELS:-1024}"
+export SMRC_TICK="${SMRC_TICK:-1}"
+export SMRC_PRICE_MIN="${SMRC_PRICE_MIN:-0}"
+export SMRC_STEADY="${SMRC_STEADY:-60000}"
+export SMRC_WARMUP="${SMRC_WARMUP:-10000}"
+export SMRC_ITERS="${SMRC_ITERS:-100000}"
 
 case "$LANGUAGE" in
   rust)

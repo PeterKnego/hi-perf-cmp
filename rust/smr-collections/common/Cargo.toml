@@ -1,0 +1,13 @@
+[package]
+name = "smr-collections-common"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "smr_collections_common"
+path = "src/lib.rs"
+
+[dependencies]
+bench-common = { path = "../../bench-common" }
+booksnap = { package = "booksnap-codec", path = "../booksnap-sbe/generated/booksnap" }
+crc32c = { workspace = true }

@@ -21,6 +21,11 @@ members = [
     "serialization/aeron_sbe",
     "serialization/aeron_sbe/generated/journal",
     "serialization/conformance",
+    "smr-collections/common",
+    "smr-collections/booksnap-sbe/generated/booksnap",
+    "smr-collections/insert",
+    "smr-collections/update",
+    "smr-collections/snapshot",
 ]
 
 [workspace.package]
@@ -41,6 +46,7 @@ serde = { version = "1", features = ["derive"] }
 bincode = { version = "2", features = ["serde"] }
 zerocopy = { version = "0.8", features = ["derive"] }
 sbe_gen = "0.7.3"
+crc32c = "0.6"
 
 [profile.release]
 lto = "thin"

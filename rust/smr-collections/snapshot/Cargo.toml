@@ -1,0 +1,12 @@
+[package]
+name = "smr-collections-snapshot"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "smr-collections-snapshot"
+path = "src/main.rs"
+
+[dependencies]
+smr-collections-common = { path = "../common" }
+bench-common = { path = "../../bench-common" }
