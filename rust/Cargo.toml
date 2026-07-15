@@ -23,6 +23,9 @@ members = [
     "serialization/conformance",
     "smr-collections/common",
     "smr-collections/booksnap-sbe/generated/booksnap",
+    "smr-collections/insert",
+    "smr-collections/update",
+    "smr-collections/snapshot",
 ]
 
 [workspace.package]

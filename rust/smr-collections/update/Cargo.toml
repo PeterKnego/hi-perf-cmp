@@ -1,0 +1,12 @@
+[package]
+name = "smr-collections-update"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "smr-collections-update"
+path = "src/main.rs"
+
+[dependencies]
+smr-collections-common = { path = "../common" }
+bench-common = { path = "../../bench-common" }

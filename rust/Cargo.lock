@@ -1261,6 +1261,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "smr-collections-insert"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+]
+
+[[package]]
+name = "smr-collections-snapshot"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+]
+
+[[package]]
+name = "smr-collections-update"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+]
+
+[[package]]
 name = "socket2"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
