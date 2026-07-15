@@ -47,6 +47,10 @@ func (m *idMap) put(k int64, v uint32) {
 func (m *idMap) get(k int64) uint32 {
 	i := (uint64(k) * 0x9E3779B97F4A7C15) & m.mask
 	for m.keys[i] != k {
+		if m.keys[i] == 0 {
+			// empty slot marker (order IDs are always >= 1): key absent.
+			return NIL
+		}
 		i = (i + 1) & m.mask
 	}
 	return m.vals[i]

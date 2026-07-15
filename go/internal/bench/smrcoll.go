@@ -47,7 +47,10 @@ func LoadSmrConfig() (SmrConfig, error) {
 	if err != nil {
 		return SmrConfig{}, err
 	}
-	priceMin := signedEnv("SMRC_PRICE_MIN", 0)
+	priceMin, err := signedEnv("SMRC_PRICE_MIN", 0)
+	if err != nil {
+		return SmrConfig{}, err
+	}
 
 	cfg := SmrConfig{
 		Cap: cap_, Levels: uint32(levels), Tick: int64(tick), PriceMin: priceMin,
@@ -65,17 +68,20 @@ func LoadSmrConfig() (SmrConfig, error) {
 	return cfg, nil
 }
 
-// signedEnv parses an int64 env var allowing zero/negative; returns def if unset.
-func signedEnv(name string, def int64) int64 {
+// signedEnv parses an int64 env var allowing zero/negative; returns def if
+// unset, hard-errors on a malformed value (consistent with Rust's parse_i64
+// and Java's readSignedLong — priceMin is written to the snapshot wire, so a
+// silently-defaulted value would break cross-language byte-identity).
+func signedEnv(name string, def int64) (int64, error) {
 	s := os.Getenv(name)
 	if s == "" {
-		return def
+		return def, nil
 	}
 	v, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return def
+		return 0, fmt.Errorf("%s: %q is not a valid integer", name, s)
 	}
-	return v
+	return v, nil
 }
 
 // MeasureSmr runs warmup discarded ops, then times iters ops (ns) into a
