@@ -1773,11 +1773,13 @@ func Restore(data []byte, cfg bench.SmrConfig) (*Book, error) {
 	}
 	r := bytes.NewReader(data[:sbeLen])
 	m := booksnap.NewSbeGoMarshaller()
+	var msg booksnap.BookSnapshot
 	var hdr booksnap.MessageHeader
-	if err := hdr.Decode(m, r, hdr.SbeSchemaVersion()); err != nil {
+	// booksnap.MessageHeader has no SbeSchemaVersion(); all header fields are
+	// sinceVersion 0, so any in-range actingVersion works — use the message's.
+	if err := hdr.Decode(m, r, msg.SbeSchemaVersion()); err != nil {
 		return nil, err
 	}
-	var msg booksnap.BookSnapshot
 	if err := msg.Decode(m, r, hdr.Version, hdr.BlockLength, false); err != nil {
 		return nil, err
 	}
