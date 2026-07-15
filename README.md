@@ -9,7 +9,7 @@ identical conditions, so the numbers are apples-to-apples.
 **Direction:** the focus areas are the performance-critical paths of
 **state-machine-replication (SMR)** systems (Raft/Paxos-style replicated logs).
 The goal is to choose and optimize the code for each path. Work is organized as a
-grid of **experiment × language** within five focus areas:
+grid of **experiment × language** within six focus areas:
 
 - **network-rtt** — minimize RTT for leader→follower→leader communication when
   replicating log entries. Experiments: `tcp`, `udp`, `quic`.
@@ -18,6 +18,9 @@ grid of **experiment × language** within five focus areas:
   sleep/wakeup _(stub)_.
 - **serialization** — codec choice for the command-log record on the hot path.
   Experiments: `sbe_gen`, `aeron_sbe`, `bincode` _(Rust only)_.
+- **smr-collections** — insert/update/snapshot cost of a fixed-capacity
+  limit-order-book state store; Agrona (Java) vs hand-rolled open-addressing
+  (Rust/Go); SBE snapshot shared across all three.
 - **shared-memory-ipc** — shared-memory inter-process communication _(planned)_.
 
 ## Features

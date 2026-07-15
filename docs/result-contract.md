@@ -16,7 +16,7 @@ see `journal/README.md`.
 | field        | type    | required | meaning                                                       |
 |--------------|---------|----------|---------------------------------------------------------------|
 | `language`   | string  | yes      | `rust` \| `java` \| `go`                                      |
-| `focus_area` | string  | yes      | `network-rtt` \| `filesystem-write` \| `thread-handoff` \| `serialization` |
+| `focus_area` | string  | yes      | `network-rtt` \| `filesystem-write` \| `thread-handoff` \| `serialization` \| `smr-collections` |
 | `experiment` | string  | yes      | the variant under the focus area, e.g. `tcp` \| `udp` \| `quic`; `placeholder` for stubs |
 | `metric`     | string  | yes      | what was measured, e.g. `rtt_p50`, `write_throughput`         |
 | `value`      | number  | yes      | the measured value                                            |
@@ -56,8 +56,12 @@ experiments (each a runnable artifact named `thread-handoff-<experiment>`):
 `handoff_throughput` (ops_per_sec). `serialization` is implemented for the
 `sbe_gen`, `aeron_sbe`, and `bincode` experiments (Rust only, single-host):
 each emits `encode_{p50,p99,mean}` and `decode_{p50,p99,mean}` (ns) plus
-`encoded_bytes`/`decode_alloc_bytes` (bytes). `shared-memory-ipc` is not yet
-scaffolded.
+`encoded_bytes`/`decode_alloc_bytes` (bytes). `smr-collections` is implemented
+for the `insert`, `update`, and `snapshot` experiments in all three languages
+(single-host): `insert`/`update` emit `<op>_{p50,p99,mean}` (ns); `snapshot`
+emits `snapshot_{p50,p99,mean}` + `restore_{p50,p99,mean}` (ns),
+`snapshot_bytes` (bytes), and `snapshot_throughput` (bytes_per_sec).
+`shared-memory-ipc` is not yet scaffolded.
 
 ## Reference emitters
 
