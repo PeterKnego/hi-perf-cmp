@@ -24,6 +24,9 @@ experiments:
   - { focus_area: serialization,    experiment: sbe_gen,     kind: local, languages: [rust] }
   - { focus_area: serialization,    experiment: aeron_sbe,   kind: local, languages: [rust] }
   - { focus_area: serialization,    experiment: bincode,     kind: local, languages: [rust] }
+  - { focus_area: smr-collections,  experiment: insert,      kind: local }
+  - { focus_area: smr-collections,  experiment: update,      kind: local }
+  - { focus_area: smr-collections,  experiment: snapshot,    kind: local }
 
 # --- network-rtt cross-host params (exported into every client run so all three
 #     languages use identical parameters for a fair comparison) ---
@@ -54,6 +57,15 @@ ser_warmup: 1000
 ser_iterations: 100000
 ser_entries: 4
 ser_cmd_bytes: 78
+
+# smr-collections params (single-host, node0). Identical across languages.
+smrc_cap: 262144
+smrc_levels: 1024
+smrc_tick: 1
+smrc_price_min: 0
+smrc_steady: 60000
+smrc_warmup: 10000
+smrc_iters: 100000
 
 # --- Toolchain versions ---
 jdk_version: "21"
