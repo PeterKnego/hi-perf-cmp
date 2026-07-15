@@ -37,7 +37,8 @@ mod tests {
         let mut b = SplitMix::new(SEED);
         let first = a.next();
         assert_eq!(first, b.next(), "two instances agree");
-        // Regression pin: recompute by hand if this ever changes.
-        assert_ne!(first, 0);
+        // Golden value: pins the exact splitmix64 output for SEED so a subtly
+        // wrong shift/multiply order fails here (cross-language determinism pin).
+        assert_eq!(first, 0x161922c645ce50e8, "splitmix64 golden first output");
     }
 }
