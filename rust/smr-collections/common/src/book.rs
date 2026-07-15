@@ -42,7 +42,7 @@ impl PriceLevel {
     };
 }
 
-/// A no-op hasher for `u64` keys (fixed hashing — no SipHash/RandomState).
+/// A fixed-integer-key no-op hasher (fixed hashing — no SipHash/RandomState).
 #[derive(Default)]
 pub struct NoHash(u64);
 impl Hasher for NoHash {
@@ -50,7 +50,7 @@ impl Hasher for NoHash {
         self.0
     }
     fn write(&mut self, _: &[u8]) {
-        unreachable!("only write_u64 is used")
+        unreachable!("only write_i64 is used")
     }
     fn write_u64(&mut self, v: u64) {
         self.0 = v;
@@ -270,7 +270,7 @@ mod tests {
     fn level_qty_equals_sum_remaining_invariant() {
         let mut b = Book::new(&cfg());
         for i in 0..50i64 {
-            b.insert(i + 1, (i % 16) as i64, 10, (i % 2) as u8);
+            b.insert(i + 1, i % 16, 10, (i % 2) as u8);
         }
         for i in 0..50i64 {
             b.update(i + 1, 3);
@@ -278,7 +278,7 @@ mod tests {
         // recompute expected per level
         let mut expect = std::collections::HashMap::new();
         for i in 0..50i64 {
-            let t = (i % 16) as i64;
+            let t = i % 16;
             let side = (i % 2) as u8;
             *expect.entry((side, t)).or_insert(0i64) += 10 - 3;
         }
