@@ -3,4 +3,4 @@
 
 pub mod book;
 pub mod rng;
-// pub mod snapshot;  // enabled in Task R3
+pub mod snapshot;
