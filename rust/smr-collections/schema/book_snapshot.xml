@@ -44,8 +44,8 @@
       <field name="qty"     id="24" type="int64"/>
       <field name="filled"  id="25" type="int64"/>
       <field name="side"    id="26" type="Side"/>
-      <field name="next"    id="27" type="uint32"/>
-      <field name="prev"    id="28" type="uint32"/>
+      <field name="nextSlot" id="27" type="uint32"/>
+      <field name="prev"     id="28" type="uint32"/>
     </group>
   </sbe:message>
 </sbe:messageSchema>

@@ -29,14 +29,14 @@ type BookSnapshotLevels struct {
 	Tail       uint32
 }
 type BookSnapshotOrders struct {
-	Slot    uint32
-	OrderId int64
-	Price   int64
-	Qty     int64
-	Filled  int64
-	Side    SideEnum
-	Next    uint32
-	Prev    uint32
+	Slot     uint32
+	OrderId  int64
+	Price    int64
+	Qty      int64
+	Filled   int64
+	Side     SideEnum
+	NextSlot uint32
+	Prev     uint32
 }
 
 func (b *BookSnapshot) Encode(_m *SbeGoMarshaller, _w io.Writer, doRangeCheck bool) error {
@@ -373,7 +373,7 @@ func (b *BookSnapshotOrders) Encode(_m *SbeGoMarshaller, _w io.Writer) error {
 	if err := b.Side.Encode(_m, _w); err != nil {
 		return err
 	}
-	if err := _m.WriteUint32(_w, b.Next); err != nil {
+	if err := _m.WriteUint32(_w, b.NextSlot); err != nil {
 		return err
 	}
 	if err := _m.WriteUint32(_w, b.Prev); err != nil {
@@ -423,10 +423,10 @@ func (b *BookSnapshotOrders) Decode(_m *SbeGoMarshaller, _r io.Reader, actingVer
 			return err
 		}
 	}
-	if !b.NextInActingVersion(actingVersion) {
-		b.Next = b.NextNullValue()
+	if !b.NextSlotInActingVersion(actingVersion) {
+		b.NextSlot = b.NextSlotNullValue()
 	} else {
-		if err := _m.ReadUint32(_r, &b.Next); err != nil {
+		if err := _m.ReadUint32(_r, &b.NextSlot); err != nil {
 			return err
 		}
 	}
@@ -472,9 +472,9 @@ func (b *BookSnapshotOrders) RangeCheck(actingVersion uint16, schemaVersion uint
 	if err := b.Side.RangeCheck(actingVersion, schemaVersion); err != nil {
 		return err
 	}
-	if b.NextInActingVersion(actingVersion) {
-		if b.Next < b.NextMinValue() || b.Next > b.NextMaxValue() {
-			return fmt.Errorf("Range check failed on b.Next (%v < %v > %v)", b.NextMinValue(), b.Next, b.NextMaxValue())
+	if b.NextSlotInActingVersion(actingVersion) {
+		if b.NextSlot < b.NextSlotMinValue() || b.NextSlot > b.NextSlotMaxValue() {
+			return fmt.Errorf("Range check failed on b.NextSlot (%v < %v > %v)", b.NextSlotMinValue(), b.NextSlot, b.NextSlotMaxValue())
 		}
 	}
 	if b.PrevInActingVersion(actingVersion) {
@@ -1287,23 +1287,23 @@ func (*BookSnapshotOrders) SideMetaAttribute(meta int) string {
 	return ""
 }
 
-func (*BookSnapshotOrders) NextId() uint16 {
+func (*BookSnapshotOrders) NextSlotId() uint16 {
 	return 27
 }
 
-func (*BookSnapshotOrders) NextSinceVersion() uint16 {
+func (*BookSnapshotOrders) NextSlotSinceVersion() uint16 {
 	return 0
 }
 
-func (b *BookSnapshotOrders) NextInActingVersion(actingVersion uint16) bool {
-	return actingVersion >= b.NextSinceVersion()
+func (b *BookSnapshotOrders) NextSlotInActingVersion(actingVersion uint16) bool {
+	return actingVersion >= b.NextSlotSinceVersion()
 }
 
-func (*BookSnapshotOrders) NextDeprecated() uint16 {
+func (*BookSnapshotOrders) NextSlotDeprecated() uint16 {
 	return 0
 }
 
-func (*BookSnapshotOrders) NextMetaAttribute(meta int) string {
+func (*BookSnapshotOrders) NextSlotMetaAttribute(meta int) string {
 	switch meta {
 	case 1:
 		return ""
@@ -1317,15 +1317,15 @@ func (*BookSnapshotOrders) NextMetaAttribute(meta int) string {
 	return ""
 }
 
-func (*BookSnapshotOrders) NextMinValue() uint32 {
+func (*BookSnapshotOrders) NextSlotMinValue() uint32 {
 	return 0
 }
 
-func (*BookSnapshotOrders) NextMaxValue() uint32 {
+func (*BookSnapshotOrders) NextSlotMaxValue() uint32 {
 	return math.MaxUint32 - 1
 }
 
-func (*BookSnapshotOrders) NextNullValue() uint32 {
+func (*BookSnapshotOrders) NextSlotNullValue() uint32 {
 	return math.MaxUint32
 }
 

@@ -69,7 +69,8 @@ func (s *Snapshotter) Encode(b *Book) []byte {
 		o := b.Pool[slot]
 		msg.Orders = append(msg.Orders, booksnap.BookSnapshotOrders{
 			Slot: slot, OrderId: o.OrderID, Price: o.Price, Qty: o.Qty, Filled: o.Filled,
-			Side: sideEnum(o.Side), Next: o.Next, Prev: o.Prev,
+			// SBE field is NextSlot (Java Iterator.Next collision avoided); struct field stays Next.
+			Side: sideEnum(o.Side), NextSlot: o.Next, Prev: o.Prev,
 		})
 	}
 
@@ -127,7 +128,7 @@ func Restore(data []byte, cfg bench.SmrConfig) (*Book, error) {
 		o := &msg.Orders[i]
 		b.Pool[o.Slot] = Order{
 			OrderID: o.OrderId, Price: o.Price, Qty: o.Qty, Filled: o.Filled,
-			Next: o.Next, Prev: o.Prev, Side: sideU8(o.Side),
+			Next: o.NextSlot, Prev: o.Prev, Side: sideU8(o.Side),
 		}
 	}
 	b.rebuildIDs()

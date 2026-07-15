@@ -75,7 +75,7 @@ pub fn encode(book: &Book, buf: &mut [u8]) -> usize {
             og.qty(o.qty);
             og.filled(o.filled);
             og.side(side_enum(o.side));
-            og.next(o.next);
+            og.next_slot(o.next); // SBE field is `nextSlot` (Java Iterator.next() collision); struct field stays `next`
             og.prev(o.prev);
         }
         og.get_limit()
@@ -135,7 +135,7 @@ pub fn restore(bytes: &[u8], cfg: &SmrConfig) -> Result<Book, String> {
             price: og.price(),
             qty: og.qty(),
             filled: og.filled(),
-            next: og.next(),
+            next: og.next_slot(),
             prev: og.prev(),
             side: side_u8(og.side()),
         };

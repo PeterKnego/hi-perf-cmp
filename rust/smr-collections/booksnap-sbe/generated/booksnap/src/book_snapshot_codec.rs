@@ -551,7 +551,7 @@ pub mod encoder {
             self
         }
 
-        /// primitive field 'next'
+        /// primitive field 'nextSlot'
         /// - min value: 0
         /// - max value: 4294967294
         /// - null value: 0xffffffff_u32
@@ -561,7 +561,7 @@ pub mod encoder {
         /// - encodedLength: 4
         /// - version: 0
         #[inline]
-        pub fn next(&mut self, value: u32) -> &mut Self {
+        pub fn next_slot(&mut self, value: u32) -> &mut Self {
             let offset = self.offset + 37;
             self.get_buf_mut().put_u32_at(offset, value);
             self
@@ -983,7 +983,7 @@ pub mod decoder {
 
         /// primitive field - 'REQUIRED'
         #[inline]
-        pub fn next(&self) -> u32 {
+        pub fn next_slot(&self) -> u32 {
             self.get_buf().get_u32_at(self.offset + 37)
         }
 
