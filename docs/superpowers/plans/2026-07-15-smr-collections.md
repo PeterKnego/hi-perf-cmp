@@ -828,7 +828,7 @@ pub fn encode(book: &Book, buf: &mut [u8]) -> usize {
         let mut enc = header.parent().expect("header parent");
         enc.price_min(book.price_min);
         enc.tick_size(book.tick);
-        enc.n_levels(book.n_levels);
+        enc.nl_evels(book.n_levels); // NB: SBE Rust generator emits `nl_evels` for schema field `nLevels`
         enc.capacity(book.pool.len() as u32);
         enc.hwm(book.hwm);
         enc.best_bid(book.best_bid);
@@ -886,7 +886,7 @@ pub fn restore(bytes: &[u8], cfg: &SmrConfig) -> Result<Book, String> {
     let dec = BookSnapshotDecoder::default().header(header, 0);
     book.price_min = dec.price_min();
     book.tick = dec.tick_size();
-    book.n_levels = dec.n_levels();
+    book.n_levels = dec.nl_evels(); // NB: SBE Rust generator emits `nl_evels` for schema field `nLevels`
     book.hwm = dec.hwm();
     book.best_bid = dec.best_bid();
     book.best_ask = dec.best_ask();
