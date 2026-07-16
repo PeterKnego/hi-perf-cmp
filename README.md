@@ -82,9 +82,10 @@ shared journal-record schema; Java is not planned for this focus area. `shared-m
 scaffolded in **Rust only** for `spsc` and `mpsc` (single-host, real cross-process
 IPC over a `/dev/shm` mapping); the Go and Java artifacts and the `bench-infra`
 matrix rows are still pending, so it is not yet a cross-language cell.
-`network-rtt`, `filesystem-write`, and `thread-handoff` have real AWS results —
-see [docs/RESULTS.md](docs/RESULTS.md); `serialization` is now wired into the
-`bench-infra` matrix but awaits its first AWS run.
+`network-rtt`, `filesystem-write`, `thread-handoff`, and the Rust `serialization`
+cells have real AWS results — see [docs/RESULTS.md](docs/RESULTS.md); the Go
+`bebop`/`protobuf` `serialization` cells are wired into the `bench-infra`
+matrix but await their first AWS run.
 
 ## Building & running
 
