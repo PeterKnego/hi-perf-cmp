@@ -53,8 +53,8 @@
     experiment: "{{ combo.1.experiment }}"
 
 # --- local experiments: run on node0 only ---
-# A row's optional `languages` key (e.g. serialization: Rust-only) restricts
-# the (language, experiment) product to that subset; rows without it run for
+# A row's optional `languages` key restricts which languages run it
+# (serialization rows are per-language: Rust or Go); rows without it run for
 # every entry in `languages` as before.
 - name: Run local experiments per language (node0 only)
   ansible.builtin.include_tasks: local.yml
