@@ -54,9 +54,10 @@ experiments (each a separate runnable artifact named `<focus_area>-<experiment>`
 experiments (each a runnable artifact named `thread-handoff-<experiment>`):
 `spin`/`condvar`/`channel` emit `handoff_rtt_{p50,p99,mean}` (ns), `ring` emits
 `handoff_throughput` (ops_per_sec). `serialization` is implemented for the
-`sbe_gen`, `aeron_sbe`, and `bincode` experiments (Rust only, single-host):
-each emits `encode_{p50,p99,mean}` and `decode_{p50,p99,mean}` (ns) plus
-`encoded_bytes`/`decode_alloc_bytes` (bytes). `smr-collections` is implemented
+`sbe_gen`, `aeron_sbe`, and `bincode` experiments in Rust, and the `bebop` and
+`protobuf` experiments in Go (single-host): each emits `encode_{p50,p99,mean}`
+and `decode_{p50,p99,mean}` (ns) plus `encoded_bytes`/`decode_alloc_bytes`
+(bytes). `smr-collections` is implemented
 for the `insert`, `update`, and `snapshot` experiments in all three languages
 (single-host): `insert`/`update` emit `<op>_{p50,p99,mean}` (ns); `snapshot`
 emits `snapshot_{p50,p99,mean}` + `restore_{p50,p99,mean}` (ns),

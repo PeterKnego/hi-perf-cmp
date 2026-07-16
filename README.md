@@ -17,7 +17,7 @@ grid of **experiment × language** within six focus areas:
 - **thread-handoff** — thread-to-thread data passing, including thread
   sleep/wakeup _(stub)_.
 - **serialization** — codec choice for the command-log record on the hot path.
-  Experiments: `sbe_gen`, `aeron_sbe`, `bincode` _(Rust only)_.
+  Experiments: `sbe_gen`, `aeron_sbe`, `bincode` (Rust); `bebop`, `protobuf` (Go).
 - **smr-collections** — insert/update/snapshot cost of a fixed-capacity
   limit-order-book state store; Agrona (Java) vs hand-rolled open-addressing
   (Rust/Go); SBE snapshot shared across all three.
@@ -76,9 +76,9 @@ aligns on `(focus_area, experiment, language, metric)`, and tracks them over tim
 see below). `filesystem-write` is implemented for `fsync`, `fdatasync`, `prealloc`,
 and `batch` (single-host, local NVMe). `thread-handoff` is implemented for `spin`,
 `condvar`, `channel`, and `ring` (single-host). `serialization` is implemented in
-**Rust only** for `sbe_gen`, `aeron_sbe`, and `bincode` (single-host, measuring
-encode/decode latency and decode allocation for one shared journal-record
-schema); Go and Java are not planned for this focus area. `shared-memory-ipc` is
+**Rust** (`sbe_gen`, `aeron_sbe`, `bincode`) and **Go** (`bebop`, `protobuf`) —
+single-host, measuring encode/decode latency and decode allocation for one
+shared journal-record schema; Java is not planned for this focus area. `shared-memory-ipc` is
 scaffolded in **Rust only** for `spsc` and `mpsc` (single-host, real cross-process
 IPC over a `/dev/shm` mapping); the Go and Java artifacts and the `bench-infra`
 matrix rows are still pending, so it is not yet a cross-language cell.

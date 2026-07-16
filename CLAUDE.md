@@ -20,10 +20,11 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 **Status:** `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (cross-host capable).
 `filesystem-write` is implemented for the `fsync`, `fdatasync`, `prealloc`, and `batch` experiments
 (single-host, local NVMe). `thread-handoff` is implemented for the `spin`, `condvar`, `channel`, and
-`ring` experiments (single-host). `serialization` is implemented in Rust only (three codecs —
-`sbe_gen` zerocopy SBE, `aeron_sbe` real-logic SBE-tool Rust output, `bincode` serde+bincode —
-single-host, measuring encode/decode latency + decode allocation); Go/Java are not planned for this
-focus area. `smr-collections` is implemented for the `insert`, `update`, and `snapshot` experiments
+`ring` experiments (single-host). `serialization` is implemented in Rust (`sbe_gen` zerocopy SBE,
+`aeron_sbe` real-logic SBE-tool Rust output, `bincode` serde+bincode) and Go (`bebop` via the
+200sc/bebop safe API, `protobuf` via the canonical google.golang.org/protobuf runtime), single-host,
+measuring encode/decode latency + decode allocation; Java is not planned for this focus area.
+`smr-collections` is implemented for the `insert`, `update`, and `snapshot` experiments
 across all three languages (single-host, fixed-capacity limit-order-book state store): Java uses
 Agrona (`Long2ObjectHashMap` + pooled orders), Rust/Go use a hand-rolled open-addressing id-map;
 the snapshot format is SBE (`book_snapshot.xml`), byte-identical across languages and verified by a
@@ -57,7 +58,7 @@ dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust only), `smr-collections-{insert,update,snapshot}`.
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust) and `serialization-{bebop,protobuf}` (Go), `smr-collections-{insert,update,snapshot}`.
 
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt + filesystem-write + thread-handoff experiments
@@ -66,9 +67,10 @@ cargo run --release -p network-rtt-tcp        # -p network-rtt-udp | -p filesyst
 cargo run --release -p serialization-bincode  # -p serialization-sbe_gen | -p serialization-aeron_sbe
 cargo run --release -p smr-collections-insert # -p smr-collections-update | -p smr-collections-snapshot
 
-# Go — single module: internal/bench + cmd/network-rtt-* + filesystem-write-* + thread-handoff-*
+# Go — single module: internal/bench + cmd/network-rtt-* + filesystem-write-* + thread-handoff-* + serialization-*
 cd go && go build ./... && go vet ./... && go test ./...
 go run ./cmd/network-rtt-tcp
+go run ./cmd/serialization-protobuf  # or ./cmd/serialization-bebop
 go run ./cmd/smr-collections-insert
 
 # Java — single Gradle build: :common + :network-rtt-* + :filesystem-write-* + :thread-handoff-*, JDK 21 toolchain

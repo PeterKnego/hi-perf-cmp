@@ -144,7 +144,9 @@ mixed block of fixed fields plus a repeating group of variable-length command
 payloads — across three Rust codecs: `sbe_gen` (zero-copy SBE via the
 `zerocopy` crate), `aeron_sbe` (the reference real-logic `sbe-tool` emitting
 Rust — the same codec Aeron itself uses), and `bincode` (serde + bincode v2,
-the ergonomic derive baseline). Rust-only, single host (node0). The harness
+the ergonomic derive baseline). Rust-only at measurement time (single host,
+node0) — the Go `bebop` and `protobuf` cells were added later and await their
+own AWS run; this table isn't updated until they have one. The harness
 encodes a stream of records into an in-memory journal then replays (decodes)
 them, timing each operation and — via a counting global allocator — reporting
 heap bytes allocated per decode. 100,000 measured iterations per codec.
