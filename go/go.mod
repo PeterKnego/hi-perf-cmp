@@ -5,6 +5,7 @@ go 1.22
 require (
 	github.com/200sc/bebop v0.6.2
 	github.com/quic-go/quic-go v0.48.2
+	google.golang.org/protobuf v1.36.6
 )
 
 require (

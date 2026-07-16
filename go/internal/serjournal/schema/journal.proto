@@ -1,0 +1,28 @@
+// The serialization focus area's JournalRecord (see the 2026-07-16 design
+// spec). sfixed64/sfixed32 by design: the ids/timestamps are full-width
+// mixed bit patterns, where default varints would encode ~10 bytes/field.
+syntax = "proto3";
+package hiperf.journal;
+
+option go_package = "github.com/peterknego/hi-perf-cmp/go/internal/serjournal/journalpb";
+
+message Entry {
+  sfixed64 entry_term_id = 1;
+  sfixed64 entry_index = 2;
+  sfixed64 entry_timestamp = 3;
+  sfixed32 command_key = 4;
+  bytes command = 5;
+}
+
+message JournalRecord {
+  sfixed64 leadership_term_id = 1;
+  sfixed64 log_position = 2;
+  sfixed64 timestamp = 3;
+  sfixed64 cluster_session_id = 4;
+  sfixed64 correlation_id = 5;
+  sfixed32 leader_member_id = 6;
+  sfixed32 service_id = 7;
+  uint32 event_type = 8;
+  uint32 flags = 9;
+  repeated Entry entries = 10;
+}
