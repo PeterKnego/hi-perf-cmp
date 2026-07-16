@@ -1,0 +1,24 @@
+// The serialization focus area's JournalRecord (see the 2026-07-16 design
+// spec). Bebop structs are fixed-layout; `flags` is a reserved bebop
+// keyword, so the field is named recordFlags.
+
+struct Entry {
+    int64 entryTermId;
+    int64 entryIndex;
+    int64 entryTimestamp;
+    int32 commandKey;
+    byte[] command;
+}
+
+struct JournalRecord {
+    int64 leadershipTermId;
+    int64 logPosition;
+    int64 timestamp;
+    int64 clusterSessionId;
+    int64 correlationId;
+    int32 leaderMemberId;
+    int32 serviceId;
+    byte eventType;
+    byte recordFlags;
+    Entry[] entries;
+}

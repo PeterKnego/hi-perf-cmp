@@ -2,7 +2,10 @@ module github.com/peterknego/hi-perf-cmp/go
 
 go 1.22
 
-require github.com/quic-go/quic-go v0.48.2
+require (
+	github.com/200sc/bebop v0.6.2
+	github.com/quic-go/quic-go v0.48.2
+)
 
 require (
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
