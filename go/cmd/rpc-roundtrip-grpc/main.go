@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/peterknego/hi-perf-cmp/go/internal/bench"
 	"github.com/peterknego/hi-perf-cmp/go/internal/rpcpayload"
@@ -94,7 +95,9 @@ func measureAndEmit(addr string, cfg bench.RpcConfig) {
 	ctx := context.Background()
 
 	roundTrip := func() error {
-		resp, err := client.Roundtrip(ctx, req)
+		callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		resp, err := client.Roundtrip(callCtx, req)
+		cancel()
 		if err != nil {
 			return fmt.Errorf("roundtrip: %w", err)
 		}
