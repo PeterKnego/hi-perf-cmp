@@ -1,0 +1,17 @@
+// rpc-roundtrip flat payload (see the 2026-07-17 design spec). `flags` is a
+// reserved bebop keyword, so the field is recordFlags.
+struct RpcPayload {
+    uint32 hop;
+    uint64 seq;
+    int64 timestamp;
+    uint64 orderId;
+    int64 price;
+    int64 qty;
+    uint32 symbolId;
+    uint64 accountId;
+    uint16 venueId;
+    byte side;
+    byte recordFlags;
+    byte[] signature;
+    byte[] context;
+}
