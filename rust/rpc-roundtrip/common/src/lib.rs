@@ -161,10 +161,17 @@ fn parse_mode(name: &str) -> Result<Mode, String> {
 fn parse_port(name: &str, default: u16) -> Result<u16, String> {
     match env::var(name) {
         Err(_) => Ok(default),
-        Ok(v) => v
-            .trim()
-            .parse::<u16>()
-            .map_err(|_| format!("{name}: expected a u16 port, got {v:?}")),
+        Ok(v) => {
+            let p = v
+                .trim()
+                .parse::<u16>()
+                .map_err(|_| format!("{name}: expected a u16 port, got {v:?}"))?;
+            if p == 0 {
+                Err(format!("{name}: must be a non-zero port, got 0"))
+            } else {
+                Ok(p)
+            }
+        }
     }
 }
 
