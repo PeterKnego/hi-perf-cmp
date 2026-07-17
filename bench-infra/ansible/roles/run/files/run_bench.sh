@@ -17,16 +17,24 @@
 #   RTT_QUIC_PORT     QUIC echo port          (default 9102)
 #   RTT_PAYLOAD_BYTES / RTT_WARMUP / RTT_ITERATIONS  measurement params
 #
+# rpc-roundtrip consumes the RPC_* contract (cross-host, like RTT_*):
+#   RPC_MODE          loopback (default) | server | client
+#   RPC_HOST          responder address (client mode)
+#   RPC_UDP_PORT      sbe_udp datagram port   (default 9200)
+#   RPC_TCP_PORT      bebop_tcp port          (default 9201)
+#   RPC_GRPC_PORT     grpc HTTP/2 port        (default 9202)
+#   RPC_WARMUP / RPC_ITERATIONS  measurement params
+#
 #   SRC_DIR           path to the synced repo root (required)
 #   JAVA_HOME         JDK home (required for java)
 #
 # filesystem-write consumes the FSW_* vars (below); thread-handoff and
-# serialization ignore RTT_*/FSW_* (their own SER_*/TH_* vars are exported
-# by the caller, not defaulted here).
+# serialization ignore RTT_*/RPC_*/FSW_* (their own SER_*/TH_* vars are
+# exported by the caller, not defaulted here).
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 <rust|go|java> <network-rtt|filesystem-write|thread-handoff|serialization|smr-collections> <experiment> <loopback|server|client>" >&2
+  echo "usage: $0 <rust|go|java> <network-rtt|filesystem-write|thread-handoff|serialization|smr-collections|rpc-roundtrip> <experiment> <loopback|server|client>" >&2
   exit 2
 }
 
@@ -39,7 +47,7 @@ MODE="$4"
 SRC_DIR="${SRC_DIR:?SRC_DIR must point at the synced repo root}"
 
 case "$FOCUS_AREA" in
-  network-rtt|filesystem-write|thread-handoff|serialization|smr-collections) ;;
+  network-rtt|filesystem-write|thread-handoff|serialization|smr-collections|rpc-roundtrip) ;;
   *) echo "unknown focus_area: $FOCUS_AREA" >&2; usage ;;
 esac
 
@@ -60,6 +68,15 @@ export RTT_QUIC_PORT="${RTT_QUIC_PORT:-9102}"
 export RTT_PAYLOAD_BYTES="${RTT_PAYLOAD_BYTES:-64}"
 export RTT_WARMUP="${RTT_WARMUP:-10000}"
 export RTT_ITERATIONS="${RTT_ITERATIONS:-100000}"
+
+# Export the RPC contract with defaults, mirroring RTT_* above.
+export RPC_MODE="${MODE}"
+export RPC_HOST="${RPC_HOST:-}"
+export RPC_UDP_PORT="${RPC_UDP_PORT:-9200}"
+export RPC_TCP_PORT="${RPC_TCP_PORT:-9201}"
+export RPC_GRPC_PORT="${RPC_GRPC_PORT:-9202}"
+export RPC_WARMUP="${RPC_WARMUP:-10000}"
+export RPC_ITERATIONS="${RPC_ITERATIONS:-100000}"
 
 # Export the filesystem-write contract. FSW_DIR defaults to the CWD, which the
 # run role points at the NVMe-backed scratch dir. tmpfs would give meaningless

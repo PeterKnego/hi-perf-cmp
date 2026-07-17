@@ -15,6 +15,8 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 - **serialization** — encode/decode cost (latency + memory) of a command-log record; SBE vs bincode.
 - **smr-collections** — insert/update/snapshot cost of the in-memory state store (a fixed-capacity
   limit-order-book) that SMR replays commands into.
+- **rpc-roundtrip** — mutating serialize→send→deserialize+mutate→reserialize→send→deserialize round-trip
+  across transport+codec stacks.
 - **shared-memory-ipc** — shared-memory inter-process communication _(planned focus area)_.
 
 **Status:** `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (cross-host capable).
@@ -28,7 +30,9 @@ measuring encode/decode latency + decode allocation; Java is not planned for thi
 across all three languages (single-host, fixed-capacity limit-order-book state store): Java uses
 Agrona (`Long2ObjectHashMap` + pooled orders), Rust/Go use a hand-rolled open-addressing id-map;
 the snapshot format is SBE (`book_snapshot.xml`), byte-identical across languages and verified by a
-golden test. `shared-memory-ipc` is not yet scaffolded.
+golden test. `rpc-roundtrip` is implemented for `sbe_udp` (Rust, UDP + zero-copy SBE), `grpc` (Go, gRPC),
+and `bebop_tcp` (Go, TCP + bebop), cross-host, measuring full mutating round-trip latency + encoded size;
+Java is not planned for this focus area. `shared-memory-ipc` is not yet scaffolded.
 
 ## Architecture: the result contract is the only coupling
 
@@ -58,7 +62,7 @@ dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust) and `serialization-{bebop,protobuf}` (Go), `smr-collections-{insert,update,snapshot}`.
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust) and `serialization-{bebop,protobuf}` (Go), `smr-collections-{insert,update,snapshot}`, `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
 
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt + filesystem-write + thread-handoff experiments
@@ -66,12 +70,14 @@ cd rust && cargo build --release && cargo test && cargo clippy --all-targets && 
 cargo run --release -p network-rtt-tcp        # -p network-rtt-udp | -p filesystem-write-fsync | -p filesystem-write-batch | ...
 cargo run --release -p serialization-bincode  # -p serialization-sbe_gen | -p serialization-aeron_sbe
 cargo run --release -p smr-collections-insert # -p smr-collections-update | -p smr-collections-snapshot
+cargo run --release -p rpc-roundtrip-sbe_udp
 
 # Go — single module: internal/bench + cmd/network-rtt-* + filesystem-write-* + thread-handoff-* + serialization-*
 cd go && go build ./... && go vet ./... && go test ./...
 go run ./cmd/network-rtt-tcp
 go run ./cmd/serialization-protobuf  # or ./cmd/serialization-bebop
 go run ./cmd/smr-collections-insert
+go run ./cmd/rpc-roundtrip-grpc      # or ./cmd/rpc-roundtrip-bebop_tcp
 
 # Java — single Gradle build: :common + :network-rtt-* + :filesystem-write-* + :thread-handoff-*, JDK 21 toolchain
 cd java && ./gradlew build        # runs tests too (StatsTest under :common)
@@ -95,14 +101,15 @@ Rust 1.96 · Go 1.22 · Java 21 · Gradle 8.10.2 (via wrapper).
 
 `bench-infra/` provisions a 2-node AWS fleet (Terraform) and runs the benchmarks on it (Ansible),
 pulling result-contract lines to `bench-out/dist/<ts>/results.jsonl`. node0 = client/driver +
-single-host benchmarks; node1 = the `network-rtt` cross-host responder. Instances are NVMe-bearing
-`c6id` (local NVMe mounted at the bench home for `filesystem-write`). Workflow: `make init` → `make up`
-→ `make bench` → `make destroy` (creds in a gitignored `.env`). Real runs cost money and are
+single-host benchmarks; node1 = the `network-rtt` and `rpc-roundtrip` cross-host responder. Instances are
+NVMe-bearing `c6id` (local NVMe mounted at the bench home for `filesystem-write`). Workflow: `make init` →
+`make up` → `make bench` → `make destroy` (creds in a gitignored `.env`). Real runs cost money and are
 **user-initiated** — never `terraform apply` automatically. See `bench-infra/README.md` and the spec.
 
 `network-rtt` has an `RTT_MODE` env contract — `loopback` (default, local dev), `server`, `client` —
-plus `RTT_HOST`/`RTT_TCP_PORT`/`RTT_UDP_PORT`. Real network RTT is **cross-host only**; loopback is a
-local-dev convenience, never a reported result.
+plus `RTT_HOST`/`RTT_TCP_PORT`/`RTT_UDP_PORT`. `rpc-roundtrip` mirrors this with an `RPC_MODE` env
+contract plus `RPC_HOST`/`RPC_UDP_PORT`/`RPC_TCP_PORT`/`RPC_GRPC_PORT`. Real network RTT/RPC is
+**cross-host only**; loopback is a local-dev convenience, never a reported result.
 
 ## Tracking performance over time
 
@@ -127,7 +134,7 @@ Keep experiment-specific dependencies in that artifact only (e.g. QUIC's quinn/q
 
 To turn a stub focus area real: replace its placeholder emit (`experiment: "placeholder"`, `metric:
 "placeholder"`, `notes: "stub"`) with real measurement. Keep focus-area names exact (`network-rtt`,
-`filesystem-write`, `thread-handoff`, `serialization`, `smr-collections`, and the planned
+`filesystem-write`, `thread-handoff`, `serialization`, `smr-collections`, `rpc-roundtrip`, and the planned
 `shared-memory-ipc`), `language` matching the directory,
 and always emit the `experiment` field — the `tools/journal` CLI aligns on `(focus_area, experiment, language,
 metric)`. For the Rust release profile and workspace conventions, see below.

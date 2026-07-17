@@ -21,7 +21,7 @@ experiments:
   # restricts which languages the (language, experiment) product loop runs this
   # row for (see ansible/roles/run/tasks/main.yml) — each row below names its
   # own language. Rows without `languages` run for all of `languages` above,
-  # unchanged.
+  # unchanged. The `languages` key applies to both local and cross_host rows.
   - { focus_area: serialization,    experiment: sbe_gen,     kind: local, languages: [rust] }
   - { focus_area: serialization,    experiment: aeron_sbe,   kind: local, languages: [rust] }
   - { focus_area: serialization,    experiment: bincode,     kind: local, languages: [rust] }
@@ -30,6 +30,12 @@ experiments:
   - { focus_area: smr-collections,  experiment: insert,      kind: local }
   - { focus_area: smr-collections,  experiment: update,      kind: local }
   - { focus_area: smr-collections,  experiment: snapshot,    kind: local }
+  # rpc-roundtrip is per-language like serialization above: sbe_udp is Rust
+  # only, grpc/bebop_tcp are Go only (Java not planned) — see the cross_host
+  # `languages` filter fix in ansible/roles/run/tasks/main.yml.
+  - { focus_area: rpc-roundtrip,    experiment: sbe_udp,     kind: cross_host, languages: [rust] }
+  - { focus_area: rpc-roundtrip,    experiment: grpc,        kind: cross_host, languages: [go] }
+  - { focus_area: rpc-roundtrip,    experiment: bebop_tcp,   kind: cross_host, languages: [go] }
 
 # --- network-rtt cross-host params (exported into every client run so all three
 #     languages use identical parameters for a fair comparison) ---
@@ -71,6 +77,15 @@ smrc_price_min: 0
 smrc_steady: 60000
 smrc_warmup: 10000
 smrc_iters: 100000
+
+# rpc-roundtrip params (cross-host: node0 client, node1 responder). Three
+# whole-stack cells over one shared ~250-byte payload. Ports distinct from
+# network-rtt's 91xx so the two focus areas never collide.
+rpc_udp_port: 9200
+rpc_tcp_port: 9201
+rpc_grpc_port: 9202
+rpc_warmup: 10000
+rpc_iterations: 100000
 
 # --- Toolchain versions ---
 jdk_version: "21"

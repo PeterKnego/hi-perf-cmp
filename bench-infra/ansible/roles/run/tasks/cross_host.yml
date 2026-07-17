@@ -18,6 +18,11 @@
         export RTT_PAYLOAD_BYTES="{{ rtt_payload_bytes }}"
         export RTT_WARMUP="{{ rtt_warmup }}"
         export RTT_ITERATIONS="{{ rtt_iterations }}"
+        export RPC_UDP_PORT="{{ rpc_udp_port }}"
+        export RPC_TCP_PORT="{{ rpc_tcp_port }}"
+        export RPC_GRPC_PORT="{{ rpc_grpc_port }}"
+        export RPC_WARMUP="{{ rpc_warmup }}"
+        export RPC_ITERATIONS="{{ rpc_iterations }}"
         setsid {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} server \
           > {{ remote_home }}/rtt-server-{{ language }}-{{ experiment }}.out 2>&1 < /dev/null &
       args:
@@ -40,6 +45,12 @@
         export RTT_PAYLOAD_BYTES="{{ rtt_payload_bytes }}"
         export RTT_WARMUP="{{ rtt_warmup }}"
         export RTT_ITERATIONS="{{ rtt_iterations }}"
+        export RPC_HOST="{{ hostvars[groups['node1'][0]].private_ip }}"
+        export RPC_UDP_PORT="{{ rpc_udp_port }}"
+        export RPC_TCP_PORT="{{ rpc_tcp_port }}"
+        export RPC_GRPC_PORT="{{ rpc_grpc_port }}"
+        export RPC_WARMUP="{{ rpc_warmup }}"
+        export RPC_ITERATIONS="{{ rpc_iterations }}"
         {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} client \
           >> {{ remote_results_dir }}/results.jsonl
       args:

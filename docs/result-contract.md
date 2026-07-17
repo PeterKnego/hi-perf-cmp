@@ -16,7 +16,7 @@ see `journal/README.md`.
 | field        | type    | required | meaning                                                       |
 |--------------|---------|----------|---------------------------------------------------------------|
 | `language`   | string  | yes      | `rust` \| `java` \| `go`                                      |
-| `focus_area` | string  | yes      | `network-rtt` \| `filesystem-write` \| `thread-handoff` \| `serialization` \| `smr-collections` |
+| `focus_area` | string  | yes      | `network-rtt` \| `filesystem-write` \| `thread-handoff` \| `serialization` \| `smr-collections` \| `rpc-roundtrip` |
 | `experiment` | string  | yes      | the variant under the focus area, e.g. `tcp` \| `udp` \| `quic`; `placeholder` for stubs |
 | `metric`     | string  | yes      | what was measured, e.g. `rtt_p50`, `write_throughput`         |
 | `value`      | number  | yes      | the measured value                                            |
@@ -62,7 +62,12 @@ for the `insert`, `update`, and `snapshot` experiments in all three languages
 (single-host): `insert`/`update` emit `<op>_{p50,p99,mean}` (ns); `snapshot`
 emits `snapshot_{p50,p99,mean}` + `restore_{p50,p99,mean}` (ns),
 `snapshot_bytes` (bytes), and `snapshot_throughput` (bytes_per_sec).
-`shared-memory-ipc` is not yet scaffolded.
+`rpc-roundtrip` is implemented for the `sbe_udp` experiment in Rust and the
+`grpc` and `bebop_tcp` experiments in Go (cross-host; Java not planned): each
+emits `rtt_{p50,p99,mean}` (ns) — a mutating serialize→send→deserialize+
+mutate→reserialize→send→deserialize round trip, matching `network-rtt`'s
+metric shape — plus `encoded_bytes` (bytes) for the on-wire size of one
+encoded request. `shared-memory-ipc` is not yet scaffolded.
 
 ## Reference emitters
 

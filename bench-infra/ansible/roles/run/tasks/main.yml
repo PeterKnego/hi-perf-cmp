@@ -40,13 +40,17 @@
   changed_when: false
 
 # --- cross_host experiments: server on node1, client on node0, per language ---
-# One (language, experiment) pair at a time, sequentially, so the fixed RTT
-# ports are never contended across experiments.
+# One (language, experiment) pair at a time, sequentially, so the fixed RTT/RPC
+# ports are never contended across experiments. A row's optional `languages`
+# key (e.g. rpc-roundtrip: sbe_udp is Rust-only, grpc/bebop_tcp are Go-only)
+# restricts the (language, experiment) product to that subset, same as the
+# local loop below; rows without it run for every entry in `languages` above.
 - name: Run cross_host experiments per language, sequentially
   ansible.builtin.include_tasks: cross_host.yml
   loop: "{{ languages | product(experiments | selectattr('kind', 'equalto', 'cross_host') | list) | list }}"
   loop_control:
     loop_var: combo
+  when: combo.1.languages is not defined or combo.0 in combo.1.languages
   vars:
     language: "{{ combo.0 }}"
     focus_area: "{{ combo.1.focus_area }}"
