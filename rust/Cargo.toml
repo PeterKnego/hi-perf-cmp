@@ -26,6 +26,7 @@ members = [
     "smr-collections/insert",
     "smr-collections/update",
     "smr-collections/snapshot",
+    "rpc-roundtrip/common",
 ]
 
 [workspace.package]

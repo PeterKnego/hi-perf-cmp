@@ -1,0 +1,13 @@
+[package]
+name = "rpc-roundtrip-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "rpc_roundtrip_common"
+path = "src/lib.rs"
+
+[dependencies]
+bench-common = { path = "../../bench-common" }
