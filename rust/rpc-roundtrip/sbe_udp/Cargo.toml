@@ -1,0 +1,22 @@
+[package]
+name = "rpc-roundtrip-sbe_udp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "rpc-roundtrip-sbe_udp"
+path = "src/main.rs"
+
+[lib]
+name = "rpc_roundtrip_sbe_udp"
+path = "src/lib.rs"
+
+[dependencies]
+bench-common = { path = "../../bench-common" }
+rpc-roundtrip-common = { path = "../common" }
+zerocopy = { workspace = true }
+
+[build-dependencies]
+sbe_gen = { workspace = true }

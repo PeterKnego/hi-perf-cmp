@@ -999,6 +999,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rpc-roundtrip-sbe_udp"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "rpc-roundtrip-common",
+ "sbe_gen",
+ "zerocopy",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

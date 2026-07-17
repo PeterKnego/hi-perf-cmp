@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sbe:messageSchema xmlns:sbe="http://fixprotocol.io/2016/sbe"
+                   package="rpc_payload" id="8" schemaId="8" version="1"
+                   byteOrder="littleEndian">
+  <types>
+    <composite name="messageHeader">
+      <type name="blockLength" primitiveType="uint16"/>
+      <type name="templateId"  primitiveType="uint16"/>
+      <type name="schemaId"    primitiveType="uint16"/>
+      <type name="version"     primitiveType="uint16"/>
+    </composite>
+    <type name="sig32"  primitiveType="uint8" length="32"/>
+    <type name="ctx152" primitiveType="uint8" length="152"/>
+  </types>
+  <sbe:message name="RpcPayload" id="1" blockLength="244">
+    <field name="hop"       id="1"  type="uint32"/>
+    <field name="seq"       id="2"  type="uint64"/>
+    <field name="timestamp" id="3"  type="int64"/>
+    <field name="orderId"   id="4"  type="uint64"/>
+    <field name="price"     id="5"  type="int64"/>
+    <field name="qty"       id="6"  type="int64"/>
+    <field name="symbolId"  id="7"  type="uint32"/>
+    <field name="accountId" id="8"  type="uint64"/>
+    <field name="venueId"   id="9"  type="uint16"/>
+    <field name="side"      id="10" type="uint8"/>
+    <field name="flags"     id="11" type="uint8"/>
+    <field name="signature" id="12" type="sig32"/>
+    <field name="context"   id="13" type="ctx152"/>
+  </sbe:message>
+</sbe:messageSchema>

@@ -27,6 +27,7 @@ members = [
     "smr-collections/update",
     "smr-collections/snapshot",
     "rpc-roundtrip/common",
+    "rpc-roundtrip/sbe_udp",
 ]
 
 [workspace.package]
