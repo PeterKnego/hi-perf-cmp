@@ -1,0 +1,16 @@
+timestamp=20260720T120209Z
+instance_type=c6id.2xlarge
+vcpus=8
+mem_mb=15701
+kernel=6.17.0-1019-aws
+rtt_payload_bytes=64
+rtt_warmup=10000
+rtt_iterations=100000
+rtt_tcp_port=9100
+rtt_udp_port=9101
+rtt_quic_port=9102
+languages=rust,go,java
+experiments=rpc-roundtrip/sbe_udp,rpc-roundtrip/grpc,rpc-roundtrip/bebop_tcp
+git_sha=79706160a45da4cd9253f78d43604790623d59fc dirty
+node0_role=node0 (client/driver + single-host benches)
+node1_role=node1 (network-rtt responder)

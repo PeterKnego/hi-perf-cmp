@@ -1,0 +1,12 @@
+{"language":"rust","focus_area":"rpc-roundtrip","experiment":"sbe_udp","metric":"rtt_p50","value":26101,"unit":"ns","samples":100000}
+{"language":"rust","focus_area":"rpc-roundtrip","experiment":"sbe_udp","metric":"rtt_p99","value":38520,"unit":"ns","samples":100000}
+{"language":"rust","focus_area":"rpc-roundtrip","experiment":"sbe_udp","metric":"rtt_mean","value":26770.90514,"unit":"ns","samples":100000}
+{"language":"rust","focus_area":"rpc-roundtrip","experiment":"sbe_udp","metric":"encoded_bytes","value":252,"unit":"bytes","samples":1}
+{"language":"go","focus_area":"rpc-roundtrip","experiment":"grpc","metric":"rtt_p50","value":126100,"unit":"ns","samples":100000}
+{"language":"go","focus_area":"rpc-roundtrip","experiment":"grpc","metric":"rtt_p99","value":189301,"unit":"ns","samples":100000}
+{"language":"go","focus_area":"rpc-roundtrip","experiment":"grpc","metric":"rtt_mean","value":130263.29479,"unit":"ns","samples":100000}
+{"language":"go","focus_area":"rpc-roundtrip","experiment":"grpc","metric":"encoded_bytes","value":247,"unit":"bytes","samples":1}
+{"language":"go","focus_area":"rpc-roundtrip","experiment":"bebop_tcp","metric":"rtt_p50","value":34638,"unit":"ns","samples":100000}
+{"language":"go","focus_area":"rpc-roundtrip","experiment":"bebop_tcp","metric":"rtt_p99","value":57060,"unit":"ns","samples":100000}
+{"language":"go","focus_area":"rpc-roundtrip","experiment":"bebop_tcp","metric":"rtt_mean","value":35652.7878,"unit":"ns","samples":100000}
+{"language":"go","focus_area":"rpc-roundtrip","experiment":"bebop_tcp","metric":"encoded_bytes","value":252,"unit":"bytes","samples":1}
