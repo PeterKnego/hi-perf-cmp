@@ -10,7 +10,7 @@ same-AZ cluster placement group for the 2-node network runs. Uniform harness:
 64-byte payload, 10,000 warmup + 100,000 measured iterations, identical stats
 code in each language.
 
-**Runs recorded** (June 26 – July 13, 2026):
+**Runs recorded** (June 26 – July 20, 2026):
 
 | run | what it measured |
 |---|---|
@@ -19,8 +19,12 @@ code in each language.
 | [20260627T071950Z](../journal/runs/20260627T071950Z-07a4b9a872fc/entry.md) | First `thread-handoff` run (spin/condvar/channel/ring); network + filesystem re-measured |
 | [20260627T193417Z](../journal/runs/20260627T193417Z-003926ca6c91/entry.md) | Optimized SPSC ring (Rust + Go); full matrix re-measured |
 | [20260713T152911Z](../journal/runs/20260713T152911Z-23b9778538e9/entry.md) | First `serialization` run (sbe_gen/aeron_sbe/bincode); full matrix re-measured — **current baseline** |
+| [20260716T100733Z](../journal/runs/20260716T100733Z-16a158ef9fd2/entry.md) | Go `serialization` cells added (`bebop`, `protobuf`) alongside the Rust codecs (scoped run) |
+| [20260720T120209Z](../journal/runs/20260720T120209Z-79706160a45d/entry.md) | First `rpc-roundtrip` run (sbe_udp/grpc/bebop_tcp) — mutating cross-host round-trip (scoped run) |
 
-Unless noted, tables below show the **current baseline** run (20260713T152911Z).
+Unless noted, tables below show the **current baseline** run (20260713T152911Z). The
+two July 16 / July 20 runs are **scoped** (one focus area each, not a full-matrix
+re-measure), so the baseline pointer is unchanged; their sections cite their own run.
 
 ---
 
@@ -144,12 +148,15 @@ mixed block of fixed fields plus a repeating group of variable-length command
 payloads — across three Rust codecs: `sbe_gen` (zero-copy SBE via the
 `zerocopy` crate), `aeron_sbe` (the reference real-logic `sbe-tool` emitting
 Rust — the same codec Aeron itself uses), and `bincode` (serde + bincode v2,
-the ergonomic derive baseline). Rust-only at measurement time (single host,
-node0) — the Go `bebop` and `protobuf` cells were added later and await their
-own AWS run; this table isn't updated until they have one. The harness
+the ergonomic derive baseline). Two Go cells were added later — `bebop` (via the
+200sc/bebop safe API) and `protobuf` (the canonical google.golang.org/protobuf
+runtime, `sfixed`-typed schema) — measuring the same logical record. The harness
 encodes a stream of records into an in-memory journal then replays (decodes)
-them, timing each operation and — via a counting global allocator — reporting
-heap bytes allocated per decode. 100,000 measured iterations per codec.
+them, timing each operation and — via a counting global allocator (Rust) /
+`ReadMemStats` TotalAlloc delta (Go) — reporting heap bytes allocated per decode.
+100,000 measured iterations per codec.
+
+Rust codecs (baseline run 20260713T152911Z):
 
 | codec | encode p50 | decode p50 | decode p99 | encoded bytes | decode alloc |
 |---|---|---|---|---|---|
@@ -157,9 +164,17 @@ heap bytes allocated per decode. 100,000 measured iterations per codec.
 | aeron_sbe | 57 ns | 409 ns | 443 ns | 502 | **0 B** |
 | bincode   | 85 ns | 947 ns | 1034 ns | 482 | **536 B** |
 
-p50/p99 in ns; a `_mean` is also emitted per op (decode means: sbe_gen 415,
-aeron_sbe 416, bincode 972 ns). Uniform harness: identical record builder and
-iteration count across codecs.
+Go codecs (run 20260716T100733Z):
+
+| codec | encode p50 | decode p50 | decode p99 | encoded bytes | decode alloc |
+|---|---|---|---|---|---|
+| bebop     | 92 ns  | 1061 ns | 4123 ns | 494 | **544 B** |
+| protobuf  | 473 ns | 1743 ns | 5991 ns | 514 | **888 B** |
+
+p50/p99 in ns; a `_mean` is also emitted per op (Rust decode means: sbe_gen 415,
+aeron_sbe 416, bincode 972 ns; Go decode means: bebop 1281, protobuf 1956 ns).
+Uniform record builder and iteration count across codecs and languages; the two
+language groups come from different runs, so read Go-vs-Rust as cross-run.
 
 **What we learned:**
 
@@ -189,6 +204,57 @@ iteration count across codecs.
   (~50–100 ns) that its p99 (~340–350 ns for all three) is dominated by timer
   and scheduling noise rather than the codec; decode is the meaningful
   differentiator.
+- **Go tells the same zero-copy-vs-owned story, one tier slower and with GC
+  tails.** Neither Go codec is zero-copy, so both allocate on decode (`bebop`
+  544 B, `protobuf` 888 B) — the same axis the Rust `bincode` cell exposes.
+  Among the Go pair, `bebop` beats stock `protobuf` ~5× on encode (92 vs 473 ns)
+  and ~1.6× on decode (1061 vs 1743 ns) with ~40 % less allocation. Both carry
+  GC-visible decode tails absent in Rust (p99 4.1 µs / 6.0 µs, ~4× and ~3.4×
+  their p50) — the honest cost of an owned-decode codec on a garbage-collected
+  runtime. `protobuf`'s 514 B wire size uses `sfixed` fields deliberately (full-
+  width ids would otherwise pay varint pathology).
+
+## rpc-roundtrip — mutating request/response across whole stacks (cross-host)
+
+A new focus area that fuses `serialization` and `network-rtt`: unlike the byte
+echo in `network-rtt`, the responder here does **real codec work** — it
+deserializes the request, increments a `hop` field, and re-serializes the reply.
+The client serializes a ~250 B record, sends it cross-host (node0→node1),
+receives the mutated reply, deserializes it, and verifies `hop+1` / `seq`
+preserved. Three cells compare whole realistic stacks (transport **and** codec
+differ per cell, by design — this is not an isolated-variable matrix): `sbe_udp`
+(Rust, hand-rolled UDP + zero-copy SBE), `bebop_tcp` (Go, length-prefixed TCP +
+bebop safe API), `grpc` (Go, unary gRPC over HTTP/2 + protobuf). Run
+20260720T120209Z; 100,000 measured iterations.
+
+| cell | stack | rtt p50 | rtt mean | rtt p99 | encoded bytes |
+|---|---|---|---|---|---|
+| sbe_udp   | Rust · UDP · zero-copy SBE   | 26.1 µs  | 26.8 µs  | 38.5 µs  | 252 |
+| bebop_tcp | Go · TCP · bebop            | 34.6 µs  | 35.7 µs  | 57.1 µs  | 252 |
+| grpc      | Go · HTTP/2 · protobuf      | 126.1 µs | 130.3 µs | 189.3 µs | 247 |
+
+**What we learned:**
+
+- **Full gRPC costs ~4.8× a hand-rolled zero-copy datagram round-trip.** `grpc`
+  round-trips a mutate-and-return in ~126 µs p50 vs `sbe_udp`'s ~26 µs — the
+  HTTP/2 framing, unary-call machinery, and reflection-based protobuf marshalling
+  are the price of the framework, exactly the whole-stack overhead this focus
+  area exists to surface. `bebop_tcp` sits between them (~35 µs, ~1.3× sbe_udp):
+  a plain TCP ping-pong with a fast codec is close to raw network RTT.
+- **The gRPC tail is the widest.** Its p99 is 189 µs (~1.5× its p50); the two
+  hand-rolled cells stay tighter (sbe_udp 1.48×, bebop_tcp 1.65× p50). Read
+  against the `network-rtt` baseline (~35 µs TCP p50, byte echo), `bebop_tcp`'s
+  ~35 µs shows the added encode+decode+mutate work is nearly free at this size,
+  while gRPC's stack dominates the number.
+- **Read the sizes and the sbe_udp lead honestly.** `grpc`'s 247 B reflects
+  proto3 omitting the two zero-valued fields (`hop`/`seq`) of the index-0
+  request; a non-zero request encodes ~260–275 B. And `sbe_udp`'s lead is partly
+  a zero-copy story, not transport alone: it mutates `hop` in place and is
+  genuinely zero-allocation on the timed path, whereas `bebop_tcp` pays the
+  bebop safe-API decode allocation every round trip (as the `serialization`
+  section quantifies) and gRPC allocates throughout its call path.
+- First run of this focus area — these are the reference values; no prior run to
+  compare against.
 
 ## shared-memory-ipc — planned
 
@@ -226,3 +292,8 @@ remains empty.
    (536 B) every decode — the memory and latency difference an SMR replay path
    cares about. The two SBE toolchains (pure-Rust `sbe_gen` vs the reference
    Aeron `sbe-tool`) are wire-identical, so that choice is ergonomic.
+6. **RPC framework vs hand-rolled stack:** for a mutating request/response on
+   the replication path, a hand-rolled UDP + zero-copy SBE stack round-trips in
+   ~26 µs; full gRPC (HTTP/2 + protobuf) costs **~4.8×** that (~126 µs) for its
+   framing and call machinery, and a plain TCP + bebop stack lands in between
+   (~35 µs). The transport+codec stack, not the language, sets the tier here.
