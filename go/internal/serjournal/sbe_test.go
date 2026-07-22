@@ -25,8 +25,8 @@ func TestSBEFlyweightByteIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(golden) != 502 {
-		t.Fatalf("golden size %d, want 502", len(golden))
+	if len(golden) != 570 {
+		t.Fatalf("golden size %d, want 570", len(golden))
 	}
 	codec := NewSBECodec()
 	scratch := make([]byte, 64*1024)

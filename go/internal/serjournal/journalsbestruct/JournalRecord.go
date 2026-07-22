@@ -26,7 +26,10 @@ type JournalRecordEntries struct {
 	EntryIndex     int64
 	EntryTimestamp int64
 	CommandKey     int32
-	Command        []uint8
+	CmdQty         int64
+	CmdPrice       float64
+	CmdFlag        uint8
+	CmdText        []uint8
 }
 
 func (j *JournalRecord) Encode(_m *SbeGoMarshaller, _w io.Writer, doRangeCheck bool) error {
@@ -62,7 +65,7 @@ func (j *JournalRecord) Encode(_m *SbeGoMarshaller, _w io.Writer, doRangeCheck b
 	if err := _m.WriteUint8(_w, j.Flags); err != nil {
 		return err
 	}
-	var EntriesBlockLength uint16 = 28
+	var EntriesBlockLength uint16 = 45
 	if err := _m.WriteUint16(_w, EntriesBlockLength); err != nil {
 		return err
 	}
@@ -240,10 +243,19 @@ func (j *JournalRecordEntries) Encode(_m *SbeGoMarshaller, _w io.Writer) error {
 	if err := _m.WriteInt32(_w, j.CommandKey); err != nil {
 		return err
 	}
-	if err := _m.WriteUint32(_w, uint32(len(j.Command))); err != nil {
+	if err := _m.WriteInt64(_w, j.CmdQty); err != nil {
 		return err
 	}
-	if err := _m.WriteBytes(_w, j.Command); err != nil {
+	if err := _m.WriteFloat64(_w, j.CmdPrice); err != nil {
+		return err
+	}
+	if err := _m.WriteUint8(_w, j.CmdFlag); err != nil {
+		return err
+	}
+	if err := _m.WriteUint32(_w, uint32(len(j.CmdText))); err != nil {
+		return err
+	}
+	if err := _m.WriteBytes(_w, j.CmdText); err != nil {
 		return err
 	}
 	return nil
@@ -278,20 +290,41 @@ func (j *JournalRecordEntries) Decode(_m *SbeGoMarshaller, _r io.Reader, actingV
 			return err
 		}
 	}
+	if !j.CmdQtyInActingVersion(actingVersion) {
+		j.CmdQty = j.CmdQtyNullValue()
+	} else {
+		if err := _m.ReadInt64(_r, &j.CmdQty); err != nil {
+			return err
+		}
+	}
+	if !j.CmdPriceInActingVersion(actingVersion) {
+		j.CmdPrice = j.CmdPriceNullValue()
+	} else {
+		if err := _m.ReadFloat64(_r, &j.CmdPrice); err != nil {
+			return err
+		}
+	}
+	if !j.CmdFlagInActingVersion(actingVersion) {
+		j.CmdFlag = j.CmdFlagNullValue()
+	} else {
+		if err := _m.ReadUint8(_r, &j.CmdFlag); err != nil {
+			return err
+		}
+	}
 	if actingVersion > j.SbeSchemaVersion() && blockLength > j.SbeBlockLength() {
 		io.CopyN(ioutil.Discard, _r, int64(blockLength-j.SbeBlockLength()))
 	}
 
-	if j.CommandInActingVersion(actingVersion) {
-		var CommandLength uint32
-		if err := _m.ReadUint32(_r, &CommandLength); err != nil {
+	if j.CmdTextInActingVersion(actingVersion) {
+		var CmdTextLength uint32
+		if err := _m.ReadUint32(_r, &CmdTextLength); err != nil {
 			return err
 		}
-		if cap(j.Command) < int(CommandLength) {
-			j.Command = make([]uint8, CommandLength)
+		if cap(j.CmdText) < int(CmdTextLength) {
+			j.CmdText = make([]uint8, CmdTextLength)
 		}
-		j.Command = j.Command[:CommandLength]
-		if err := _m.ReadBytes(_r, j.Command); err != nil {
+		j.CmdText = j.CmdText[:CmdTextLength]
+		if err := _m.ReadBytes(_r, j.CmdText); err != nil {
 			return err
 		}
 	}
@@ -317,6 +350,21 @@ func (j *JournalRecordEntries) RangeCheck(actingVersion uint16, schemaVersion ui
 	if j.CommandKeyInActingVersion(actingVersion) {
 		if j.CommandKey < j.CommandKeyMinValue() || j.CommandKey > j.CommandKeyMaxValue() {
 			return fmt.Errorf("Range check failed on j.CommandKey (%v < %v > %v)", j.CommandKeyMinValue(), j.CommandKey, j.CommandKeyMaxValue())
+		}
+	}
+	if j.CmdQtyInActingVersion(actingVersion) {
+		if j.CmdQty < j.CmdQtyMinValue() || j.CmdQty > j.CmdQtyMaxValue() {
+			return fmt.Errorf("Range check failed on j.CmdQty (%v < %v > %v)", j.CmdQtyMinValue(), j.CmdQty, j.CmdQtyMaxValue())
+		}
+	}
+	if j.CmdPriceInActingVersion(actingVersion) {
+		if j.CmdPrice < j.CmdPriceMinValue() || j.CmdPrice > j.CmdPriceMaxValue() {
+			return fmt.Errorf("Range check failed on j.CmdPrice (%v < %v > %v)", j.CmdPriceMinValue(), j.CmdPrice, j.CmdPriceMaxValue())
+		}
+	}
+	if j.CmdFlagInActingVersion(actingVersion) {
+		if j.CmdFlag < j.CmdFlagMinValue() || j.CmdFlag > j.CmdFlagMaxValue() {
+			return fmt.Errorf("Range check failed on j.CmdFlag (%v < %v > %v)", j.CmdFlagMinValue(), j.CmdFlag, j.CmdFlagMaxValue())
 		}
 	}
 	return nil
@@ -884,7 +932,23 @@ func (*JournalRecordEntries) CommandKeyNullValue() int32 {
 	return math.MinInt32
 }
 
-func (*JournalRecordEntries) CommandMetaAttribute(meta int) string {
+func (*JournalRecordEntries) CmdQtyId() uint16 {
+	return 15
+}
+
+func (*JournalRecordEntries) CmdQtySinceVersion() uint16 {
+	return 0
+}
+
+func (j *JournalRecordEntries) CmdQtyInActingVersion(actingVersion uint16) bool {
+	return actingVersion >= j.CmdQtySinceVersion()
+}
+
+func (*JournalRecordEntries) CmdQtyDeprecated() uint16 {
+	return 0
+}
+
+func (*JournalRecordEntries) CmdQtyMetaAttribute(meta int) string {
 	switch meta {
 	case 1:
 		return ""
@@ -898,23 +962,133 @@ func (*JournalRecordEntries) CommandMetaAttribute(meta int) string {
 	return ""
 }
 
-func (*JournalRecordEntries) CommandSinceVersion() uint16 {
+func (*JournalRecordEntries) CmdQtyMinValue() int64 {
+	return math.MinInt64 + 1
+}
+
+func (*JournalRecordEntries) CmdQtyMaxValue() int64 {
+	return math.MaxInt64
+}
+
+func (*JournalRecordEntries) CmdQtyNullValue() int64 {
+	return math.MinInt64
+}
+
+func (*JournalRecordEntries) CmdPriceId() uint16 {
+	return 16
+}
+
+func (*JournalRecordEntries) CmdPriceSinceVersion() uint16 {
 	return 0
 }
 
-func (j *JournalRecordEntries) CommandInActingVersion(actingVersion uint16) bool {
-	return actingVersion >= j.CommandSinceVersion()
+func (j *JournalRecordEntries) CmdPriceInActingVersion(actingVersion uint16) bool {
+	return actingVersion >= j.CmdPriceSinceVersion()
 }
 
-func (*JournalRecordEntries) CommandDeprecated() uint16 {
+func (*JournalRecordEntries) CmdPriceDeprecated() uint16 {
 	return 0
 }
 
-func (JournalRecordEntries) CommandCharacterEncoding() string {
+func (*JournalRecordEntries) CmdPriceMetaAttribute(meta int) string {
+	switch meta {
+	case 1:
+		return ""
+	case 2:
+		return ""
+	case 3:
+		return ""
+	case 4:
+		return "required"
+	}
+	return ""
+}
+
+func (*JournalRecordEntries) CmdPriceMinValue() float64 {
+	return -math.MaxFloat64
+}
+
+func (*JournalRecordEntries) CmdPriceMaxValue() float64 {
+	return math.MaxFloat64
+}
+
+func (*JournalRecordEntries) CmdPriceNullValue() float64 {
+	return math.NaN()
+}
+
+func (*JournalRecordEntries) CmdFlagId() uint16 {
+	return 17
+}
+
+func (*JournalRecordEntries) CmdFlagSinceVersion() uint16 {
+	return 0
+}
+
+func (j *JournalRecordEntries) CmdFlagInActingVersion(actingVersion uint16) bool {
+	return actingVersion >= j.CmdFlagSinceVersion()
+}
+
+func (*JournalRecordEntries) CmdFlagDeprecated() uint16 {
+	return 0
+}
+
+func (*JournalRecordEntries) CmdFlagMetaAttribute(meta int) string {
+	switch meta {
+	case 1:
+		return ""
+	case 2:
+		return ""
+	case 3:
+		return ""
+	case 4:
+		return "required"
+	}
+	return ""
+}
+
+func (*JournalRecordEntries) CmdFlagMinValue() uint8 {
+	return 0
+}
+
+func (*JournalRecordEntries) CmdFlagMaxValue() uint8 {
+	return math.MaxUint8 - 1
+}
+
+func (*JournalRecordEntries) CmdFlagNullValue() uint8 {
+	return math.MaxUint8
+}
+
+func (*JournalRecordEntries) CmdTextMetaAttribute(meta int) string {
+	switch meta {
+	case 1:
+		return ""
+	case 2:
+		return ""
+	case 3:
+		return ""
+	case 4:
+		return "required"
+	}
+	return ""
+}
+
+func (*JournalRecordEntries) CmdTextSinceVersion() uint16 {
+	return 0
+}
+
+func (j *JournalRecordEntries) CmdTextInActingVersion(actingVersion uint16) bool {
+	return actingVersion >= j.CmdTextSinceVersion()
+}
+
+func (*JournalRecordEntries) CmdTextDeprecated() uint16 {
+	return 0
+}
+
+func (JournalRecordEntries) CmdTextCharacterEncoding() string {
 	return "null"
 }
 
-func (JournalRecordEntries) CommandHeaderLength() uint64 {
+func (JournalRecordEntries) CmdTextHeaderLength() uint64 {
 	return 4
 }
 
@@ -935,7 +1109,7 @@ func (*JournalRecord) EntriesDeprecated() uint16 {
 }
 
 func (*JournalRecordEntries) SbeBlockLength() (blockLength uint) {
-	return 28
+	return 45
 }
 
 func (*JournalRecordEntries) SbeSchemaVersion() (schemaVersion uint16) {

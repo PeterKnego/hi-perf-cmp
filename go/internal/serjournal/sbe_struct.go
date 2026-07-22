@@ -32,7 +32,9 @@ func ToSBEStruct(r *Record) journalsbestruct.JournalRecord {
 		e := &r.Entries[i]
 		entries[i] = journalsbestruct.JournalRecordEntries{
 			EntryTermId: e.EntryTermID, EntryIndex: e.EntryIndex,
-			EntryTimestamp: e.EntryTimestamp, CommandKey: e.CommandKey, Command: e.Command,
+			EntryTimestamp: e.EntryTimestamp, CommandKey: e.CommandKey,
+			CmdQty: e.CmdQty, CmdPrice: e.CmdPrice,
+			CmdFlag: boolU8(e.CmdFlag), CmdText: []uint8(e.CmdText),
 		}
 	}
 	return journalsbestruct.JournalRecord{
@@ -92,7 +94,10 @@ func (c *SBEStructCodec) DecodeChecksum(frame []byte) uint64 {
 		ck.AddI64(e.EntryIndex)
 		ck.AddI64(e.EntryTimestamp)
 		ck.AddI32(e.CommandKey)
-		ck.AddBytes(e.Command)
+		ck.AddI64(e.CmdQty)
+		ck.AddF64(e.CmdPrice)
+		ck.AddBool(e.CmdFlag != 0)
+		ck.AddStringBytes(e.CmdText)
 	}
 	return ck.Finish()
 }

@@ -646,11 +646,11 @@ func (g *JournalRecordEntries) WrapForEncode(
 	g.bufferLength = bufferLength
 	dimensions := GroupSizeEncoding{}
 	dimensions.Wrap(buffer, *pos, actingVersion, bufferLength)
-	dimensions.SetBlockLength(28)
+	dimensions.SetBlockLength(45)
 	dimensions.SetNumInGroup(count)
 	g.index = 0
 	g.count = uint64(count)
-	g.blockLength = 28
+	g.blockLength = 45
 	g.actingVersion = actingVersion
 	g.initialPosition = *pos
 	g.positionPtr = pos
@@ -662,7 +662,7 @@ func (g *JournalRecordEntries) SbeHeaderSize() uint64 {
 }
 
 func (g *JournalRecordEntries) SbeBlockLength() uint64 {
-	return 28
+	return 45
 }
 
 func (g *JournalRecordEntries) SbePosition() uint64 {
@@ -917,7 +917,7 @@ func (m *JournalRecordEntries) SetCommandKey(value int32) *JournalRecordEntries 
 	return m
 }
 
-func (m *JournalRecordEntries) CommandMetaAttribute(metaAttribute string) string {
+func (m *JournalRecordEntries) CmdQtyMetaAttribute(metaAttribute string) string {
 	switch metaAttribute {
 	case "PRESENCE":
 		return "required"
@@ -926,31 +926,181 @@ func (m *JournalRecordEntries) CommandMetaAttribute(metaAttribute string) string
 	}
 }
 
-func (m *JournalRecordEntries) CommandCharacterEncoding() string {
-	return "null"
-}
-
-func (m *JournalRecordEntries) CommandSinceVersion() uint64 {
-	return 0
-}
-
-func (m *JournalRecordEntries) CommandInActingVersion() bool {
-	return true
-}
-
-func (m *JournalRecordEntries) CommandId() uint16 {
+func (m *JournalRecordEntries) CmdQtyId() int {
 	return 15
 }
 
-func (m *JournalRecordEntries) CommandHeaderLength() uint64 {
+func (m *JournalRecordEntries) CmdQtySinceVersion() uint64 {
+	return 0
+}
+
+func (m *JournalRecordEntries) CmdQtyInActingVersion() bool {
+	return true
+}
+
+func (m *JournalRecordEntries) CmdQtyEncodingOffset() uint {
+	return 28
+}
+
+func (m *JournalRecordEntries) CmdQtyNullValue() int64 {
+	return SbeNullValueInt64()
+}
+
+func (m *JournalRecordEntries) CmdQtyMinValue() int64 {
+	return int64(-9223372036854775807)
+}
+
+func (m *JournalRecordEntries) CmdQtyMaxValue() int64 {
+	return int64(9223372036854775807)
+}
+
+func (m *JournalRecordEntries) CmdQtyEncodingLength() int {
+	return 8
+}
+
+func (m *JournalRecordEntries) CmdQty() int64 {
+	return Int64LittleEndian(m.buffer[(m.offset + 28):])
+}
+
+func (m *JournalRecordEntries) SetCmdQty(value int64) *JournalRecordEntries {
+	PutInt64LittleEndian(m.buffer[(m.offset+28):], value)
+	return m
+}
+
+func (m *JournalRecordEntries) CmdPriceMetaAttribute(metaAttribute string) string {
+	switch metaAttribute {
+	case "PRESENCE":
+		return "required"
+	default:
+		return ""
+	}
+}
+
+func (m *JournalRecordEntries) CmdPriceId() int {
+	return 16
+}
+
+func (m *JournalRecordEntries) CmdPriceSinceVersion() uint64 {
+	return 0
+}
+
+func (m *JournalRecordEntries) CmdPriceInActingVersion() bool {
+	return true
+}
+
+func (m *JournalRecordEntries) CmdPriceEncodingOffset() uint {
+	return 36
+}
+
+func (m *JournalRecordEntries) CmdPriceNullValue() float64 {
+	return SbeNullValueDouble()
+}
+
+func (m *JournalRecordEntries) CmdPriceMinValue() float64 {
+	return -1.7976931348623157e308
+}
+
+func (m *JournalRecordEntries) CmdPriceMaxValue() float64 {
+	return 1.7976931348623157e308
+}
+
+func (m *JournalRecordEntries) CmdPriceEncodingLength() int {
+	return 8
+}
+
+func (m *JournalRecordEntries) CmdPrice() float64 {
+	return DoubleLittleEndian(m.buffer[(m.offset + 36):])
+}
+
+func (m *JournalRecordEntries) SetCmdPrice(value float64) *JournalRecordEntries {
+	PutDoubleLittleEndian(m.buffer[(m.offset+36):], value)
+	return m
+}
+
+func (m *JournalRecordEntries) CmdFlagMetaAttribute(metaAttribute string) string {
+	switch metaAttribute {
+	case "PRESENCE":
+		return "required"
+	default:
+		return ""
+	}
+}
+
+func (m *JournalRecordEntries) CmdFlagId() int {
+	return 17
+}
+
+func (m *JournalRecordEntries) CmdFlagSinceVersion() uint64 {
+	return 0
+}
+
+func (m *JournalRecordEntries) CmdFlagInActingVersion() bool {
+	return true
+}
+
+func (m *JournalRecordEntries) CmdFlagEncodingOffset() uint {
+	return 44
+}
+
+func (m *JournalRecordEntries) CmdFlagNullValue() uint8 {
+	return SbeNullValueUint8()
+}
+
+func (m *JournalRecordEntries) CmdFlagMinValue() uint8 {
+	return uint8(0)
+}
+
+func (m *JournalRecordEntries) CmdFlagMaxValue() uint8 {
+	return uint8(254)
+}
+
+func (m *JournalRecordEntries) CmdFlagEncodingLength() int {
+	return 1
+}
+
+func (m *JournalRecordEntries) CmdFlag() uint8 {
+	return Uint8LittleEndian(m.buffer[(m.offset + 44):])
+}
+
+func (m *JournalRecordEntries) SetCmdFlag(value uint8) *JournalRecordEntries {
+	PutUint8LittleEndian(m.buffer[(m.offset+44):], value)
+	return m
+}
+
+func (m *JournalRecordEntries) CmdTextMetaAttribute(metaAttribute string) string {
+	switch metaAttribute {
+	case "PRESENCE":
+		return "required"
+	default:
+		return ""
+	}
+}
+
+func (m *JournalRecordEntries) CmdTextCharacterEncoding() string {
+	return "null"
+}
+
+func (m *JournalRecordEntries) CmdTextSinceVersion() uint64 {
+	return 0
+}
+
+func (m *JournalRecordEntries) CmdTextInActingVersion() bool {
+	return true
+}
+
+func (m *JournalRecordEntries) CmdTextId() uint16 {
+	return 18
+}
+
+func (m *JournalRecordEntries) CmdTextHeaderLength() uint64 {
 	return 4
 }
 
-func (m *JournalRecordEntries) CommandLength() uint32 {
+func (m *JournalRecordEntries) CmdTextLength() uint32 {
 	return Uint32LittleEndian(m.buffer[m.SbePosition():])
 }
 
-func (m *JournalRecordEntries) SkipCommand() uint64 {
+func (m *JournalRecordEntries) SkipCmdText() uint64 {
 	lengthOfLengthField := uint64(4)
 	lengthPosition := m.SbePosition()
 	dataLength := uint64(Uint32LittleEndian(m.buffer[lengthPosition : lengthPosition+lengthOfLengthField]))
@@ -958,7 +1108,7 @@ func (m *JournalRecordEntries) SkipCommand() uint64 {
 	return dataLength
 }
 
-func (m *JournalRecordEntries) Command() string {
+func (m *JournalRecordEntries) CmdText() string {
 	lengthFieldValue := uint64(Uint32LittleEndian(m.buffer[m.SbePosition() : m.SbePosition()+4]))
 	m.SetSbePosition(m.SbePosition() + uint64(4))
 	pos := m.SbePosition()
@@ -966,7 +1116,7 @@ func (m *JournalRecordEntries) Command() string {
 	return string(m.buffer[pos : pos+lengthFieldValue])
 }
 
-func (m *JournalRecordEntries) GetCommand(dst []byte) int {
+func (m *JournalRecordEntries) GetCmdText(dst []byte) int {
 	lengthOfLengthField := uint64(4)
 	lengthPosition := m.SbePosition()
 	m.SetSbePosition(m.SbePosition() + lengthOfLengthField)
@@ -981,7 +1131,7 @@ func (m *JournalRecordEntries) GetCommand(dst []byte) int {
 	return int(bytesToCopy)
 }
 
-func (m *JournalRecordEntries) PutCommandLen(src string, length uint32) *JournalRecordEntries {
+func (m *JournalRecordEntries) PutCmdTextLen(src string, length uint32) *JournalRecordEntries {
 	lengthOfLengthField := uint64(4)
 	lengthPosition := m.SbePosition()
 	m.SetSbePosition(lengthPosition + lengthOfLengthField)
@@ -994,7 +1144,7 @@ func (m *JournalRecordEntries) PutCommandLen(src string, length uint32) *Journal
 	return m
 }
 
-func (m *JournalRecordEntries) GetCommandAsString() string {
+func (m *JournalRecordEntries) GetCmdTextAsString() string {
 	lengthOfLengthField := uint64(4)
 	lengthPosition := m.SbePosition()
 	dataLength := uint64(Uint32LittleEndian(m.buffer[lengthPosition : lengthPosition+lengthOfLengthField]))
@@ -1004,9 +1154,9 @@ func (m *JournalRecordEntries) GetCommandAsString() string {
 	return string(m.buffer[pos : pos+dataLength])
 }
 
-func (m *JournalRecordEntries) GetCommandAsJsonEscapedString() string {
+func (m *JournalRecordEntries) GetCmdTextAsJsonEscapedString() string {
 	oss := strings.Builder{}
-	s := m.GetCommandAsString()
+	s := m.GetCmdTextAsString()
 
 	for _, c := range s {
 		switch c {
@@ -1037,11 +1187,11 @@ func (m *JournalRecordEntries) GetCommandAsJsonEscapedString() string {
 	return oss.String()
 }
 
-func (m *JournalRecordEntries) PutCommand(str string) *JournalRecordEntries {
+func (m *JournalRecordEntries) PutCmdText(str string) *JournalRecordEntries {
 	if len(str) > 1073741824 {
 		panic("string too long for length type [E109]")
 	}
-	return m.PutCommandLen(str, uint32(len(str)))
+	return m.PutCmdTextLen(str, uint32(len(str)))
 }
 
 func (writer *JournalRecordEntries) String() string {
@@ -1063,9 +1213,21 @@ func (writer *JournalRecordEntries) String() string {
 	builder.WriteString(fmt.Sprintf(`"%v"`, writer.CommandKey()))
 
 	builder.WriteString(", ")
-	builder.WriteString(`"command": `)
+	builder.WriteString(`"cmdQty": `)
+	builder.WriteString(fmt.Sprintf(`"%v"`, writer.CmdQty()))
+
+	builder.WriteString(", ")
+	builder.WriteString(`"cmdPrice": `)
+	builder.WriteString(fmt.Sprintf(`"%v"`, writer.CmdPrice()))
+
+	builder.WriteString(", ")
+	builder.WriteString(`"cmdFlag": `)
+	builder.WriteString(fmt.Sprintf(`"%v"`, writer.CmdFlag()))
+
+	builder.WriteString(", ")
+	builder.WriteString(`"cmdText": `)
 	builder.WriteString(`"`)
-	writer.SkipCommand()
+	writer.SkipCmdText()
 	builder.WriteString(" bytes of raw data")
 	builder.WriteString("}")
 
@@ -1073,21 +1235,21 @@ func (writer *JournalRecordEntries) String() string {
 }
 
 func (m *JournalRecordEntries) Skip() {
-	m.SkipCommand()
+	m.SkipCmdText()
 }
 
 func (m *JournalRecordEntries) IsConstLength() bool {
 	return false
 }
 
-func (m *JournalRecordEntries) ComputeLength(CommandLength int) (int, error) {
+func (m *JournalRecordEntries) ComputeLength(CmdTextLength int) (int, error) {
 	length := uint64(m.SbeBlockLength())
 
-	length += m.CommandHeaderLength()
-	if m.CommandLength() > 1073741824 {
-		return 0, fmt.Errorf("CommandLength too long for length type [E109]")
+	length += m.CmdTextHeaderLength()
+	if m.CmdTextLength() > 1073741824 {
+		return 0, fmt.Errorf("CmdTextLength too long for length type [E109]")
 	}
-	length += uint64(m.CommandLength())
+	length += uint64(m.CmdTextLength())
 
 	return int(length), nil
 }
@@ -1184,7 +1346,7 @@ func (m *JournalRecord) IsConstLength() bool {
 	return false
 }
 
-func (m *JournalRecord) ComputeLength(EntriesItemLengths []struct{ CommandLength int }) (int, error) {
+func (m *JournalRecord) ComputeLength(EntriesItemLengths []struct{ CmdTextLength int }) (int, error) {
 	length := uint64(m.SbeBlockLength())
 
 	length += m.Entries().SbeHeaderSize()
@@ -1193,7 +1355,7 @@ func (m *JournalRecord) ComputeLength(EntriesItemLengths []struct{ CommandLength
 	}
 
 	for _, e := range EntriesItemLengths {
-		l, err := m.Entries().ComputeLength(e.CommandLength)
+		l, err := m.Entries().ComputeLength(e.CmdTextLength)
 		if err != nil {
 			return 0, err
 		}

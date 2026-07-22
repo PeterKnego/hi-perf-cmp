@@ -1,8 +1,6 @@
 package serjournal
 
 import (
-	"unsafe"
-
 	"github.com/peterknego/hi-perf-cmp/go/internal/serjournal/journalsbe"
 )
 
@@ -19,6 +17,13 @@ type SBECodec struct {
 // NewSBECodec allocates the reusable flyweight state once.
 func NewSBECodec() *SBECodec {
 	return &SBECodec{cmd: make([]byte, 64*1024)}
+}
+
+func boolU8(b bool) uint8 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // Encode writes a full framed message (header + body) into scratch and returns
@@ -42,14 +47,11 @@ func (c *SBECodec) Encode(r Record, scratch []byte) int {
 		g.SetEntryTermId(e.EntryTermID).
 			SetEntryIndex(e.EntryIndex).
 			SetEntryTimestamp(e.EntryTimestamp).
-			SetCommandKey(e.CommandKey)
-		// PutCommand takes a string but copies the bytes immediately and never
-		// retains the header, so an unsafe.String view avoids a per-entry alloc.
-		if len(e.Command) > 0 {
-			g.PutCommand(unsafe.String(&e.Command[0], len(e.Command)))
-		} else {
-			g.PutCommand("")
-		}
+			SetCommandKey(e.CommandKey).
+			SetCmdQty(e.CmdQty).
+			SetCmdPrice(e.CmdPrice).
+			SetCmdFlag(boolU8(e.CmdFlag))
+		g.PutCmdText(e.CmdText)
 	}
 	return int(journalsbe.MessageHeaderEncodedLength) + int(m.EncodedLength())
 }
@@ -78,8 +80,11 @@ func (c *SBECodec) DecodeChecksum(frame []byte) uint64 {
 		ck.AddI64(e.EntryIndex())
 		ck.AddI64(e.EntryTimestamp())
 		ck.AddI32(e.CommandKey())
-		n := e.GetCommand(c.cmd)
-		ck.AddBytes(c.cmd[:n])
+		ck.AddI64(e.CmdQty())
+		ck.AddF64(e.CmdPrice())
+		ck.AddBool(e.CmdFlag() != 0)
+		n := e.GetCmdText(c.cmd)
+		ck.AddStringBytes(c.cmd[:n])
 	}
 	return ck.Finish()
 }
