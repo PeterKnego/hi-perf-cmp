@@ -59,8 +59,11 @@ fn write_fields(r: &JournalRecord, enc: &mut journal_record::JournalRecordEncode
                 ee.entry_term_id(e.entry_term_id)
                     .entry_index(e.entry_index)
                     .entry_timestamp(e.entry_timestamp)
-                    .command_key(e.command_key);
-                ee.command(&e.command)?;
+                    .command_key(e.command_key)
+                    .cmd_qty(e.cmd_qty)
+                    .cmd_price(e.cmd_price)
+                    .cmd_flag(e.cmd_flag as u8);
+                ee.cmd_text(e.cmd_text.as_bytes())?;
                 Ok(())
             })?;
         }
@@ -90,7 +93,11 @@ pub fn decode_checksum(bytes: &[u8]) -> u64 {
         c.add_i64(entry.entry_index().map(|v| v.get()).unwrap_or(0));
         c.add_i64(entry.entry_timestamp().map(|v| v.get()).unwrap_or(0));
         c.add_i32(entry.command_key().map(|v| v.get()).unwrap_or(0));
-        c.add_bytes(entry.command.bytes);
+        c.add_i64(entry.cmd_qty().map(|v| v.get()).unwrap_or(0));
+        c.add_f64(entry.cmd_price().map(|v| v.get()).unwrap_or(0.0));
+        c.add_bool(entry.cmd_flag().copied().unwrap_or(0) != 0);
+        // cmd_text is var-data bytes = the string's UTF-8; fold via add_str over the bytes.
+        c.add_str(std::str::from_utf8(entry.cmd_text.bytes).unwrap_or(""));
     }
     c.finish()
 }

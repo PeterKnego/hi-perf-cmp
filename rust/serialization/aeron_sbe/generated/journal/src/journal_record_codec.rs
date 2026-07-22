@@ -275,7 +275,7 @@ pub mod encoder {
 
         #[inline]
         pub const fn block_length() -> u16 {
-            28
+            45
         }
 
         #[inline]
@@ -364,9 +364,57 @@ pub mod encoder {
             self
         }
 
+        /// primitive field 'cmdQty'
+        /// - min value: -9223372036854775807
+        /// - max value: 9223372036854775807
+        /// - null value: -9223372036854775808_i64
+        /// - characterEncoding: null
+        /// - semanticType: null
+        /// - encodedOffset: 28
+        /// - encodedLength: 8
+        /// - version: 0
+        #[inline]
+        pub fn cmd_qty(&mut self, value: i64) -> &mut Self {
+            let offset = self.offset + 28;
+            self.get_buf_mut().put_i64_at(offset, value);
+            self
+        }
+
+        /// primitive field 'cmdPrice'
+        /// - min value: -1.7976931348623157E308
+        /// - max value: 1.7976931348623157E308
+        /// - null value: f64::NAN
+        /// - characterEncoding: null
+        /// - semanticType: null
+        /// - encodedOffset: 36
+        /// - encodedLength: 8
+        /// - version: 0
+        #[inline]
+        pub fn cmd_price(&mut self, value: f64) -> &mut Self {
+            let offset = self.offset + 36;
+            self.get_buf_mut().put_f64_at(offset, value);
+            self
+        }
+
+        /// primitive field 'cmdFlag'
+        /// - min value: 0
+        /// - max value: 254
+        /// - null value: 0xff_u8
+        /// - characterEncoding: null
+        /// - semanticType: null
+        /// - encodedOffset: 44
+        /// - encodedLength: 1
+        /// - version: 0
+        #[inline]
+        pub fn cmd_flag(&mut self, value: u8) -> &mut Self {
+            let offset = self.offset + 44;
+            self.get_buf_mut().put_u8_at(offset, value);
+            self
+        }
+
         /// VAR_DATA ENCODER - character encoding: 'None'
         #[inline]
-        pub fn command(&mut self, value: &[u8]) -> &mut Self {
+        pub fn cmd_text(&mut self, value: &[u8]) -> &mut Self {
             let limit = self.get_limit();
             let data_length = value.len().min((u32::MAX - 1) as usize);
             self.set_limit(limit + 4 + data_length);
@@ -579,7 +627,7 @@ pub mod decoder {
             self
         }
 
-        /// group token - Token{signal=BEGIN_GROUP, name='entries', referencedName='null', description='null', packageName='null', id=10, version=0, deprecated=0, encodedLength=28, offset=50, componentTokenCount=24, encoding=Encoding{presence=REQUIRED, primitiveType=null, byteOrder=LITTLE_ENDIAN, minValue=null, maxValue=null, nullValue=null, constValue=null, characterEncoding='null', epoch='null', timeUnit=null, semanticType='null'}}
+        /// group token - Token{signal=BEGIN_GROUP, name='entries', referencedName='null', description='null', packageName='null', id=10, version=0, deprecated=0, encodedLength=45, offset=50, componentTokenCount=33, encoding=Encoding{presence=REQUIRED, primitiveType=null, byteOrder=LITTLE_ENDIAN, minValue=null, maxValue=null, nullValue=null, constValue=null, characterEncoding='null', epoch='null', timeUnit=null, semanticType='null'}}
         #[inline]
         pub fn parent(&mut self) -> SbeResult<P> {
             self.parent.take().ok_or(SbeErr::ParentNotSet)
@@ -635,9 +683,27 @@ pub mod decoder {
             self.get_buf().get_i32_at(self.offset + 24)
         }
 
+        /// primitive field - 'REQUIRED'
+        #[inline]
+        pub fn cmd_qty(&self) -> i64 {
+            self.get_buf().get_i64_at(self.offset + 28)
+        }
+
+        /// primitive field - 'REQUIRED'
+        #[inline]
+        pub fn cmd_price(&self) -> f64 {
+            self.get_buf().get_f64_at(self.offset + 36)
+        }
+
+        /// primitive field - 'REQUIRED'
+        #[inline]
+        pub fn cmd_flag(&self) -> u8 {
+            self.get_buf().get_u8_at(self.offset + 44)
+        }
+
         /// VAR_DATA DECODER - character encoding: 'None'
         #[inline]
-        pub fn command_decoder(&mut self) -> (usize, usize) {
+        pub fn cmd_text_decoder(&mut self) -> (usize, usize) {
             let offset = self.parent.as_ref().expect("parent missing").get_limit();
             let data_length = self.get_buf().get_u32_at(offset) as usize;
             self.parent
@@ -648,7 +714,7 @@ pub mod decoder {
         }
 
         #[inline]
-        pub fn command_slice(&'a self, coordinates: (usize, usize)) -> &'a [u8] {
+        pub fn cmd_text_slice(&'a self, coordinates: (usize, usize)) -> &'a [u8] {
             debug_assert!(self.get_limit() >= coordinates.0 + coordinates.1);
             self.get_buf().get_slice_at(coordinates.0, coordinates.1)
         }

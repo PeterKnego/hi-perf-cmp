@@ -46,7 +46,10 @@ fn encode_fields(r: &JournalRecord, mut enc: JournalRecordEncoder<'_>) -> usize 
         group.entry_index(e.entry_index);
         group.entry_timestamp(e.entry_timestamp);
         group.command_key(e.command_key);
-        group.command(&e.command);
+        group.cmd_qty(e.cmd_qty);
+        group.cmd_price(e.cmd_price);
+        group.cmd_flag(e.cmd_flag as u8);
+        group.cmd_text(e.cmd_text.as_bytes());
     }
     group.get_limit()
 }
@@ -74,8 +77,11 @@ pub fn decode_checksum(bytes: &[u8]) -> u64 {
         c.add_i64(group.entry_index());
         c.add_i64(group.entry_timestamp());
         c.add_i32(group.command_key());
-        let coords = group.command_decoder();
-        c.add_bytes(group.command_slice(coords));
+        c.add_i64(group.cmd_qty());
+        c.add_f64(group.cmd_price());
+        c.add_bool(group.cmd_flag() != 0);
+        let coords = group.cmd_text_decoder();
+        c.add_str(std::str::from_utf8(group.cmd_text_slice(coords)).unwrap_or(""));
     }
     c.finish()
 }
