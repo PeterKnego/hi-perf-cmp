@@ -15,7 +15,10 @@ type Entry struct {
 	EntryIndex     int64
 	EntryTimestamp int64
 	CommandKey     int32
-	Command        []byte
+	CmdQty         int64
+	CmdPrice       float64
+	CmdFlag        bool
+	CmdText        string
 }
 
 func (bbp Entry) MarshalBebopTo(buf []byte) int {
@@ -28,10 +31,15 @@ func (bbp Entry) MarshalBebopTo(buf []byte) int {
 	at += 8
 	iohelp.WriteInt32Bytes(buf[at:], bbp.CommandKey)
 	at += 4
-	iohelp.WriteUint32Bytes(buf[at:], uint32(len(bbp.Command)))
-	at += 4
-	copy(buf[at:at+len(bbp.Command)], bbp.Command)
-	at += len(bbp.Command)
+	iohelp.WriteInt64Bytes(buf[at:], bbp.CmdQty)
+	at += 8
+	iohelp.WriteFloat64Bytes(buf[at:], bbp.CmdPrice)
+	at += 8
+	iohelp.WriteBoolBytes(buf[at:], bbp.CmdFlag)
+	at += 1
+	iohelp.WriteUint32Bytes(buf[at:], uint32(len(bbp.CmdText)))
+	copy(buf[at+4:at+4+len(bbp.CmdText)], []byte(bbp.CmdText))
+	at += 4 + len(bbp.CmdText)
 	return at
 }
 
@@ -57,16 +65,26 @@ func (bbp *Entry) UnmarshalBebop(buf []byte) (err error) {
 	}
 	bbp.CommandKey = iohelp.ReadInt32Bytes(buf[at:])
 	at += 4
-	if len(buf[at:]) < 4 {
+	if len(buf[at:]) < 8 {
 		return io.ErrUnexpectedEOF
 	}
-	bbp.Command = make([]byte, iohelp.ReadUint32Bytes(buf[at:]))
-	at += 4
-	if len(buf[at:]) < len(bbp.Command)*1 {
+	bbp.CmdQty = iohelp.ReadInt64Bytes(buf[at:])
+	at += 8
+	if len(buf[at:]) < 8 {
 		return io.ErrUnexpectedEOF
 	}
-	copy(bbp.Command, buf[at:at+len(bbp.Command)])
-	at += len(bbp.Command)
+	bbp.CmdPrice = iohelp.ReadFloat64Bytes(buf[at:])
+	at += 8
+	if len(buf[at:]) < 1 {
+		return io.ErrUnexpectedEOF
+	}
+	bbp.CmdFlag = iohelp.ReadBoolBytes(buf[at:])
+	at += 1
+	bbp.CmdText, err = iohelp.ReadStringBytes(buf[at:])
+	if err != nil {
+		return err
+	}
+	at += 4 + len(bbp.CmdText)
 	return nil
 }
 
@@ -76,8 +94,11 @@ func (bbp Entry) EncodeBebop(iow io.Writer) (err error) {
 	iohelp.WriteInt64(w, bbp.EntryIndex)
 	iohelp.WriteInt64(w, bbp.EntryTimestamp)
 	iohelp.WriteInt32(w, bbp.CommandKey)
-	iohelp.WriteUint32(w, uint32(len(bbp.Command)))
-	w.Write(bbp.Command)
+	iohelp.WriteInt64(w, bbp.CmdQty)
+	iohelp.WriteFloat64(w, bbp.CmdPrice)
+	iohelp.WriteBool(w, bbp.CmdFlag)
+	iohelp.WriteUint32(w, uint32(len(bbp.CmdText)))
+	w.Write([]byte(bbp.CmdText))
 	return w.Err
 }
 
@@ -87,8 +108,10 @@ func (bbp *Entry) DecodeBebop(ior io.Reader) (err error) {
 	bbp.EntryIndex = iohelp.ReadInt64(r)
 	bbp.EntryTimestamp = iohelp.ReadInt64(r)
 	bbp.CommandKey = iohelp.ReadInt32(r)
-	bbp.Command = make([]byte, iohelp.ReadUint32(r))
-	r.Read(bbp.Command)
+	bbp.CmdQty = iohelp.ReadInt64(r)
+	bbp.CmdPrice = iohelp.ReadFloat64(r)
+	bbp.CmdFlag = iohelp.ReadBool(r)
+	bbp.CmdText = iohelp.ReadString(r)
 	return r.Err
 }
 
@@ -98,8 +121,10 @@ func (bbp Entry) Size() int {
 	bodyLen += 8
 	bodyLen += 8
 	bodyLen += 4
-	bodyLen += 4
-	bodyLen += len(bbp.Command) * 1
+	bodyLen += 8
+	bodyLen += 8
+	bodyLen += 1
+	bodyLen += 4 + len(bbp.CmdText)
 	return bodyLen
 }
 

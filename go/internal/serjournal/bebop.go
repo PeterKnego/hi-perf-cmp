@@ -3,8 +3,8 @@ package serjournal
 import "github.com/peterknego/hi-perf-cmp/go/internal/serjournal/journalbop"
 
 // ToBebop converts the logical record to the generated bebop representation.
-// Command slices are shared, not copied — encode only reads them. Conversion
-// happens in the harness's untimed pre-build phase.
+// Fields are native bebop scalars (int64/float64/bool/string), copied by
+// value. Conversion happens in the harness's untimed pre-build phase.
 func ToBebop(r *Record) journalbop.JournalRecord {
 	entries := make([]journalbop.Entry, len(r.Entries))
 	for i := range r.Entries {
@@ -14,7 +14,10 @@ func ToBebop(r *Record) journalbop.JournalRecord {
 			EntryIndex:     e.EntryIndex,
 			EntryTimestamp: e.EntryTimestamp,
 			CommandKey:     e.CommandKey,
-			Command:        e.Command,
+			CmdQty:         e.CmdQty,
+			CmdPrice:       e.CmdPrice,
+			CmdFlag:        e.CmdFlag,
+			CmdText:        e.CmdText,
 		}
 	}
 	return journalbop.JournalRecord{
@@ -60,7 +63,10 @@ func DecodeBebopChecksum(buf []byte) uint64 {
 		c.AddI64(e.EntryIndex)
 		c.AddI64(e.EntryTimestamp)
 		c.AddI32(e.CommandKey)
-		c.AddBytes(e.Command)
+		c.AddI64(e.CmdQty)
+		c.AddF64(e.CmdPrice)
+		c.AddBool(e.CmdFlag)
+		c.AddString(e.CmdText)
 	}
 	return c.Finish()
 }
