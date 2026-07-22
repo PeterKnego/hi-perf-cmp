@@ -2,6 +2,7 @@ package serjournal
 
 import (
 	"bytes"
+	"io"
 
 	"github.com/peterknego/hi-perf-cmp/go/internal/serjournal/journalsbestruct"
 )
@@ -17,6 +18,9 @@ type sliceWriter struct {
 func (w *sliceWriter) Write(p []byte) (int, error) {
 	c := copy(w.b[w.n:], p)
 	w.n += c
+	if c < len(p) {
+		return c, io.ErrShortWrite
+	}
 	return c, nil
 }
 
