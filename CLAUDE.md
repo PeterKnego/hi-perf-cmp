@@ -29,7 +29,9 @@ measuring encode/decode latency + decode allocation. Go now also has SBE: a zero
 reusing experiment `aeron_sbe` (the Go twin of the Rust `aeron_sbe` flyweight, byte-identical wire, 0
 decode-alloc) and an owned-decode `sbe_struct` cell (same wire, materializes an owned struct); both are
 generated from the shared `journal.xml` by the vendored real-logic sbe-tool
-(`-Dsbe.go.generate.generate.flyweights` toggles the two modes). Java is not planned for this focus area.
+(`-Dsbe.go.generate.generate.flyweights` toggles the two modes). Go also has a `flatbuffers` cell using
+Google FlatBuffers' zero-copy read path (default accessors, not the object API): 0 decode allocation,
+with a larger wire than SBE (~608 B vs SBE's 502 B). Java is not planned for this focus area.
 `smr-collections` is implemented for the `insert`, `update`, and `snapshot` experiments
 across all three languages (single-host, fixed-capacity limit-order-book state store): Java uses
 Agrona (`Long2ObjectHashMap` + pooled orders), Rust/Go use a hand-rolled open-addressing id-map;
@@ -66,7 +68,7 @@ dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust; `aeron_sbe` also Go) and `serialization-{aeron_sbe,sbe_struct,bebop,protobuf}` (Go), `smr-collections-{insert,update,snapshot}`, `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust; `aeron_sbe` also Go) and `serialization-{aeron_sbe,sbe_struct,bebop,protobuf,flatbuffers}` (Go), `smr-collections-{insert,update,snapshot}`, `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
 
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt + filesystem-write + thread-handoff experiments
@@ -81,6 +83,7 @@ cd go && go build ./... && go vet ./... && go test ./...
 go run ./cmd/network-rtt-tcp
 go run ./cmd/serialization-protobuf  # or ./cmd/serialization-bebop
 go run ./cmd/serialization-aeron_sbe # or ./cmd/serialization-sbe_struct
+go run ./cmd/serialization-flatbuffers
 go run ./cmd/smr-collections-insert
 go run ./cmd/rpc-roundtrip-grpc      # or ./cmd/rpc-roundtrip-bebop_tcp
 
