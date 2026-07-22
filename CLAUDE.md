@@ -25,7 +25,11 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 `ring` experiments (single-host). `serialization` is implemented in Rust (`sbe_gen` zerocopy SBE,
 `aeron_sbe` real-logic SBE-tool Rust output, `bincode` serde+bincode) and Go (`bebop` via the
 200sc/bebop safe API, `protobuf` via the canonical google.golang.org/protobuf runtime), single-host,
-measuring encode/decode latency + decode allocation; Java is not planned for this focus area.
+measuring encode/decode latency + decode allocation. Go now also has SBE: a zero-copy flyweight cell
+reusing experiment `aeron_sbe` (the Go twin of the Rust `aeron_sbe` flyweight, byte-identical wire, 0
+decode-alloc) and an owned-decode `sbe_struct` cell (same wire, materializes an owned struct); both are
+generated from the shared `journal.xml` by the vendored real-logic sbe-tool
+(`-Dsbe.go.generate.generate.flyweights` toggles the two modes). Java is not planned for this focus area.
 `smr-collections` is implemented for the `insert`, `update`, and `snapshot` experiments
 across all three languages (single-host, fixed-capacity limit-order-book state store): Java uses
 Agrona (`Long2ObjectHashMap` + pooled orders), Rust/Go use a hand-rolled open-addressing id-map;
@@ -62,7 +66,7 @@ dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust) and `serialization-{bebop,protobuf}` (Go), `smr-collections-{insert,update,snapshot}`, `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust; `aeron_sbe` also Go) and `serialization-{aeron_sbe,sbe_struct,bebop,protobuf}` (Go), `smr-collections-{insert,update,snapshot}`, `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
 
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt + filesystem-write + thread-handoff experiments
@@ -76,6 +80,7 @@ cargo run --release -p rpc-roundtrip-sbe_udp
 cd go && go build ./... && go vet ./... && go test ./...
 go run ./cmd/network-rtt-tcp
 go run ./cmd/serialization-protobuf  # or ./cmd/serialization-bebop
+go run ./cmd/serialization-aeron_sbe # or ./cmd/serialization-sbe_struct
 go run ./cmd/smr-collections-insert
 go run ./cmd/rpc-roundtrip-grpc      # or ./cmd/rpc-roundtrip-bebop_tcp
 

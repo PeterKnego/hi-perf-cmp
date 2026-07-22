@@ -23,8 +23,9 @@ experiments:
   # own language. Rows without `languages` run for all of `languages` above,
   # unchanged. The `languages` key applies to both local and cross_host rows.
   - { focus_area: serialization,    experiment: sbe_gen,     kind: local, languages: [rust] }
-  - { focus_area: serialization,    experiment: aeron_sbe,   kind: local, languages: [rust] }
+  - { focus_area: serialization,    experiment: aeron_sbe,   kind: local, languages: [rust, go] }
   - { focus_area: serialization,    experiment: bincode,     kind: local, languages: [rust] }
+  - { focus_area: serialization,    experiment: sbe_struct,  kind: local, languages: [go] }
   - { focus_area: serialization,    experiment: bebop,       kind: local, languages: [go] }
   - { focus_area: serialization,    experiment: protobuf,    kind: local, languages: [go] }
   - { focus_area: smr-collections,  experiment: insert,      kind: local }
@@ -58,12 +59,14 @@ th_warmup: 10000
 th_iterations: 100000
 th_ring_cap: 1024
 
-# --- serialization params (single-host, node0). Five experiments over one
-#     shared ~500-byte journal record: sbe_gen, aeron_sbe, bincode (Rust) and
-#     bebop, protobuf (Go); ser_* params are shared by all five. aeron_sbe
-#     ships a committed generated crate + vendored jar, and the Go bebop/
-#     protobuf cells ship committed generated code too, so NO JDK/protoc/
-#     generator is needed at bench time (only regen.sh regenerates it). ---
+# --- serialization params (single-host, node0). Six experiment cells over one
+#     shared ~500-byte journal record: sbe_gen, aeron_sbe, bincode (Rust);
+#     aeron_sbe (also Go, zero-copy flyweight), sbe_struct (Go, owned-decode,
+#     same wire), bebop, protobuf (Go); ser_* params are shared by all. aeron_sbe
+#     ships committed generated code (Rust crate + vendored jar; Go flyweight +
+#     owned-decode variants), and the Go bebop/protobuf cells ship committed
+#     generated code too, so NO JDK/protoc/generator is needed at bench time
+#     (only regen.sh regenerates it). ---
 ser_warmup: 1000
 ser_iterations: 100000
 ser_entries: 4
