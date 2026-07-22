@@ -59,7 +59,7 @@ th_warmup: 10000
 th_iterations: 100000
 th_ring_cap: 1024
 
-# --- serialization params (single-host, node0). Six experiment cells over one
+# --- serialization params (single-host, node0). Six experiment names over one
 #     shared ~500-byte journal record: sbe_gen, aeron_sbe, bincode (Rust);
 #     aeron_sbe (also Go, zero-copy flyweight), sbe_struct (Go, owned-decode,
 #     same wire), bebop, protobuf (Go); ser_* params are shared by all. aeron_sbe
