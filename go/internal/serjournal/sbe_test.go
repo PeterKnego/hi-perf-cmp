@@ -48,3 +48,31 @@ func TestSBEFlyweightDecodeZeroAlloc(t *testing.T) {
 		t.Errorf("flyweight decode allocs/op = %v, want 0", avg)
 	}
 }
+
+func TestSBEStructRoundTrip(t *testing.T) {
+	codec := NewSBEStructCodec()
+	scratch := make([]byte, 64*1024)
+	for _, cfg := range [][2]int{{4, 78}, {2, 8}, {6, 40}} {
+		for _, idx := range []uint64{0, 1, 42} {
+			r := BuildRecord(idx, cfg[0], cfg[1])
+			n := codec.Encode(ToSBEStruct(&r), scratch)
+			if got, want := codec.DecodeChecksum(scratch[:n]), ChecksumRecord(&r); got != want {
+				t.Errorf("cfg%v idx%d: decode checksum %#x != fold %#x", cfg, idx, got, want)
+			}
+		}
+	}
+}
+
+func TestSBEStructByteIdentity(t *testing.T) {
+	golden, err := os.ReadFile("testdata/journal_sbe_golden.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec := NewSBEStructCodec()
+	scratch := make([]byte, 64*1024)
+	r := BuildRecord(7, 4, 78)
+	n := codec.Encode(ToSBEStruct(&r), scratch)
+	if !bytes.Equal(scratch[:n], golden) {
+		t.Fatalf("struct frame (%d bytes) not byte-identical to Rust golden", n)
+	}
+}
