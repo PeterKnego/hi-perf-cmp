@@ -1,0 +1,27 @@
+// FlatBuffers schema for the serialization JournalRecord (see the 2026-07-22
+// design spec). Entry is a table (not a struct) because command is
+// variable-length. Field order/names mirror the shared logical record.
+namespace journalfb;
+
+table Entry {
+  entry_term_id:long;
+  entry_index:long;
+  entry_timestamp:long;
+  command_key:int;
+  command:[ubyte];
+}
+
+table JournalRecord {
+  leadership_term_id:long;
+  log_position:long;
+  timestamp:long;
+  cluster_session_id:long;
+  correlation_id:long;
+  leader_member_id:int;
+  service_id:int;
+  event_type:ubyte;
+  flags:ubyte;
+  entries:[Entry];
+}
+
+root_type JournalRecord;
