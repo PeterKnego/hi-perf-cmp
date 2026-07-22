@@ -7,9 +7,9 @@ import "testing"
 // To regenerate: build a scratch crate depending on rust/serialization/common
 // and print the checksums for the tuples below (see the implementation plan).
 var golden = []struct {
-	index             uint64
-	entries, textLen  int
-	want              uint64
+	index            uint64
+	entries, textLen int
+	want             uint64
 }{
 	{0, 4, 78, 0x86d721cbffdefc06},
 	{1, 4, 78, 0xddb1bfa73e9819cb},
