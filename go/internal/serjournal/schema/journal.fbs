@@ -8,7 +8,10 @@ table Entry {
   entry_index:long;
   entry_timestamp:long;
   command_key:int;
-  command:[ubyte];
+  cmd_qty:long;
+  cmd_price:double;
+  cmd_flag:bool;
+  cmd_text:string;
 }
 
 table JournalRecord {

@@ -89,42 +89,52 @@ func (rcv *Entry) MutateCommandKey(n int32) bool {
 	return rcv._tab.MutateInt32Slot(10, n)
 }
 
-func (rcv *Entry) Command(j int) byte {
+func (rcv *Entry) CmdQty() int64 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
-		a := rcv._tab.Vector(o)
-		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
+		return rcv._tab.GetInt64(o + rcv._tab.Pos)
 	}
 	return 0
 }
 
-func (rcv *Entry) CommandLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
-	if o != 0 {
-		return rcv._tab.VectorLen(o)
-	}
-	return 0
+func (rcv *Entry) MutateCmdQty(n int64) bool {
+	return rcv._tab.MutateInt64Slot(12, n)
 }
 
-func (rcv *Entry) CommandBytes() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+func (rcv *Entry) CmdPrice() float64 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
+	if o != 0 {
+		return rcv._tab.GetFloat64(o + rcv._tab.Pos)
+	}
+	return 0.0
+}
+
+func (rcv *Entry) MutateCmdPrice(n float64) bool {
+	return rcv._tab.MutateFloat64Slot(14, n)
+}
+
+func (rcv *Entry) CmdFlag() bool {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	if o != 0 {
+		return rcv._tab.GetBool(o + rcv._tab.Pos)
+	}
+	return false
+}
+
+func (rcv *Entry) MutateCmdFlag(n bool) bool {
+	return rcv._tab.MutateBoolSlot(16, n)
+}
+
+func (rcv *Entry) CmdText() []byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(18))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
 	return nil
 }
 
-func (rcv *Entry) MutateCommand(j int, n byte) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
-	if o != 0 {
-		a := rcv._tab.Vector(o)
-		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
-	}
-	return false
-}
-
 func EntryStart(builder *flatbuffers.Builder) {
-	builder.StartObject(5)
+	builder.StartObject(8)
 }
 func EntryAddEntryTermId(builder *flatbuffers.Builder, entryTermId int64) {
 	builder.PrependInt64Slot(0, entryTermId, 0)
@@ -138,11 +148,17 @@ func EntryAddEntryTimestamp(builder *flatbuffers.Builder, entryTimestamp int64) 
 func EntryAddCommandKey(builder *flatbuffers.Builder, commandKey int32) {
 	builder.PrependInt32Slot(3, commandKey, 0)
 }
-func EntryAddCommand(builder *flatbuffers.Builder, command flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(4, flatbuffers.UOffsetT(command), 0)
+func EntryAddCmdQty(builder *flatbuffers.Builder, cmdQty int64) {
+	builder.PrependInt64Slot(4, cmdQty, 0)
 }
-func EntryStartCommandVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
-	return builder.StartVector(1, numElems, 1)
+func EntryAddCmdPrice(builder *flatbuffers.Builder, cmdPrice float64) {
+	builder.PrependFloat64Slot(5, cmdPrice, 0.0)
+}
+func EntryAddCmdFlag(builder *flatbuffers.Builder, cmdFlag bool) {
+	builder.PrependBoolSlot(6, cmdFlag, false)
+}
+func EntryAddCmdText(builder *flatbuffers.Builder, cmdText flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(7, flatbuffers.UOffsetT(cmdText), 0)
 }
 func EntryEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

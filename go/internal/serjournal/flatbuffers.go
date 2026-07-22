@@ -26,7 +26,7 @@ func (c *FBCodec) Encode(r Record, scratch []byte) int {
 	b := c.b
 	b.Reset()
 
-	// Nested objects (command vectors, Entry tables) must be built before the
+	// Nested objects (cmd_text strings, Entry tables) must be built before the
 	// containing entries vector / root table.
 	if cap(c.offs) < len(r.Entries) {
 		c.offs = make([]flatbuffers.UOffsetT, len(r.Entries))
@@ -34,13 +34,16 @@ func (c *FBCodec) Encode(r Record, scratch []byte) int {
 	c.offs = c.offs[:len(r.Entries)]
 	for i := range r.Entries {
 		e := &r.Entries[i]
-		cmdOff := b.CreateByteVector(e.Command)
+		textOff := b.CreateString(e.CmdText)
 		journalfb.EntryStart(b)
 		journalfb.EntryAddEntryTermId(b, e.EntryTermID)
 		journalfb.EntryAddEntryIndex(b, e.EntryIndex)
 		journalfb.EntryAddEntryTimestamp(b, e.EntryTimestamp)
 		journalfb.EntryAddCommandKey(b, e.CommandKey)
-		journalfb.EntryAddCommand(b, cmdOff)
+		journalfb.EntryAddCmdQty(b, e.CmdQty)
+		journalfb.EntryAddCmdPrice(b, e.CmdPrice)
+		journalfb.EntryAddCmdFlag(b, e.CmdFlag)
+		journalfb.EntryAddCmdText(b, textOff)
 		c.offs[i] = journalfb.EntryEnd(b)
 	}
 
@@ -69,7 +72,8 @@ func (c *FBCodec) Encode(r Record, scratch []byte) int {
 
 // DecodeChecksum reads via zero-copy accessors and folds every field in the
 // canonical ChecksumRecord order. Zero allocation: scalars read in place, the
-// Entry accessor is reused, CommandBytes returns a view into the buffer.
+// Entry accessor is reused, CmdText() returns a []byte view into the buffer
+// folded via AddStringBytes (no string() copy).
 func (c *FBCodec) DecodeChecksum(frame []byte) uint64 {
 	rec := journalfb.GetRootAsJournalRecord(frame, 0)
 	ck := NewChecksum()
@@ -89,7 +93,10 @@ func (c *FBCodec) DecodeChecksum(frame []byte) uint64 {
 		ck.AddI64(c.ent.EntryIndex())
 		ck.AddI64(c.ent.EntryTimestamp())
 		ck.AddI32(c.ent.CommandKey())
-		ck.AddBytes(c.ent.CommandBytes())
+		ck.AddI64(c.ent.CmdQty())
+		ck.AddF64(c.ent.CmdPrice())
+		ck.AddBool(c.ent.CmdFlag())
+		ck.AddStringBytes(c.ent.CmdText()) // []byte view; AddStringBytes keeps decode 0-alloc
 	}
 	return ck.Finish()
 }
