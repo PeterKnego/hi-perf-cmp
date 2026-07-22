@@ -9,9 +9,11 @@ Add a Google **FlatBuffers** Go codec to the `serialization` focus area — cell
 `(serialization, flatbuffers, go)` — encoding/decoding the same ~500-byte
 `JournalRecord`. FlatBuffers is **zero-copy on read**: generated accessors read
 fields directly from the buffer with no unpack step, so decode allocates
-**nothing** and is (per the `kcchu/buffer-benchmarks` comparison) the fastest
-decode. This adds a second zero-copy-decode data point alongside the SBE
-flyweight cell, via a completely different wire format.
+**nothing**. The `kcchu/buffer-benchmarks` comparison reports FlatBuffers as the
+fastest decode; note that a local run of this harness found the SBE flyweight
+(`aeron_sbe` Go) decodes faster here, so the value of this cell is the second
+zero-copy-decode data point alongside the SBE flyweight — via a completely
+different wire format — not a fastest-decode claim.
 
 ## The zero-copy config
 

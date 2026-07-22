@@ -21,7 +21,7 @@ func TestFlatBuffersEncodedSizeBand(t *testing.T) {
 	scratch := make([]byte, 64*1024)
 	r := BuildRecord(0, 4, 78)
 	n := codec.Encode(r, scratch)
-	// FlatBuffers carries vtables + offsets; ~616 B at the default config.
+	// FlatBuffers carries vtables + offsets; ~608 B at the default config.
 	if n < 550 || n > 700 {
 		t.Fatalf("encoded size %d outside [550,700]", n)
 	}
