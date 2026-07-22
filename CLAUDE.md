@@ -12,7 +12,9 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 - **network-rtt** — minimize RTT for leader→follower→leader communication when replicating log entries.
 - **filesystem-write** — fast, durable command-log persistence.
 - **thread-handoff** — thread-to-thread data passing, including thread sleep/wakeup.
-- **serialization** — encode/decode cost (latency + memory) of a command-log record; SBE vs bincode.
+- **serialization** — encode/decode cost (latency + memory) of a command-log record carrying a **typed
+  command** (`cmdQty` int64, `cmdPrice` float64, `cmdFlag` bool, `cmdText` string) rather than an opaque
+  blob, so the grid exercises field encoding (float/varint/bool/string); SBE vs bincode vs bebop/protobuf/flatbuffers.
 - **smr-collections** — insert/update/snapshot cost of the in-memory state store (a fixed-capacity
   limit-order-book) that SMR replays commands into.
 - **rpc-roundtrip** — mutating serialize→send→deserialize+mutate→reserialize→send→deserialize round-trip
@@ -25,7 +27,10 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 `ring` experiments (single-host). `serialization` is implemented in Rust (`sbe_gen` zerocopy SBE,
 `aeron_sbe` real-logic SBE-tool Rust output, `bincode` serde+bincode) and Go (`bebop` via the
 200sc/bebop safe API, `protobuf` via the canonical google.golang.org/protobuf runtime), single-host,
-measuring encode/decode latency + decode allocation. Go now also has SBE: a zero-copy flyweight cell
+measuring encode/decode latency + decode allocation. Each journal entry's command is a **typed command**
+(`cmdQty` int64, `cmdPrice` float64, `cmdFlag` bool, `cmdText` string) rather than an opaque
+variable-length blob, so the grid exercises field encoding (float/varint/bool/string) instead of a
+memcpy; `SER_CMD_BYTES` now sizes the `cmdText` string (default 12). Go now also has SBE: a zero-copy flyweight cell
 reusing experiment `aeron_sbe` (the Go twin of the Rust `aeron_sbe` flyweight, byte-identical wire, 0
 decode-alloc) and an owned-decode `sbe_struct` cell (same wire, materializes an owned struct); both are
 generated from the shared `journal.xml` by the vendored real-logic sbe-tool

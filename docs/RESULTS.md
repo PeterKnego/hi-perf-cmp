@@ -144,6 +144,14 @@ for `spin` (busy-wait), `condvar` (mutex + condition variable park/unpark), and
 
 ## serialization — command-log record encode/decode (single host)
 
+> **Record change note.** As of the next run, the journal record's per-entry
+> command is a **typed command** (`cmdQty` int64, `cmdPrice` float64, `cmdFlag`
+> bool, `cmdText` string, with `SER_CMD_BYTES` now sizing `cmdText` at 12
+> rather than 78) instead of an opaque blob, making the typed scalars —
+> not the string — the dominant cost. The tables below (baseline
+> 20260713T152911Z / scoped 20260722T131646Z) predate that change and remain
+> historical until re-measured.
+
 Encode and decode of one ~500 B state-machine-replication journal record — a
 mixed block of fixed fields plus a repeating group of variable-length command
 payloads — across three Rust codecs: `sbe_gen` (zero-copy SBE via the

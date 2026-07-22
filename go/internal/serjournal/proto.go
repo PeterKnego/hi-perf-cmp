@@ -7,8 +7,9 @@ import (
 )
 
 // ToProto converts the logical record to the generated protobuf
-// representation. Command slices are shared, not copied — encode only reads
-// them. Conversion happens in the harness's untimed pre-build phase.
+// representation. CmdText is a shared string, not copied — encode only reads
+// it; the other command fields (CmdQty, CmdPrice, CmdFlag) are scalars copied
+// by value. Conversion happens in the harness's untimed pre-build phase.
 func ToProto(r *Record) *journalpb.JournalRecord {
 	entries := make([]*journalpb.Entry, len(r.Entries))
 	for i := range r.Entries {

@@ -61,18 +61,19 @@ th_iterations: 100000
 th_ring_cap: 1024
 
 # --- serialization params (single-host, node0). Seven experiment names over one
-#     shared ~500-byte journal record: sbe_gen, aeron_sbe, bincode (Rust);
-#     aeron_sbe (also Go, zero-copy flyweight), sbe_struct (Go, owned-decode,
-#     same wire), bebop, protobuf, flatbuffers (Go, zero-copy read via the
-#     default accessors); ser_* params are shared by all. aeron_sbe ships
-#     committed generated code (Rust crate + vendored jar; Go flyweight +
-#     owned-decode variants), and the Go bebop/protobuf/flatbuffers cells ship
-#     committed generated code too, so NO JDK/protoc/generator/flatc is needed
-#     at bench time (only regen.sh regenerates it). ---
+#     shared journal record carrying a typed command (cmdQty int64, cmdPrice
+#     float64, cmdFlag bool, cmdText string): sbe_gen, aeron_sbe, bincode
+#     (Rust); aeron_sbe (also Go, zero-copy flyweight), sbe_struct (Go,
+#     owned-decode, same wire), bebop, protobuf, flatbuffers (Go, zero-copy
+#     read via the default accessors); ser_* params are shared by all.
+#     aeron_sbe ships committed generated code (Rust crate + vendored jar; Go
+#     flyweight + owned-decode variants), and the Go bebop/protobuf/flatbuffers
+#     cells ship committed generated code too, so NO JDK/protoc/generator/flatc
+#     is needed at bench time (only regen.sh regenerates it). ---
 ser_warmup: 1000
 ser_iterations: 100000
 ser_entries: 4
-ser_cmd_bytes: 78
+ser_cmd_bytes: 12  # sizes the cmdText string; keeps the typed scalars (not the string) dominant
 
 # smr-collections params (single-host, node0). Identical across languages.
 smrc_cap: 262144
