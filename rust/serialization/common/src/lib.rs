@@ -10,7 +10,10 @@ pub struct Entry {
     pub entry_index: i64,
     pub entry_timestamp: i64,
     pub command_key: i32,
-    pub command: Vec<u8>,
+    pub cmd_qty: i64,
+    pub cmd_price: f64,
+    pub cmd_flag: bool,
+    pub cmd_text: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -39,23 +42,30 @@ fn mix(x: u64) -> u64 {
 }
 
 /// Build one journal record deterministically from `index`, with `entries`
-/// group members each carrying a `cmd_bytes`-long command payload. Defaults of
-/// `entries = 4`, `cmd_bytes = 78` encode to ~500 bytes.
-pub fn build_record(index: u64, entries: usize, cmd_bytes: usize) -> JournalRecord {
+/// group members each carrying a `text_len`-long command text. Defaults of
+/// `entries = 4`, `text_len = 78` encode to ~500 bytes.
+pub fn build_record(index: u64, entries: usize, text_len: usize) -> JournalRecord {
     let h = mix(index);
     let mut group = Vec::with_capacity(entries);
     for k in 0..entries as u64 {
         let e = mix(h ^ k.wrapping_mul(0x0100_0000_01B3));
-        let mut command = vec![0u8; cmd_bytes];
-        for (i, b) in command.iter_mut().enumerate() {
-            *b = (e >> (i % 8 * 8)) as u8 ^ i as u8;
+        let cmd_qty = mix(e) as i64;
+        let cmd_price = (mix(e ^ 0xF0) >> 11) as f64 * 3.0517578125e-5;
+        let cmd_flag = (mix(e ^ 0x0F) & 1) == 1;
+        let t = mix(e ^ 0xAA);
+        let mut cmd_text = String::with_capacity(text_len);
+        for i in 0..text_len {
+            cmd_text.push((0x20u8 + (t >> (i % 8 * 8)) as u8 % 95) as char);
         }
         group.push(Entry {
             entry_term_id: e as i64,
             entry_index: (index * entries as u64 + k) as i64,
             entry_timestamp: mix(e) as i64,
             command_key: (e >> 32) as i32,
-            command,
+            cmd_qty,
+            cmd_price,
+            cmd_flag,
+            cmd_text,
         });
     }
     JournalRecord {
@@ -105,6 +115,22 @@ impl Checksum {
         }
     }
     #[inline]
+    pub fn add_f64(&mut self, v: f64) {
+        self.step(v.to_bits());
+    }
+    #[inline]
+    pub fn add_bool(&mut self, v: bool) {
+        self.step(v as u64);
+    }
+    #[inline]
+    pub fn add_str(&mut self, s: &str) {
+        let b = s.as_bytes();
+        self.step(b.len() as u64);
+        for &x in b {
+            self.step(x as u64);
+        }
+    }
+    #[inline]
     pub fn finish(self) -> u64 {
         self.0
     }
@@ -134,7 +160,10 @@ pub fn checksum_record(r: &JournalRecord) -> u64 {
         c.add_i64(e.entry_index);
         c.add_i64(e.entry_timestamp);
         c.add_i32(e.command_key);
-        c.add_bytes(&e.command);
+        c.add_i64(e.cmd_qty);
+        c.add_f64(e.cmd_price);
+        c.add_bool(e.cmd_flag);
+        c.add_str(&e.cmd_text);
     }
     c.finish()
 }
@@ -149,12 +178,36 @@ mod tests {
         let b = build_record(42, 4, 78);
         assert_eq!(a, b);
         assert_eq!(a.entries.len(), 4);
-        assert_eq!(a.entries[0].command.len(), 78);
+        assert_eq!(a.entries[0].cmd_text.len(), 78);
     }
 
     #[test]
     fn build_record_varies_by_index() {
         assert_ne!(build_record(1, 4, 78), build_record(2, 4, 78));
+    }
+
+    #[test]
+    fn golden_checksums() {
+        assert_eq!(
+            checksum_record(&build_record(0, 4, 78)),
+            0x86d7_21cb_ffde_fc06
+        );
+        assert_eq!(
+            checksum_record(&build_record(1, 4, 78)),
+            0xddb1_bfa7_3e98_19cb
+        );
+        assert_eq!(
+            checksum_record(&build_record(42, 4, 78)),
+            0x495a_0d76_3cc8_20ca
+        );
+        assert_eq!(
+            checksum_record(&build_record(99999, 4, 78)),
+            0x552b_9243_6dae_830e
+        );
+        assert_eq!(
+            checksum_record(&build_record(7, 2, 8)),
+            0x9b52_5460_dd07_0517
+        );
     }
 
     #[test]
@@ -175,7 +228,10 @@ mod tests {
             c.add_i64(e.entry_index);
             c.add_i64(e.entry_timestamp);
             c.add_i32(e.command_key);
-            c.add_bytes(&e.command);
+            c.add_i64(e.cmd_qty);
+            c.add_f64(e.cmd_price);
+            c.add_bool(e.cmd_flag);
+            c.add_str(&e.cmd_text);
         }
         assert_eq!(checksum_record(&r), c.finish());
     }
