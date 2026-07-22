@@ -31,7 +31,10 @@ type Entry struct {
 	EntryIndex     int64                  `protobuf:"fixed64,2,opt,name=entry_index,json=entryIndex,proto3" json:"entry_index,omitempty"`
 	EntryTimestamp int64                  `protobuf:"fixed64,3,opt,name=entry_timestamp,json=entryTimestamp,proto3" json:"entry_timestamp,omitempty"`
 	CommandKey     int32                  `protobuf:"fixed32,4,opt,name=command_key,json=commandKey,proto3" json:"command_key,omitempty"`
-	Command        []byte                 `protobuf:"bytes,5,opt,name=command,proto3" json:"command,omitempty"`
+	CmdQty         int64                  `protobuf:"fixed64,5,opt,name=cmd_qty,json=cmdQty,proto3" json:"cmd_qty,omitempty"`
+	CmdPrice       float64                `protobuf:"fixed64,6,opt,name=cmd_price,json=cmdPrice,proto3" json:"cmd_price,omitempty"`
+	CmdFlag        bool                   `protobuf:"varint,7,opt,name=cmd_flag,json=cmdFlag,proto3" json:"cmd_flag,omitempty"`
+	CmdText        string                 `protobuf:"bytes,8,opt,name=cmd_text,json=cmdText,proto3" json:"cmd_text,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -94,11 +97,32 @@ func (x *Entry) GetCommandKey() int32 {
 	return 0
 }
 
-func (x *Entry) GetCommand() []byte {
+func (x *Entry) GetCmdQty() int64 {
 	if x != nil {
-		return x.Command
+		return x.CmdQty
 	}
-	return nil
+	return 0
+}
+
+func (x *Entry) GetCmdPrice() float64 {
+	if x != nil {
+		return x.CmdPrice
+	}
+	return 0
+}
+
+func (x *Entry) GetCmdFlag() bool {
+	if x != nil {
+		return x.CmdFlag
+	}
+	return false
+}
+
+func (x *Entry) GetCmdText() string {
+	if x != nil {
+		return x.CmdText
+	}
+	return ""
 }
 
 type JournalRecord struct {
@@ -221,15 +245,18 @@ var File_schema_journal_proto protoreflect.FileDescriptor
 
 const file_schema_journal_proto_rawDesc = "" +
 	"\n" +
-	"\x14schema/journal.proto\x12\x0ehiperf.journal\"\xb0\x01\n" +
+	"\x14schema/journal.proto\x12\x0ehiperf.journal\"\x82\x02\n" +
 	"\x05Entry\x12\"\n" +
 	"\rentry_term_id\x18\x01 \x01(\x10R\ventryTermId\x12\x1f\n" +
 	"\ventry_index\x18\x02 \x01(\x10R\n" +
 	"entryIndex\x12'\n" +
 	"\x0fentry_timestamp\x18\x03 \x01(\x10R\x0eentryTimestamp\x12\x1f\n" +
 	"\vcommand_key\x18\x04 \x01(\x0fR\n" +
-	"commandKey\x12\x18\n" +
-	"\acommand\x18\x05 \x01(\fR\acommand\"\x82\x03\n" +
+	"commandKey\x12\x17\n" +
+	"\acmd_qty\x18\x05 \x01(\x10R\x06cmdQty\x12\x1b\n" +
+	"\tcmd_price\x18\x06 \x01(\x01R\bcmdPrice\x12\x19\n" +
+	"\bcmd_flag\x18\a \x01(\bR\acmdFlag\x12\x19\n" +
+	"\bcmd_text\x18\b \x01(\tR\acmdText\"\x82\x03\n" +
 	"\rJournalRecord\x12,\n" +
 	"\x12leadership_term_id\x18\x01 \x01(\x10R\x10leadershipTermId\x12!\n" +
 	"\flog_position\x18\x02 \x01(\x10R\vlogPosition\x12\x1c\n" +

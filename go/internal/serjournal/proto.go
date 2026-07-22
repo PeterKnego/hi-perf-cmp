@@ -18,7 +18,10 @@ func ToProto(r *Record) *journalpb.JournalRecord {
 			EntryIndex:     e.EntryIndex,
 			EntryTimestamp: e.EntryTimestamp,
 			CommandKey:     e.CommandKey,
-			Command:        e.Command,
+			CmdQty:         e.CmdQty,
+			CmdPrice:       e.CmdPrice,
+			CmdFlag:        e.CmdFlag,
+			CmdText:        e.CmdText,
 		}
 	}
 	return &journalpb.JournalRecord{
@@ -74,7 +77,10 @@ func DecodeProtoChecksum(buf []byte) uint64 {
 		c.AddI64(e.EntryIndex)
 		c.AddI64(e.EntryTimestamp)
 		c.AddI32(e.CommandKey)
-		c.AddBytes(e.Command)
+		c.AddI64(e.CmdQty)
+		c.AddF64(e.CmdPrice)
+		c.AddBool(e.CmdFlag)
+		c.AddString(e.CmdText)
 	}
 	return c.Finish()
 }

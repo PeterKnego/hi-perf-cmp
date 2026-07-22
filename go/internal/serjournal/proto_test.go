@@ -17,8 +17,9 @@ func TestProtoEncodedSizeBand(t *testing.T) {
 	r := BuildRecord(0, 4, 78)
 	scratch := make([]byte, 64*1024)
 	n := EncodeProto(ToProto(&r), scratch)
-	// ~500-byte target; loose band allows per-codec framing differences.
-	if n < 450 || n > 570 {
-		t.Fatalf("encoded size %d outside [450, 570]", n)
+	// ~575-byte target (typed command fields); loose band allows per-codec
+	// framing differences.
+	if n < 545 || n > 605 {
+		t.Fatalf("encoded size %d outside [545, 605]", n)
 	}
 }

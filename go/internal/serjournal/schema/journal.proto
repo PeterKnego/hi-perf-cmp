@@ -11,7 +11,10 @@ message Entry {
   sfixed64 entry_index = 2;
   sfixed64 entry_timestamp = 3;
   sfixed32 command_key = 4;
-  bytes command = 5;
+  sfixed64 cmd_qty = 5;
+  double cmd_price = 6;
+  bool cmd_flag = 7;
+  string cmd_text = 8;
 }
 
 message JournalRecord {
