@@ -3,27 +3,27 @@ package serjournal
 import "testing"
 
 // Golden values generated from the Rust serialization-common implementation
-// (checksum_record(build_record(index, entries, cmdBytes))) on 2026-07-16.
+// (checksum_record(build_record(index, entries, textLen))) on 2026-07-16.
 // To regenerate: build a scratch crate depending on rust/serialization/common
 // and print the checksums for the tuples below (see the implementation plan).
 var golden = []struct {
 	index             uint64
-	entries, cmdBytes int
+	entries, textLen  int
 	want              uint64
 }{
-	{0, 4, 78, 0x7b8ca2b4f6f556d9},
-	{1, 4, 78, 0x2ecb381439a319d6},
-	{42, 4, 78, 0xe0e5b9514969d90d},
-	{99999, 4, 78, 0xd19fa98130a517fe},
-	{7, 2, 8, 0x6d62ff2cced105df},
+	{0, 4, 78, 0x86d721cbffdefc06},
+	{1, 4, 78, 0xddb1bfa73e9819cb},
+	{42, 4, 78, 0x495a0d763cc820ca},
+	{99999, 4, 78, 0x552b92436dae830e},
+	{7, 2, 8, 0x9b525460dd070517},
 }
 
 func TestGoldenChecksumsMatchRust(t *testing.T) {
 	for _, g := range golden {
-		r := BuildRecord(g.index, g.entries, g.cmdBytes)
+		r := BuildRecord(g.index, g.entries, g.textLen)
 		if got := ChecksumRecord(&r); got != g.want {
 			t.Errorf("(%d,%d,%d): got %#016x, want %#016x",
-				g.index, g.entries, g.cmdBytes, got, g.want)
+				g.index, g.entries, g.textLen, got, g.want)
 		}
 	}
 }
@@ -34,9 +34,9 @@ func TestBuildRecordIsDeterministic(t *testing.T) {
 	if ChecksumRecord(&a) != ChecksumRecord(&b) {
 		t.Fatal("same index produced different records")
 	}
-	if len(a.Entries) != 4 || len(a.Entries[0].Command) != 78 {
+	if len(a.Entries) != 4 || len(a.Entries[0].CmdText) != 78 {
 		t.Fatalf("unexpected shape: %d entries, %d command bytes",
-			len(a.Entries), len(a.Entries[0].Command))
+			len(a.Entries), len(a.Entries[0].CmdText))
 	}
 }
 

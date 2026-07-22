@@ -5,13 +5,18 @@
 // the golden test anchors the two implementations to identical records.
 package serjournal
 
+import "math"
+
 // Entry is one replicated command in the record's repeating group.
 type Entry struct {
 	EntryTermID    int64
 	EntryIndex     int64
 	EntryTimestamp int64
 	CommandKey     int32
-	Command        []byte
+	CmdQty         int64
+	CmdPrice       float64
+	CmdFlag        bool
+	CmdText        string
 }
 
 // Record mirrors Rust serialization-common's JournalRecord.
@@ -38,23 +43,27 @@ func mix(x uint64) uint64 {
 }
 
 // BuildRecord builds one journal record deterministically from index, with
-// entries group members each carrying a cmdBytes-long command payload.
-// Defaults of entries=4, cmdBytes=78 encode to ~500 bytes.
-func BuildRecord(index uint64, entries, cmdBytes int) Record {
+// entries group members each carrying a textLen-long command text payload.
+// Defaults of entries=4, textLen=78 encode to ~500 bytes.
+func BuildRecord(index uint64, entries, textLen int) Record {
 	h := mix(index)
 	group := make([]Entry, 0, entries)
 	for k := uint64(0); k < uint64(entries); k++ {
 		e := mix(h ^ k*0x100000001B3)
-		command := make([]byte, cmdBytes)
-		for i := range command {
-			command[i] = byte(e>>(i%8*8)) ^ byte(i)
+		t := mix(e ^ 0xAA)
+		text := make([]byte, textLen)
+		for i := range text {
+			text[i] = 0x20 + byte(t>>(i%8*8))%95
 		}
 		group = append(group, Entry{
 			EntryTermID:    int64(e),
 			EntryIndex:     int64(index*uint64(entries) + k),
 			EntryTimestamp: int64(mix(e)),
 			CommandKey:     int32(e >> 32),
-			Command:        command,
+			CmdQty:         int64(mix(e)),
+			CmdPrice:       float64(mix(e^0xF0)>>11) * 3.0517578125e-5,
+			CmdFlag:        mix(e^0x0F)&1 == 1,
+			CmdText:        string(text),
 		})
 	}
 	return Record{
@@ -94,6 +103,31 @@ func (c *Checksum) AddBytes(b []byte) {
 	}
 }
 
+func (c *Checksum) AddF64(v float64) { c.step(math.Float64bits(v)) }
+func (c *Checksum) AddBool(v bool) {
+	if v {
+		c.step(1)
+	} else {
+		c.step(0)
+	}
+}
+func (c *Checksum) AddString(s string) {
+	c.step(uint64(len(s)))
+	for i := 0; i < len(s); i++ {
+		c.step(uint64(s[i]))
+	}
+}
+
+// AddStringBytes folds a UTF-8 byte view identically to AddString, so the
+// zero-copy decoders (flyweight, flatbuffers) can fold cmdText without a
+// string() allocation.
+func (c *Checksum) AddStringBytes(b []byte) {
+	c.step(uint64(len(b)))
+	for _, x := range b {
+		c.step(uint64(x))
+	}
+}
+
 func (c Checksum) Finish() uint64 { return uint64(c) }
 
 // ChecksumRecord is the canonical fold over a fully-owned record. Codec decode
@@ -115,7 +149,10 @@ func ChecksumRecord(r *Record) uint64 {
 		c.AddI64(e.EntryIndex)
 		c.AddI64(e.EntryTimestamp)
 		c.AddI32(e.CommandKey)
-		c.AddBytes(e.Command)
+		c.AddI64(e.CmdQty)
+		c.AddF64(e.CmdPrice)
+		c.AddBool(e.CmdFlag)
+		c.AddString(e.CmdText)
 	}
 	return c.Finish()
 }
