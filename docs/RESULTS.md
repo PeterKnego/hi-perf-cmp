@@ -10,7 +10,7 @@ same-AZ cluster placement group for the 2-node network runs. Uniform harness:
 64-byte payload, 10,000 warmup + 100,000 measured iterations, identical stats
 code in each language.
 
-**Runs recorded** (June 26 – July 20, 2026):
+**Runs recorded** (June 26 – July 22, 2026):
 
 | run | what it measured |
 |---|---|
@@ -21,6 +21,7 @@ code in each language.
 | [20260713T152911Z](../journal/runs/20260713T152911Z-23b9778538e9/entry.md) | First `serialization` run (sbe_gen/aeron_sbe/bincode); full matrix re-measured — **current baseline** |
 | [20260716T100733Z](../journal/runs/20260716T100733Z-16a158ef9fd2/entry.md) | Go `serialization` cells added (`bebop`, `protobuf`) alongside the Rust codecs (scoped run) |
 | [20260720T120209Z](../journal/runs/20260720T120209Z-79706160a45d/entry.md) | First `rpc-roundtrip` run (sbe_udp/grpc/bebop_tcp) — mutating cross-host round-trip (scoped run) |
+| [20260722T131646Z](../journal/runs/20260722T131646Z-cd050b70cc78/entry.md) | `serialization` grid extended with Go SBE flyweight (`aeron_sbe`), Go SBE struct (`sbe_struct`), and `flatbuffers` (scoped run) |
 
 Unless noted, tables below show the **current baseline** run (20260713T152911Z). The
 two July 16 / July 20 runs are **scoped** (one focus area each, not a full-matrix
@@ -148,9 +149,12 @@ mixed block of fixed fields plus a repeating group of variable-length command
 payloads — across three Rust codecs: `sbe_gen` (zero-copy SBE via the
 `zerocopy` crate), `aeron_sbe` (the reference real-logic `sbe-tool` emitting
 Rust — the same codec Aeron itself uses), and `bincode` (serde + bincode v2,
-the ergonomic derive baseline). Two Go cells were added later — `bebop` (via the
-200sc/bebop safe API) and `protobuf` (the canonical google.golang.org/protobuf
-runtime, `sfixed`-typed schema) — measuring the same logical record. The harness
+the ergonomic derive baseline). Five Go codecs were added later, measuring the
+same logical record: `bebop` (200sc/bebop safe API), `protobuf` (canonical
+google.golang.org/protobuf, `sfixed`-typed schema), `aeron_sbe` (the SBE tool's
+zero-copy Golang **flyweight** — the Go twin of the Rust `aeron_sbe`),
+`sbe_struct` (the same tool's default owned-struct Golang codec), and
+`flatbuffers` (zero-copy accessors). The harness
 encodes a stream of records into an in-memory journal then replays (decodes)
 them, timing each operation and — via a counting global allocator (Rust) /
 `ReadMemStats` TotalAlloc delta (Go) — reporting heap bytes allocated per decode.
@@ -164,17 +168,27 @@ Rust codecs (baseline run 20260713T152911Z):
 | aeron_sbe | 57 ns | 409 ns | 443 ns | 502 | **0 B** |
 | bincode   | 85 ns | 947 ns | 1034 ns | 482 | **536 B** |
 
-Go codecs (run 20260716T100733Z):
+Go codecs (run 20260722T131646Z — five codecs, two of them zero-copy):
 
 | codec | encode p50 | decode p50 | decode p99 | encoded bytes | decode alloc |
 |---|---|---|---|---|---|
-| bebop     | 92 ns  | 1061 ns | 4123 ns | 494 | **544 B** |
-| protobuf  | 473 ns | 1743 ns | 5991 ns | 514 | **888 B** |
+| aeron_sbe (flyweight) | 126 ns | 892 ns  | 958 ns  | 502 | **0 B**   |
+| flatbuffers           | 572 ns | 1041 ns | 1295 ns | 608 | **0 B**   |
+| bebop                 | 83 ns  | 1063 ns | 4013 ns | 494 | **544 B** |
+| sbe_struct            | 338 ns | 1450 ns | 5229 ns | 502 | **544 B** |
+| protobuf              | 480 ns | 1718 ns | 5701 ns | 514 | **888 B** |
+
+`aeron_sbe` (go) is the SBE tool's zero-copy Golang **flyweight** (the Go twin of
+the Rust `aeron_sbe`); `sbe_struct` is the same tool's default owned-struct
+Golang codec (same 502 B wire, materializes on decode); `flatbuffers` reads via
+zero-copy accessors.
 
 p50/p99 in ns; a `_mean` is also emitted per op (Rust decode means: sbe_gen 415,
-aeron_sbe 416, bincode 972 ns; Go decode means: bebop 1281, protobuf 1956 ns).
-Uniform record builder and iteration count across codecs and languages; the two
-language groups come from different runs, so read Go-vs-Rust as cross-run.
+aeron_sbe 416, bincode 961 ns; Go decode means: aeron_sbe 909, flatbuffers 1063,
+bebop 1265, sbe_struct 1677, protobuf 1988 ns). Uniform record builder and
+iteration count across codecs and languages. The Rust table is the 20260713
+baseline; its cells re-measured within noise on the 20260722 run (sbe_gen decode
+408, aeron_sbe 409, bincode 933 ns), so Go-vs-Rust reads directly.
 
 **What we learned:**
 
@@ -204,15 +218,37 @@ language groups come from different runs, so read Go-vs-Rust as cross-run.
   (~50–100 ns) that its p99 (~340–350 ns for all three) is dominated by timer
   and scheduling noise rather than the codec; decode is the meaningful
   differentiator.
-- **Go tells the same zero-copy-vs-owned story, one tier slower and with GC
-  tails.** Neither Go codec is zero-copy, so both allocate on decode (`bebop`
-  544 B, `protobuf` 888 B) — the same axis the Rust `bincode` cell exposes.
-  Among the Go pair, `bebop` beats stock `protobuf` ~5× on encode (92 vs 473 ns)
-  and ~1.6× on decode (1061 vs 1743 ns) with ~40 % less allocation. Both carry
-  GC-visible decode tails absent in Rust (p99 4.1 µs / 6.0 µs, ~4× and ~3.4×
-  their p50) — the honest cost of an owned-decode codec on a garbage-collected
-  runtime. `protobuf`'s 514 B wire size uses `sfixed` fields deliberately (full-
-  width ids would otherwise pay varint pathology).
+- **Go has zero-copy decode too, and it splits the field into two tiers.** The
+  two zero-copy Go cells — SBE `aeron_sbe` (flyweight) and `flatbuffers` — decode
+  at **0 B allocated**, versus 544–888 B for the owned-decode cells (`bebop`,
+  `sbe_struct`, `protobuf`). The allocation axis, not the language, is the primary
+  divider: the zero-copy cells also have tight decode tails (p99 ~1.07–1.24× p50),
+  while every owned-decode Go cell carries a GC-visible tail (p99 3.5–4.9× p50,
+  up to 5.7 µs) — the honest cost of rebuilding an owned object graph per record
+  on a garbage-collected runtime.
+- **FlatBuffers is zero-copy but NOT the fastest decode here — zero-copy ≠ fast
+  reads.** FlatBuffers decodes at 1041 ns, *slower* than the Go SBE flyweight
+  (892 ns) and ~2.5× the Rust SBE cells (~408 ns), despite all four allocating
+  0 B. The difference is field access: SBE reads fixed byte offsets, while
+  FlatBuffers chases a vtable + offset indirection per field. Zero-copy removes
+  the *allocation*, not the per-field read cost. FlatBuffers also pays the most on
+  encode (572 ns — its Builder constructs the buffer bottom-up) and the largest
+  wire (608 B, from vtables + offsets). (The `kcchu/buffer-benchmarks` "fastest
+  decode" claim did not reproduce on this record/harness.)
+- **Same SBE tool, two Go modes: flyweight ~1.6× faster to decode than struct,
+  and zero-alloc.** `aeron_sbe` (flyweight) and `sbe_struct` are the identical
+  real-logic sbe-tool output — flyweight vs its default owned-struct codegen —
+  over the byte-identical 502 B wire. The flyweight decodes in 892 ns at 0 B; the
+  owned `sbe_struct` streams through its `SbeGoMarshaller` into a fresh struct at
+  1450 ns and 544 B. The choice of codegen mode, not the format, sets the cost.
+- **The Rust SBE flyweight is ~2.2× faster than the Go one at identical 0-alloc
+  and identical 502 B wire.** Rust `aeron_sbe`/`sbe_gen` decode at ~408 ns vs the
+  Go flyweight's 892 ns — a pure language/codegen gap (fixed-offset reads with no
+  bounds-check overhead), since both are zero-copy over the same bytes. Among the
+  owned-decode Go cells, `bebop` (1063 ns / 544 B) leads, then `sbe_struct`
+  (1450 ns / 544 B), then `protobuf` (1718 ns / 888 B); `protobuf`'s 514 B wire
+  uses `sfixed` fields deliberately (full-width ids would otherwise pay varint
+  pathology).
 
 ## rpc-roundtrip — mutating request/response across whole stacks (cross-host)
 
@@ -291,7 +327,13 @@ remains empty.
    (~408 ns vs ~947 ns) than serde+bincode, which rebuilds an owned graph
    (536 B) every decode — the memory and latency difference an SMR replay path
    cares about. The two SBE toolchains (pure-Rust `sbe_gen` vs the reference
-   Aeron `sbe-tool`) are wire-identical, so that choice is ergonomic.
+   Aeron `sbe-tool`) are wire-identical, so that choice is ergonomic. In Go the
+   same split holds: the SBE-tool flyweight and FlatBuffers decode at 0 B, the
+   owned codecs (bebop/protobuf/sbe-struct) at 544–888 B with GC tails. But
+   **zero-copy is not automatically the fastest decode** — SBE's fixed-offset
+   reads beat FlatBuffers' per-field vtable indirection (892 vs 1041 ns in Go,
+   both 0-alloc), so for a hot replay path prefer a fixed-layout zero-copy codec
+   (SBE) over an offset-table one (FlatBuffers).
 6. **RPC framework vs hand-rolled stack:** for a mutating request/response on
    the replication path, a hand-rolled UDP + zero-copy SBE stack round-trips in
    ~26 µs; full gRPC (HTTP/2 + protobuf) costs **~4.8×** that (~126 µs) for its
