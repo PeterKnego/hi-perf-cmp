@@ -7,7 +7,7 @@ func TestLoadSerialConfigDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("defaults errored: %v", err)
 	}
-	want := SerialConfig{Warmup: 1000, Iters: 100000, Entries: 4, CmdBytes: 78}
+	want := SerialConfig{Warmup: 1000, Iters: 100000, Entries: 4, CmdBytes: 12}
 	if cfg != want {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}

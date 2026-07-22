@@ -25,7 +25,8 @@ func (w *sliceWriter) Write(p []byte) (int, error) {
 }
 
 // ToSBEStruct converts the logical record to the owned SBE message struct
-// (untimed pre-build, like ToBebop). Command slices are shared, not copied.
+// (untimed pre-build, like ToBebop). Typed scalar fields are copied by value;
+// CmdText is converted from string to []byte, which allocates a copy.
 func ToSBEStruct(r *Record) journalsbestruct.JournalRecord {
 	entries := make([]journalsbestruct.JournalRecordEntries, len(r.Entries))
 	for i := range r.Entries {

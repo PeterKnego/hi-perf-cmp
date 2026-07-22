@@ -17,8 +17,9 @@ use crate::{result, stats};
 
 const FOCUS: &str = "serialization";
 
-/// Env-configurable knobs. `SER_ENTRIES`/`SER_CMD_BYTES` tune record size;
-/// defaults (4 / 78) encode to ~500 bytes.
+/// Env-configurable knobs. `SER_ENTRIES` tunes the entry count; `SER_CMD_BYTES`
+/// sizes the `cmd_text` string on each entry (default 12). The record is
+/// field-heavy, dominated by the typed scalar fields rather than cmd_text.
 pub struct SerialConfig {
     pub warmup: usize,
     pub iterations: usize,
@@ -32,7 +33,7 @@ impl SerialConfig {
             warmup: parse_env("SER_WARMUP", 1_000)?,
             iterations: parse_env("SER_ITERS", 100_000)?,
             entries: parse_env("SER_ENTRIES", 4)?,
-            cmd_bytes: parse_env("SER_CMD_BYTES", 78)?,
+            cmd_bytes: parse_env("SER_CMD_BYTES", 12)?,
         })
     }
 }
@@ -213,13 +214,13 @@ mod tests {
     #[test]
     fn config_defaults_from_env() {
         // No SER_* vars set in the test environment → from_env yields the
-        // ~500-byte record defaults. (edition 2024 makes set_var unsafe, so we
-        // test the default path rather than mutating the environment.)
+        // field-heavy record defaults. (edition 2024 makes set_var unsafe, so
+        // we test the default path rather than mutating the environment.)
         let cfg = SerialConfig::from_env().expect("defaults");
         assert_eq!(cfg.warmup, 1000);
         assert_eq!(cfg.iterations, 100_000);
         assert_eq!(cfg.entries, 4);
-        assert_eq!(cfg.cmd_bytes, 78);
+        assert_eq!(cfg.cmd_bytes, 12);
     }
 
     #[test]

@@ -12,8 +12,9 @@ const serFocusArea = "serialization"
 var serSink uint64
 
 // SerialConfig configures the serialization journal benchmark, sourced from
-// SER_* env vars (same names and defaults as the Rust cells; defaults encode
-// to a ~500-byte record).
+// SER_* env vars (same names and defaults as the Rust cells). CmdBytes sizes
+// the cmdText string on each entry (default 12); the record is field-heavy,
+// dominated by the typed scalar fields rather than cmdText.
 type SerialConfig struct {
 	Warmup   int
 	Iters    int
@@ -35,7 +36,7 @@ func LoadSerialConfig() (SerialConfig, error) {
 	if err != nil {
 		return SerialConfig{}, err
 	}
-	cmdBytes, err := positiveEnv("SER_CMD_BYTES", 78)
+	cmdBytes, err := positiveEnv("SER_CMD_BYTES", 12)
 	if err != nil {
 		return SerialConfig{}, err
 	}

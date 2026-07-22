@@ -35,7 +35,7 @@ func TestBuildRecordIsDeterministic(t *testing.T) {
 		t.Fatal("same index produced different records")
 	}
 	if len(a.Entries) != 4 || len(a.Entries[0].CmdText) != 78 {
-		t.Fatalf("unexpected shape: %d entries, %d command bytes",
+		t.Fatalf("unexpected shape: %d entries, %d cmd_text bytes",
 			len(a.Entries), len(a.Entries[0].CmdText))
 	}
 }
