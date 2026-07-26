@@ -170,6 +170,9 @@ mod tests {
             steady: 2000,
             warmup: 0,
             iters: 0,
+            chunk: 4096,
+            live_iters: 200_000,
+            snap_every: 20_000,
         }
     }
 
@@ -233,6 +236,9 @@ mod tests {
             steady: 2000,
             warmup: 0,
             iters: 0,
+            chunk: 4096,
+            live_iters: 200_000,
+            snap_every: 20_000,
         };
         let mut buf = vec![0u8; 4 * 1024 * 1024];
         let n = encode(&build(&c, c.steady), &mut buf);
