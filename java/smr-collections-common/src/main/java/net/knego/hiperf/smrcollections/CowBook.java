@@ -87,10 +87,6 @@ public final class CowBook {
     public int bestAsk = -1;
     private final Long2LongHashMap ids = new Long2LongHashMap(Book.NIL);
 
-    public int hwm() {
-        return hwm;
-    }
-
     public CowBook(SmrConfig cfg) {
         this.priceMin = cfg.priceMin();
         this.tick = cfg.tick();

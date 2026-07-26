@@ -39,7 +39,7 @@ public final class Main {
                 long t1 = System.nanoTime();
                 CowBook r = CowSnapshotter.restoreCow(s.backing(), len, cfg);
                 rest[k] = System.nanoTime() - t1;
-                if (r.hwm() < 0) {
+                if (r.hwm < 0) {
                     throw new IllegalStateException("unreachable");
                 }
             }
