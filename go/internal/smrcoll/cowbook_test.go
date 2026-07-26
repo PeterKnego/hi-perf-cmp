@@ -1,0 +1,82 @@
+package smrcoll
+
+import (
+	"testing"
+
+	"github.com/peterknego/hi-perf-cmp/go/internal/bench"
+)
+
+func cowCfg() bench.SmrConfig {
+	return bench.SmrConfig{
+		Cap: 1024, Levels: 300, Tick: 1, PriceMin: 0,
+		Steady: 500, Warmup: 0, Iters: 0,
+		Chunk: 64, LiveIters: 200000, SnapEvery: 20000,
+	}
+}
+
+func TestCowBookMatchesBookQueries(t *testing.T) {
+	c := cowCfg()
+	b := NewBook(c)
+	cb := NewCowBook(c)
+	r1 := NewSplitMix(SmrSeed)
+	r2 := NewSplitMix(SmrSeed)
+	for i := 0; i < c.Steady; i++ {
+		a := NextInsert(r1, i, c.Levels, c.Tick, c.PriceMin)
+		x := NextInsert(r2, i, c.Levels, c.Tick, c.PriceMin)
+		b.Insert(a.OrderID, a.Price, a.Qty, a.Side)
+		cb.Insert(x.OrderID, x.Price, x.Qty, x.Side)
+	}
+	for i := 0; i < 1000; i++ {
+		a := NextUpdate(r1, c.Steady)
+		x := NextUpdate(r2, c.Steady)
+		b.Update(a.OrderID, a.FillQty)
+		cb.Update(x.OrderID, x.FillQty)
+	}
+	if cb.Hwm != b.Hwm || cb.BestBid != b.BestBid || cb.BestAsk != b.BestAsk {
+		t.Fatalf("scalars diverge")
+	}
+	for id := int64(1); id <= int64(c.Steady); id++ {
+		if cb.GetSlot(id) != b.GetSlot(id) {
+			t.Fatalf("slot diverges for id %d", id)
+		}
+	}
+	for tick := uint32(0); tick < c.Levels; tick++ {
+		if cb.LevelQty(0, tick) != b.LevelQty(0, tick) || cb.LevelQty(1, tick) != b.LevelQty(1, tick) {
+			t.Fatalf("level qty diverges at tick %d", tick)
+		}
+	}
+	for slot := uint32(0); slot < cb.Hwm; slot++ {
+		if *cb.OrderAt(slot) != b.Pool[slot] {
+			t.Fatalf("order diverges at slot %d", slot)
+		}
+	}
+}
+
+func TestCaptureIsolatesRootFromLaterWrites(t *testing.T) {
+	c := cowCfg()
+	cb := NewCowBook(c)
+	for i := 0; i < c.Steady; i++ {
+		cb.Insert(int64(i)+1, int64(i%int(c.Levels)), 10, uint8(i%2))
+	}
+	root := cb.Capture()
+	before := root.OrderAt(5).Filled
+	cb.Update(6, 7) // order 6 lives in slot 5
+	if root.OrderAt(5).Filled != before {
+		t.Fatal("root saw a post-capture write")
+	}
+	if cb.OrderAt(5).Filled != before+7 {
+		t.Fatal("writer did not advance")
+	}
+}
+
+func TestSuccessiveCaptures(t *testing.T) {
+	c := cowCfg()
+	cb := NewCowBook(c)
+	cb.Insert(1, 5, 10, 0)
+	r1 := cb.Capture()
+	cb.Update(1, 4)
+	r2 := cb.Capture()
+	if r1.OrderAt(0).Filled != 0 || r2.OrderAt(0).Filled != 4 {
+		t.Fatalf("capture generations wrong: %d %d", r1.OrderAt(0).Filled, r2.OrderAt(0).Filled)
+	}
+}
