@@ -34,7 +34,7 @@ pub struct PriceLevel {
 }
 
 impl PriceLevel {
-    const EMPTY: PriceLevel = PriceLevel {
+    pub const EMPTY: PriceLevel = PriceLevel {
         head: NIL,
         tail: NIL,
         qty_total: 0,
@@ -59,7 +59,7 @@ impl Hasher for NoHash {
         self.0 = v as u64;
     }
 }
-type IdMap = HashMap<i64, u32, BuildHasherDefault<NoHash>>;
+pub type IdMap = HashMap<i64, u32, BuildHasherDefault<NoHash>>;
 
 pub struct Book {
     pub price_min: i64,
