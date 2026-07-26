@@ -3,6 +3,7 @@
 package main
 
 import (
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -50,6 +51,16 @@ func main() {
 		close(done)
 	}()
 
+	// Warm handshake: push one untimed capture through the serializer before
+	// the timed loop starts, so first-touch page faults of its encode buffer
+	// land here instead of in the first timed sample. Same message shape as
+	// the timed sends; the first recorded duration is dropped below.
+	busy.Store(true)
+	ch <- capMsg{root: book.Capture(), t0: time.Now()}
+	for busy.Load() {
+		runtime.Gosched()
+	}
+
 	writerNs := make([]int64, cfg.LiveIters)
 	var skipped int64
 	for k := 0; k < cfg.LiveIters; k++ {
@@ -68,5 +79,11 @@ func main() {
 	}
 	close(ch)
 	<-done
+	// The first recorded duration is the warm handshake above (the
+	// serializer is a single-consumer FIFO over the channel, so send order
+	// == process order) — exclude it from the emitted stats and counts.
+	if len(snapNs) > 0 {
+		snapNs = snapNs[1:]
+	}
 	bench.EmitSmrLive(experiment, writerNs, snapNs, skipped, snapLen)
 }

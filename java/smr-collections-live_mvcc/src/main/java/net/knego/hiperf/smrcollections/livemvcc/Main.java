@@ -59,6 +59,17 @@ public final class Main {
             });
             ser.start();
 
+            // Warm handshake: push one untimed capture through the serializer
+            // before the timed loop starts, so first-touch page faults of its
+            // encode buffer (and JIT-cold code) land here instead of in the
+            // first timed sample. Same message shape as the timed sends; the
+            // first recorded duration is dropped below.
+            busy.set(true);
+            q.put(new CapMsg(book.capture(), System.nanoTime()));
+            while (busy.get()) {
+                Thread.onSpinWait();
+            }
+
             long[] writerNs = new long[cfg.liveIters()];
             long skipped = 0;
             for (int k = 0; k < cfg.liveIters(); k++) {
@@ -77,7 +88,11 @@ public final class Main {
             }
             q.put(new CapMsg(null, 0));
             ser.join();
-            long[] snapNs = snapDur.stream().mapToLong(Long::longValue).toArray();
+            // The first recorded duration is the warm handshake above (the
+            // serializer is a single-consumer FIFO over the queue, so put
+            // order == process order) — exclude it from the emitted stats
+            // and counts.
+            long[] snapNs = snapDur.stream().skip(1).mapToLong(Long::longValue).toArray();
             SmrCollections.emitLive(EXPERIMENT, writerNs, snapNs, skipped, snapLenBox[0]);
         } catch (IllegalArgumentException e) {
             System.err.println("smr-collections-" + EXPERIMENT + ": " + e.getMessage());

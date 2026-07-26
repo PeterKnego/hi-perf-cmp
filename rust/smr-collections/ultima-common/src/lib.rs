@@ -64,8 +64,13 @@ impl UltimaBook {
                 .writer_mode(WriterMode::SingleWriter)
                 .require_explicit_version(true)
                 // Retention safety for live_ultima: the serializer re-opens the
-                // captured version by number while the writer keeps committing.
-                .num_snapshots_retained(1024)
+                // captured version by number while the writer keeps
+                // committing. ~16k retained versions ≈ tens of ms of
+                // µs-scale writer progress — covers scheduler jitter between
+                // the writer handing off a version number and the
+                // serializer's begin_read pinning it; once begin_read
+                // succeeds the ReadTx pins the version.
+                .num_snapshots_retained(16384)
                 .build(),
         )
         .expect("store");

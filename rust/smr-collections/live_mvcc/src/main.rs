@@ -49,6 +49,17 @@ fn main() {
         (durations, len)
     });
 
+    // Warm handshake: push one untimed capture through the serializer before
+    // the timed loop starts, so first-touch page faults of its encode buffer
+    // land here instead of in the first timed sample. Same message shape as
+    // the timed sends; the main thread drops this sample after join.
+    busy.store(true, Ordering::Relaxed);
+    tx.send((book.capture(), Instant::now()))
+        .expect("serializer alive");
+    while busy.load(Ordering::Acquire) {
+        std::hint::spin_loop();
+    }
+
     let mut writer_ns = vec![0u64; cfg.live_iters];
     let mut skipped = 0u64;
     for (k, w) in writer_ns.iter_mut().enumerate() {
@@ -57,6 +68,9 @@ fn main() {
             if busy.load(Ordering::Acquire) {
                 skipped += 1;
             } else {
+                // Relaxed: no other thread observes this store directly — the
+                // serializer only learns of it via the channel send below,
+                // which already establishes the needed happens-before.
                 busy.store(true, Ordering::Relaxed);
                 tx.send((book.capture(), t0)).expect("serializer alive");
             }
@@ -66,6 +80,12 @@ fn main() {
         *w = t0.elapsed().as_nanos() as u64;
     }
     drop(tx);
-    let (snap_ns, snap_len) = ser.join().expect("serializer join");
+    let (mut snap_ns, snap_len) = ser.join().expect("serializer join");
+    // The first recorded duration is the warm handshake above (the serializer
+    // is a single-consumer FIFO over the channel, so send order == process
+    // order) — exclude it from the emitted stats and counts.
+    if !snap_ns.is_empty() {
+        snap_ns.remove(0);
+    }
     emit_live(EXPERIMENT, &writer_ns, &snap_ns, skipped, snap_len);
 }

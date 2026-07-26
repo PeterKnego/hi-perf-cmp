@@ -31,8 +31,11 @@ fn main() {
         book.update(up.order_id, up.fill_qty);
     }
     let mut buf = vec![0u8; 64 + cfg.cap * 64 + (cfg.levels as usize) * 2 * 32];
+    // warm the encode path + buffer pages so the k=0 trigger measures
+    // steady-state stall, not first-touch cost
+    encode(&book, &mut buf);
     let mut writer_ns = vec![0u64; cfg.live_iters];
-    let mut snap_ns: Vec<u64> = Vec::new();
+    let mut snap_ns: Vec<u64> = Vec::with_capacity(cfg.live_iters / cfg.snap_every + 1);
     let mut snap_len = 0usize;
     for (k, w) in writer_ns.iter_mut().enumerate() {
         let t0 = Instant::now();

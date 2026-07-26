@@ -29,6 +29,9 @@ func main() {
 		book.Update(up.OrderID, up.FillQty)
 	}
 	s := smrcoll.NewSnapshotter()
+	// warm the encode path + buffer pages so the k=0 trigger measures
+	// steady-state stall, not first-touch cost
+	s.Encode(book)
 	writerNs := make([]int64, cfg.LiveIters)
 	snapNs := make([]int64, 0, cfg.LiveIters/cfg.SnapEvery+1)
 	var snapLen int

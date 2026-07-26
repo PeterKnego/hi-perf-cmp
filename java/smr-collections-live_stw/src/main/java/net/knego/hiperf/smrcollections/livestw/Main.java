@@ -27,6 +27,9 @@ public final class Main {
                 book.update(up.orderId, up.fillQty);
             }
             Snapshotter s = new Snapshotter(64 + cfg.cap() * 64 + cfg.levels() * 2 * 32);
+            // warm the encode path + buffer pages so the k=0 trigger measures
+            // steady-state stall, not first-touch cost
+            s.encode(book);
             long[] writerNs = new long[cfg.liveIters()];
             long[] snapNs = new long[cfg.liveIters() / cfg.snapEvery() + 1];
             int snapCount = 0;
