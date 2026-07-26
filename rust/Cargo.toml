@@ -31,6 +31,7 @@ members = [
     "smr-collections/mvcc_snapshot",
     "smr-collections/live_stw",
     "smr-collections/live_mvcc",
+    "smr-collections/ultima-common",
     "rpc-roundtrip/common",
     "rpc-roundtrip/sbe_udp",
 ]
@@ -54,6 +55,7 @@ bincode = { version = "2", features = ["serde"] }
 zerocopy = { version = "0.8", features = ["derive"] }
 sbe_gen = "0.7.3"
 crc32c = "0.6"
+ultima_db = { package = "ultima-db", git = "https://github.com/PeterKnego/ultima_db.git", rev = "b48295e9ad6ba6e54100a6e8ec9248c8e84e09c3" }
 
 [profile.release]
 lto = "thin"
