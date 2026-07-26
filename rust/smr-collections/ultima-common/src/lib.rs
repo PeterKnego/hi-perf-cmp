@@ -234,8 +234,28 @@ pub fn encode_at(store: &Store, version: u64, buf: &mut [u8]) -> usize {
 
         let mut lg = enc.levels_encoder(level_count, LevelsEncoder::default());
         // Level ids are side*nLevels + tick + 1: id order IS bids-then-asks,
-        // ascending tick — the STW encoder's lane order.
-        for (_, l) in levels.iter() {
+        // ascending tick — the STW encoder's lane order. This relies on
+        // `TableReader::iter()` enumerating in ascending-id order, which is
+        // id-ordered by construction: ultima_db's `Table::iter()` is
+        // documented "Iterate over all records in ID order" and delegates to
+        // `self.range(..)` over `Table.data`, a persistent CoW B-tree keyed
+        // by record id (src/table.rs at the pinned rev; `dashmap` appears
+        // elsewhere in the store but not for per-table record storage).
+        // Checked below via `debug_assert!` so the test suite (which runs in
+        // debug) proves monotonicity, not just trusts it.
+        #[cfg(debug_assertions)]
+        let mut prev_lid: Option<u64> = None;
+        for (lid, l) in levels.iter() {
+            #[cfg(debug_assertions)]
+            {
+                if let Some(prev) = prev_lid {
+                    debug_assert!(
+                        lid > prev,
+                        "levels.iter() must yield strictly ascending ids (got {lid} after {prev})"
+                    );
+                }
+                prev_lid = Some(lid);
+            }
             if l.head == NIL {
                 continue;
             }
@@ -250,9 +270,23 @@ pub fn encode_at(store: &Store, version: u64, buf: &mut [u8]) -> usize {
         let enc = lg.parent().expect("levels parent");
 
         let mut og = enc.orders_encoder(m.hwm as u16, OrdersEncoder::default());
-        // Order ids are sequential from 1 in insertion order: id order IS slot
-        // order 0..hwm.
-        for (_, o) in orders.iter() {
+        // Order ids are sequential from 1 in insertion order: id order IS
+        // slot order 0..hwm. Same ascending-id guarantee as the levels walk
+        // above (ultima_db's `Table::iter()` over its id-keyed B-tree),
+        // checked the same way.
+        #[cfg(debug_assertions)]
+        let mut prev_oid: Option<u64> = None;
+        for (oid, o) in orders.iter() {
+            #[cfg(debug_assertions)]
+            {
+                if let Some(prev) = prev_oid {
+                    debug_assert!(
+                        oid > prev,
+                        "orders.iter() must yield strictly ascending ids (got {oid} after {prev})"
+                    );
+                }
+                prev_oid = Some(oid);
+            }
             og.advance().expect("orders advance");
             og.slot(o.slot);
             og.order_id(o.slot as i64 + 1);
