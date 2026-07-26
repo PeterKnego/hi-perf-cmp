@@ -17,4 +17,7 @@ include(
     "smr-collections-insert",
     "smr-collections-update",
     "smr-collections-snapshot",
+    "smr-collections-mvcc_insert",
+    "smr-collections-mvcc_update",
+    "smr-collections-mvcc_snapshot",
 )
