@@ -1,0 +1,13 @@
+[package]
+name = "smr-collections-live_ultima"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "smr-collections-live_ultima"
+path = "src/main.rs"
+
+[dependencies]
+smr-collections-common = { path = "../common" }
+smr-collections-ultima = { path = "../ultima-common" }
+bench-common = { path = "../../bench-common" }

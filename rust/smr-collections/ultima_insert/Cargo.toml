@@ -1,0 +1,13 @@
+[package]
+name = "smr-collections-ultima_insert"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "smr-collections-ultima_insert"
+path = "src/main.rs"
+
+[dependencies]
+smr-collections-common = { path = "../common" }
+smr-collections-ultima = { path = "../ultima-common" }
+bench-common = { path = "../../bench-common" }
