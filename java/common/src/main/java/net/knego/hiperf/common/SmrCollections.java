@@ -39,4 +39,20 @@ public final class SmrCollections {
     public static void emitDouble(String experiment, String metric, double value, String unit, long samples) {
         new Result(FOCUS_AREA, experiment, metric, value, unit, samples, "").emit();
     }
+
+    /** Live-experiment metric set: writer latency (+max), snapshot latency, counts, size. */
+    public static void emitLive(String experiment, long[] writerNs, long[] snapNs, long skipped, long snapLen) {
+        long max = 0;
+        for (long v : writerNs) {
+            if (v > max) {
+                max = v;
+            }
+        }
+        emitLatency(experiment, "writer", writerNs);
+        emitInt(experiment, "writer_max", max, "ns", writerNs.length);
+        emitLatency(experiment, "snapshot", snapNs);
+        emitInt(experiment, "snap_count", snapNs.length, "count", 1);
+        emitInt(experiment, "snap_skipped", skipped, "count", 1);
+        emitInt(experiment, "snapshot_bytes", snapLen, "bytes", 1);
+    }
 }

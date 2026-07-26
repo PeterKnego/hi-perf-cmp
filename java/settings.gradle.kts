@@ -20,4 +20,6 @@ include(
     "smr-collections-mvcc_insert",
     "smr-collections-mvcc_update",
     "smr-collections-mvcc_snapshot",
+    "smr-collections-live_stw",
+    "smr-collections-live_mvcc",
 )
