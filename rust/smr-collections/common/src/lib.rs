@@ -3,5 +3,6 @@
 
 pub mod book;
 pub mod cowbook;
+pub mod cowsnap;
 pub mod rng;
 pub mod snapshot;
