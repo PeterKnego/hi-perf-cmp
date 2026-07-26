@@ -12,13 +12,16 @@ const SMRFocusArea = "smr-collections"
 
 // SmrConfig configures the LOB benchmark, sourced from SMRC_* env vars.
 type SmrConfig struct {
-	Cap      int
-	Levels   uint32
-	Tick     int64
-	PriceMin int64
-	Steady   int
-	Warmup   int
-	Iters    int
+	Cap       int
+	Levels    uint32
+	Tick      int64
+	PriceMin  int64
+	Steady    int
+	Warmup    int
+	Iters     int
+	Chunk     int
+	LiveIters int
+	SnapEvery int
 }
 
 // LoadSmrConfig reads and validates the SMRC_* environment (plan Appendix A.1).
@@ -47,6 +50,18 @@ func LoadSmrConfig() (SmrConfig, error) {
 	if err != nil {
 		return SmrConfig{}, err
 	}
+	chunk, err := positiveEnv("SMRC_CHUNK", 4096)
+	if err != nil {
+		return SmrConfig{}, err
+	}
+	liveIters, err := positiveEnv("SMRC_LIVE_ITERS", 200000)
+	if err != nil {
+		return SmrConfig{}, err
+	}
+	snapEvery, err := positiveEnv("SMRC_SNAP_EVERY", 20000)
+	if err != nil {
+		return SmrConfig{}, err
+	}
 	priceMin, err := signedEnv("SMRC_PRICE_MIN", 0)
 	if err != nil {
 		return SmrConfig{}, err
@@ -55,6 +70,7 @@ func LoadSmrConfig() (SmrConfig, error) {
 	cfg := SmrConfig{
 		Cap: cap_, Levels: uint32(levels), Tick: int64(tick), PriceMin: priceMin,
 		Steady: steady, Warmup: warmup, Iters: iters,
+		Chunk: chunk, LiveIters: liveIters, SnapEvery: snapEvery,
 	}
 	if levels > 65535 {
 		return SmrConfig{}, fmt.Errorf("SMRC_LEVELS must be <= 65535")
@@ -64,6 +80,12 @@ func LoadSmrConfig() (SmrConfig, error) {
 	}
 	if warmup+iters > cap_ {
 		return SmrConfig{}, fmt.Errorf("SMRC_WARMUP + SMRC_ITERS must be <= SMRC_CAP")
+	}
+	if chunk > cap_ {
+		return SmrConfig{}, fmt.Errorf("SMRC_CHUNK must be <= SMRC_CAP")
+	}
+	if snapEvery > liveIters {
+		return SmrConfig{}, fmt.Errorf("SMRC_SNAP_EVERY must be <= SMRC_LIVE_ITERS")
 	}
 	return cfg, nil
 }
