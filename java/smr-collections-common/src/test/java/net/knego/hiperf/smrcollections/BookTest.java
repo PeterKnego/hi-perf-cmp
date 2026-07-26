@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 
 class BookTest {
     private static SmrConfig cfg() {
-        return new SmrConfig(1024, 16, 1, 0, 100, 0, 0);
+        return new SmrConfig(1024, 16, 1, 0, 100, 0, 0, 4096, 200000, 20000);
     }
 
     @Test

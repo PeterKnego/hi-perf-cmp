@@ -1,7 +1,9 @@
 package net.knego.hiperf.common;
 
 /** Fixed-capacity LOB benchmark config from SMRC_* env vars (plan Appendix A.1). */
-public record SmrConfig(int cap, int levels, long tick, long priceMin, int steady, int warmup, int iters) {
+public record SmrConfig(
+        int cap, int levels, long tick, long priceMin, int steady, int warmup, int iters,
+        int chunk, int liveIters, int snapEvery) {
 
     public static SmrConfig fromEnv() {
         int cap = Env.readPositiveInt("SMRC_CAP", 262144);
@@ -11,6 +13,9 @@ public record SmrConfig(int cap, int levels, long tick, long priceMin, int stead
         int warmup = Env.readPositiveInt("SMRC_WARMUP", 10000);
         int iters = Env.readPositiveInt("SMRC_ITERS", 100000);
         long priceMin = readSignedLong("SMRC_PRICE_MIN", 0);
+        int chunk = Env.readPositiveInt("SMRC_CHUNK", 4096);
+        int liveIters = Env.readPositiveInt("SMRC_LIVE_ITERS", 200000);
+        int snapEvery = Env.readPositiveInt("SMRC_SNAP_EVERY", 20000);
         if (levels > 65535) {
             throw new IllegalArgumentException("SMRC_LEVELS must be <= 65535");
         }
@@ -20,7 +25,13 @@ public record SmrConfig(int cap, int levels, long tick, long priceMin, int stead
         if ((long) warmup + iters > cap) {
             throw new IllegalArgumentException("SMRC_WARMUP + SMRC_ITERS must be <= SMRC_CAP");
         }
-        return new SmrConfig(cap, levels, tick, priceMin, steady, warmup, iters);
+        if (chunk > cap) {
+            throw new IllegalArgumentException("SMRC_CHUNK must be <= SMRC_CAP");
+        }
+        if (snapEvery > liveIters) {
+            throw new IllegalArgumentException("SMRC_SNAP_EVERY must be <= SMRC_LIVE_ITERS");
+        }
+        return new SmrConfig(cap, levels, tick, priceMin, steady, warmup, iters, chunk, liveIters, snapEvery);
     }
 
     private static long readSignedLong(String name, long def) {
