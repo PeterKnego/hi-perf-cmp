@@ -150,6 +150,29 @@ pub fn emit_float(experiment: &str, metric: &str, value: f64, unit: &str, sample
     result::emit_float(FOCUS, experiment, metric, value, unit, samples);
 }
 
+/// Emit the live-experiment metric set: writer latency (p50/p99/mean + max),
+/// snapshot latency over completed snapshots, counts, and image size.
+pub fn emit_live(
+    experiment: &str,
+    writer_ns: &[u64],
+    snap_ns: &[u64],
+    skipped: u64,
+    snap_len: usize,
+) {
+    emit_latency(experiment, "writer", writer_ns);
+    emit_int(
+        experiment,
+        "writer_max",
+        writer_ns.iter().copied().max().unwrap_or(0),
+        "ns",
+        writer_ns.len(),
+    );
+    emit_latency(experiment, "snapshot", snap_ns);
+    emit_int(experiment, "snap_count", snap_ns.len() as u64, "count", 1);
+    emit_int(experiment, "snap_skipped", skipped, "count", 1);
+    emit_int(experiment, "snapshot_bytes", snap_len as u64, "bytes", 1);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

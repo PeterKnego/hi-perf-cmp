@@ -1286,6 +1286,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "smr-collections-live_mvcc"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+]
+
+[[package]]
+name = "smr-collections-live_stw"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+]
+
+[[package]]
 name = "smr-collections-mvcc_insert"
 version = "0.1.0"
 dependencies = [

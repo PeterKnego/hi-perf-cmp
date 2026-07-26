@@ -1,0 +1,12 @@
+[package]
+name = "smr-collections-live_mvcc"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "smr-collections-live_mvcc"
+path = "src/main.rs"
+
+[dependencies]
+smr-collections-common = { path = "../common" }
+bench-common = { path = "../../bench-common" }
