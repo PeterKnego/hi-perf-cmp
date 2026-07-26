@@ -32,6 +32,18 @@ experiments:
   - { focus_area: smr-collections,  experiment: insert,      kind: local }
   - { focus_area: smr-collections,  experiment: update,      kind: local }
   - { focus_area: smr-collections,  experiment: snapshot,    kind: local }
+  # MVCC variants: mvcc_* = hand-rolled chunked-CoW book (all languages);
+  # ultima_* = ultima_db competitor cell (Rust only); live_* = snapshot under
+  # live writes per store variant (writer_max is the headline stall metric).
+  - { focus_area: smr-collections,  experiment: mvcc_insert,     kind: local }
+  - { focus_area: smr-collections,  experiment: mvcc_update,     kind: local }
+  - { focus_area: smr-collections,  experiment: mvcc_snapshot,   kind: local }
+  - { focus_area: smr-collections,  experiment: ultima_insert,   kind: local, languages: [rust] }
+  - { focus_area: smr-collections,  experiment: ultima_update,   kind: local, languages: [rust] }
+  - { focus_area: smr-collections,  experiment: ultima_snapshot, kind: local, languages: [rust] }
+  - { focus_area: smr-collections,  experiment: live_stw,        kind: local }
+  - { focus_area: smr-collections,  experiment: live_mvcc,       kind: local }
+  - { focus_area: smr-collections,  experiment: live_ultima,     kind: local, languages: [rust] }
   # rpc-roundtrip is per-language like serialization above: sbe_udp is Rust
   # only, grpc/bebop_tcp are Go only (Java not planned) — see the cross_host
   # `languages` filter fix in ansible/roles/run/tasks/main.yml.
@@ -83,6 +95,9 @@ smrc_price_min: 0
 smrc_steady: 60000
 smrc_warmup: 10000
 smrc_iters: 100000
+smrc_chunk: 4096
+smrc_live_iters: 200000
+smrc_snap_every: 20000
 
 # rpc-roundtrip params (cross-host: node0 client, node1 responder). Three
 # whole-stack cells over one shared ~250-byte payload. Ports distinct from

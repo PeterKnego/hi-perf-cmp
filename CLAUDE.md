@@ -39,9 +39,9 @@ Google FlatBuffers' zero-copy read path (default accessors, not the object API):
 with a larger wire than SBE (~608 B vs SBE's 502 B). Java is not planned for this focus area.
 `smr-collections` is implemented for the `insert`, `update`, and `snapshot` experiments
 across all three languages (single-host, fixed-capacity limit-order-book state store): Java uses
-Agrona (`Long2ObjectHashMap` + pooled orders), Rust/Go use a hand-rolled open-addressing id-map;
+Agrona (`Long2ObjectHashMap` + pooled orders), Go hand-rolls open addressing, Rust uses std `HashMap` with an identity (`NoHash`) hasher;
 the snapshot format is SBE (`book_snapshot.xml`), byte-identical across languages and verified by a
-golden test. `rpc-roundtrip` is implemented for `sbe_udp` (Rust, UDP + zero-copy SBE), `grpc` (Go, gRPC),
+golden test. A chunked copy-on-write variant (`mvcc_*`, all three languages) snapshots via an O(#chunks) root capture at an op boundary without stopping the writer; `ultima_*` (Rust) runs the same workload through ultima_db (MVCC persistent B-tree, SMR pattern: SingleWriter + explicit versions, pinned git dep); `live_{stw,mvcc,ultima}` measure writer-observed latency while a snapshot is in flight (`writer_max` = stall). All variants emit byte-identical snapshot images, verified against the shared golden file. `rpc-roundtrip` is implemented for `sbe_udp` (Rust, UDP + zero-copy SBE), `grpc` (Go, gRPC),
 and `bebop_tcp` (Go, TCP + bebop), cross-host, measuring full mutating round-trip latency + encoded size;
 Java is not planned for this focus area. `shared-memory-ipc` is not yet scaffolded.
 
@@ -73,7 +73,7 @@ dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust; `aeron_sbe` also Go) and `serialization-{aeron_sbe,sbe_struct,bebop,protobuf,flatbuffers}` (Go), `smr-collections-{insert,update,snapshot}`, `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust; `aeron_sbe` also Go) and `serialization-{aeron_sbe,sbe_struct,bebop,protobuf,flatbuffers}` (Go), `smr-collections-{insert,update,snapshot,mvcc_insert,mvcc_update,mvcc_snapshot,live_stw,live_mvcc}` (all languages) and `smr-collections-{ultima_insert,ultima_update,ultima_snapshot,live_ultima}` (Rust), `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
 
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt + filesystem-write + thread-handoff experiments

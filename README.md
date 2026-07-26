@@ -19,8 +19,8 @@ grid of **experiment × language** within six focus areas:
 - **serialization** — codec choice for the command-log record on the hot path.
   Experiments: `sbe_gen`, `aeron_sbe`, `bincode` (Rust); `bebop`, `protobuf` (Go).
 - **smr-collections** — insert/update/snapshot cost of a fixed-capacity
-  limit-order-book state store; Agrona (Java) vs hand-rolled open-addressing
-  (Rust/Go); SBE snapshot shared across all three.
+  limit-order-book state store; Agrona (Java) vs Go hand-rolled open-addressing
+  vs Rust std `HashMap` with identity (`NoHash`) hasher; SBE snapshot shared across all three.
 - **shared-memory-ipc** — shared-memory inter-process communication _(planned)_.
 
 ## Features
