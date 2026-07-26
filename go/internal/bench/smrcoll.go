@@ -139,3 +139,21 @@ func EmitSmrInt(experiment, metric string, value int64, unit string, samples int
 func EmitSmrFloat(experiment, metric string, value float64, unit string, samples int64) {
 	Emit(Result{FocusArea: SMRFocusArea, Experiment: experiment, Metric: metric, Value: value, Unit: unit, Samples: samples})
 }
+
+// EmitSmrLive emits the live-experiment metric set: writer latency
+// (p50/p99/mean + max), snapshot latency over completed snapshots, counts,
+// and image size. Sorts writerNs/snapNs in place (like EmitSmrLatency).
+func EmitSmrLive(experiment string, writerNs, snapNs []int64, skipped, snapLen int64) {
+	var max int64
+	for _, v := range writerNs {
+		if v > max {
+			max = v
+		}
+	}
+	EmitSmrLatency(experiment, "writer", writerNs)
+	EmitSmrInt(experiment, "writer_max", max, "ns", int64(len(writerNs)))
+	EmitSmrLatency(experiment, "snapshot", snapNs)
+	EmitSmrInt(experiment, "snap_count", int64(len(snapNs)), "count", 1)
+	EmitSmrInt(experiment, "snap_skipped", skipped, "count", 1)
+	EmitSmrInt(experiment, "snapshot_bytes", snapLen, "bytes", 1)
+}
