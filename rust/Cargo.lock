@@ -1436,6 +1436,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "smr-collections-ultima_batch_insert"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+ "smr-collections-ultima",
+]
+
+[[package]]
+name = "smr-collections-ultima_batch_update"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+ "smr-collections-ultima",
+]
+
+[[package]]
 name = "smr-collections-ultima_insert"
 version = "0.1.0"
 dependencies = [

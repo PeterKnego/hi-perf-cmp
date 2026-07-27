@@ -36,6 +36,8 @@ members = [
     "smr-collections/ultima_update",
     "smr-collections/ultima_snapshot",
     "smr-collections/live_ultima",
+    "smr-collections/ultima_batch_insert",
+    "smr-collections/ultima_batch_update",
     "rpc-roundtrip/common",
     "rpc-roundtrip/sbe_udp",
 ]

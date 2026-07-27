@@ -44,6 +44,8 @@ experiments:
   - { focus_area: smr-collections,  experiment: live_stw,        kind: local }
   - { focus_area: smr-collections,  experiment: live_mvcc,       kind: local }
   - { focus_area: smr-collections,  experiment: live_ultima,     kind: local, languages: [rust] }
+  - { focus_area: smr-collections,  experiment: ultima_batch_insert, kind: local, languages: [rust] }
+  - { focus_area: smr-collections,  experiment: ultima_batch_update, kind: local, languages: [rust] }
   # rpc-roundtrip is per-language like serialization above: sbe_udp is Rust
   # only, grpc/bebop_tcp are Go only (Java not planned) — see the cross_host
   # `languages` filter fix in ansible/roles/run/tasks/main.yml.
@@ -96,6 +98,7 @@ smrc_steady: 60000
 smrc_warmup: 10000
 smrc_iters: 100000
 smrc_chunk: 4096
+smrc_apply_batch: 64
 smrc_live_iters: 200000
 smrc_snap_every: 20000
 

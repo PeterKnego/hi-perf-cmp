@@ -35,6 +35,7 @@
     export SMRC_WARMUP="{{ smrc_warmup }}"
     export SMRC_ITERS="{{ smrc_iters }}"
     export SMRC_CHUNK="{{ smrc_chunk }}"
+    export SMRC_APPLY_BATCH="{{ smrc_apply_batch }}"
     export SMRC_LIVE_ITERS="{{ smrc_live_iters }}"
     export SMRC_SNAP_EVERY="{{ smrc_snap_every }}"
     {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} loopback \
