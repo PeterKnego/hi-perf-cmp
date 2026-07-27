@@ -12,6 +12,9 @@ use booksnap::{Encoder, ReadBuf, WriteBuf};
 use smr_collections_common::book::NIL;
 use std::sync::Arc;
 use ultima_db::{Store, StoreConfig, WriterMode};
+// Re-exported so cell binaries can name the pin type without a direct
+// ultima_db dependency.
+pub use ultima_db::VersionPin;
 
 const HEADER_LEN: usize = 8;
 
@@ -63,14 +66,12 @@ impl UltimaBook {
             StoreConfig::builder()
                 .writer_mode(WriterMode::SingleWriter)
                 .require_explicit_version(true)
-                // Retention safety for live_ultima: the serializer re-opens the
-                // captured version by number while the writer keeps
-                // committing. ~16k retained versions ≈ tens of ms of
-                // µs-scale writer progress — covers scheduler jitter between
-                // the writer handing off a version number and the
-                // serializer's begin_read pinning it; once begin_read
-                // succeeds the ReadTx pins the version.
-                .num_snapshots_retained(16384)
+                // Retention stays at the default (10). Keeping a captured
+                // version alive for the live_ultima serializer is done with
+                // `pin_current()` (a `Send` `VersionPin` travels with the
+                // handoff), not a retention window — a large window made
+                // every commit pay an O(retained) auto-GC scan on the
+                // previously pinned ultima_db rev.
                 .build(),
         )
         .expect("store");
@@ -129,6 +130,20 @@ impl UltimaBook {
 
     pub fn current_version(&self) -> u64 {
         self.version
+    }
+
+    /// Pin the current version for handoff to a serializer thread.
+    ///
+    /// `VersionPin` is `Send + Clone`, so it travels with the version number
+    /// and keeps the snapshot alive until the serializer's `begin_read`
+    /// (inside `encode_at`) opens its own view — no retention-window sizing
+    /// needed. The commit-vs-pin race documented on `Store::pin_version`
+    /// cannot occur here: all commits go through `&mut self`, so nothing can
+    /// commit between reading `self.version` and pinning it.
+    pub fn pin_current(&self) -> VersionPin {
+        self.store
+            .pin_version(Some(self.version))
+            .expect("current version exists")
     }
 
     pub fn insert(&mut self, order_id: i64, price: i64, qty: i64, side: u8) {
@@ -480,6 +495,10 @@ mod tests {
             ub.insert(ins.order_id, ins.price, ins.qty, ins.side);
         }
         let v = ub.current_version();
+        // With default retention (10), v would be GC'd by the 200 commits
+        // below — the pin is what keeps it alive.
+        let pin = ub.pin_current();
+        assert_eq!(pin.version(), v);
         let mut buf1 = vec![0u8; 4 * 1024 * 1024];
         let n1 = encode_at(&ub.store, v, &mut buf1);
         for _ in 0..200 {
@@ -544,17 +563,17 @@ mod tests {
             ub.insert(ins.order_id, ins.price, ins.qty, ins.side);
         }
         let store = std::sync::Arc::clone(&ub.store);
-        let (tx, rx) = std::sync::mpsc::sync_channel::<u64>(1);
+        let (tx, rx) = std::sync::mpsc::sync_channel::<VersionPin>(1);
         let ser = std::thread::spawn(move || {
-            let version = rx.recv().expect("version");
+            let pin = rx.recv().expect("pin");
             let mut buf = vec![0u8; 4 * 1024 * 1024];
-            let n = encode_at(&store, version, &mut buf);
+            let n = encode_at(&store, pin.version(), &mut buf);
             buf.truncate(n);
             buf
         });
         for k in 0..total_updates {
             if k == capture_at {
-                tx.send(ub.current_version()).expect("send version");
+                tx.send(ub.pin_current()).expect("send pin");
             }
             let up = next_update(&mut rng, c.steady);
             ub.update(up.order_id, up.fill_qty);

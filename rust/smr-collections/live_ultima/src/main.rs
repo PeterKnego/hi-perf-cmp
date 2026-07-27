@@ -1,11 +1,13 @@
 //! smr-collections **live_ultima** — writer-observed latency while a
 //! serializer thread encodes a pinned old version concurrently. Capture is
-//! O(1): the writer just hands over its last committed version number.
+//! O(1): the writer pins its last committed version (`VersionPin` is `Send`)
+//! and hands the pin over; the pin keeps the snapshot alive until the
+//! serializer's read-txn opens, so retention stays at the store default.
 
 use bench_common::smrcoll::{SmrConfig, emit_live};
 use smr_collections_common::book::workload::{next_insert, next_update};
 use smr_collections_common::rng::{SEED, SplitMix};
-use smr_collections_ultima::{UltimaBook, encode_at};
+use smr_collections_ultima::{UltimaBook, VersionPin, encode_at};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
@@ -36,13 +38,13 @@ fn main() {
     let busy_ser = Arc::clone(&busy);
     let store = Arc::clone(&book.store);
     let buf_len = 64 + cfg.cap * 64 + (cfg.levels as usize) * 2 * 32;
-    let (tx, rx) = mpsc::sync_channel::<(u64, Instant)>(1);
+    let (tx, rx) = mpsc::sync_channel::<(VersionPin, Instant)>(1);
     let ser = std::thread::spawn(move || {
         let mut buf = vec![0u8; buf_len];
         let mut durations: Vec<u64> = Vec::new();
         let mut len = 0usize;
-        for (version, t0) in rx {
-            len = encode_at(&store, version, &mut buf);
+        for (pin, t0) in rx {
+            len = encode_at(&store, pin.version(), &mut buf);
             durations.push(t0.elapsed().as_nanos() as u64);
             busy_ser.store(false, Ordering::Release);
         }
@@ -54,7 +56,7 @@ fn main() {
     // land here instead of in the first timed sample. Same message shape as
     // the timed sends; the main thread drops this sample after join.
     busy.store(true, Ordering::Relaxed);
-    tx.send((book.current_version(), Instant::now()))
+    tx.send((book.pin_current(), Instant::now()))
         .expect("serializer alive");
     while busy.load(Ordering::Acquire) {
         std::hint::spin_loop();
@@ -72,7 +74,7 @@ fn main() {
                 // serializer only learns of it via the channel send below,
                 // which already establishes the needed happens-before.
                 busy.store(true, Ordering::Relaxed);
-                tx.send((book.current_version(), t0))
+                tx.send((book.pin_current(), t0))
                     .expect("serializer alive");
             }
         }

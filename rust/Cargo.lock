@@ -1672,7 +1672,7 @@ dependencies = [
 [[package]]
 name = "ultima-db"
 version = "0.1.1"
-source = "git+https://github.com/PeterKnego/ultima_db.git?rev=b48295e9ad6ba6e54100a6e8ec9248c8e84e09c3#b48295e9ad6ba6e54100a6e8ec9248c8e84e09c3"
+source = "git+https://github.com/PeterKnego/ultima_db.git?rev=8ac858d5ac194d08353c732de9e42beef1497a32#8ac858d5ac194d08353c732de9e42beef1497a32"
 dependencies = [
  "crc32fast",
  "dashmap",
