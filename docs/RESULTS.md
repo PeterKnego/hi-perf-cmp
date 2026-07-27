@@ -26,6 +26,7 @@ code in each language.
 | [20260723T081721Z](../journal/runs/20260723T081721Z-95af18f1353d/entry.md) | `serialization` re-measured on the **field-heavy typed-command record** (int/float/bool/string replaces the opaque blob) — all 8 cells, one run (scoped) |
 | [20260727T004025Z](../journal/runs/20260727T004025Z-9aed7e218abe/entry.md) | First `smr-collections` MVCC-grid run: STW vs chunked-CoW vs ultima_db, incl. the `live_*` snapshot-under-writes cells — all 12 cells, one run (scoped) |
 | [20260727T134311Z](../journal/runs/20260727T134311Z-bebcffe49a4d/entry.md) | `smr-collections` re-measure after the ultima_db `VersionPin` patch (pin-at-capture replaces the 16k-retention workaround) — all 12 cells, one run (scoped) |
+| [20260727T164805Z](../journal/runs/20260727T164805Z-ddb09a5d0ff1/entry.md) | ultima cells only: `ultima_batch_insert`/`ultima_batch_update` debut (one txn per 64-command batch) + `bulk_load`-based restore — 6 cells, one run (scoped) |
 
 Unless noted, tables below show the **current baseline** run (20260713T152911Z). The
 July 15 – 27 runs are **scoped** (one focus area each, not a full-matrix
@@ -324,13 +325,14 @@ columns are on a different base than the ns-scale flat stores.)
   standing in for a version pin, charging every commit an O(retained) GC scan.
   For sub-µs-budget apply loops the flat+CoW design still wins by ~100×; where
   the loop tolerates single-digit µs, the engine's versioning now comes at no
-  additional stall — and batching commands per txn (unmeasured here) would
-  amortize further.
-- **The one flagged regression on the patched cells is restore (+11 %,
-  7.7 → 8.6 ms)** — a code path the patch did not touch (per-record insert
-  loop), on a different instance than the baseline run; consistent with the
-  cross-instance variance every previous `journal compare` flag traced to.
-  Serialize improved 13–20 % in the same run. Watch, don't conclude.
+  additional stall — and batching commands per txn amortizes to 2.3–2.7 µs/op
+  (see the batched-apply subsection below).
+- **The restore flag from this run (+11 %) is closed**: the per-record-insert
+  restore path it sat on was replaced wholesale by `bulk_load_batch` in the
+  follow-up run below (−72 %), mooting the question of whether the wiggle was
+  real. The serialize cells, untouched across all three same-day runs, have
+  now swung 1.67 → 1.45 → 2.26 ms (p50) — treat single-host serialize means
+  on this grid as carrying a ±35 % cross-instance band.
 - **Go skipped 5 of 10 snapshot triggers in `live_mvcc`** (2/10 in the prior
   run) — its ~5.2 ms serialize exceeds the ~4 ms trigger window at this
   cadence, so skip counts sit on a knife edge. `snap_skipped` surfacing that
@@ -344,6 +346,46 @@ columns are on a different base than the ns-scale flat stores.)
   delete-heavy load is future work. (The engine side of this got cheaper
   regardless: ultima_db `8ac858d` makes snapshot GC O(evicted) per commit
   instead of O(retained).)
+
+### Batched apply + bulk_load restore (run 20260727T164805Z)
+
+Two additions bracket the engine trade at its realistic end. A real SMR
+applier commits a **consensus batch per txn**, not a txn per command — the new
+`ultima_batch_*` cells apply 64 commands per explicit-version txn with
+per-command work byte-identical to the unbatched cells (enforced by a
+golden-equivalence test), so the difference is txn amortization (plus sub-1 %
+timing/allocation asymmetries — quote ratios accordingly). And restore now
+uses ultima_db's intended path (`bulk_load_batch`: one atomic O(N)
+`from_sorted` install) instead of ~capacity per-record inserts.
+
+| cell | per-op mean | batch mean (B=64) | vs same-run unbatched |
+|---|---|---|---|
+| ultima_batch_insert | **2.31 µs** | 148 µs | 8.47 µs → **3.7×** |
+| ultima_batch_update | **2.67 µs** | 171 µs | 7.11 µs → **2.7×** |
+
+| cell | this run | prior run (per-record path) |
+|---|---|---|
+| ultima_snapshot restore | **2.43 ms** | 8.60 ms (−72 %) |
+
+**What we learned:**
+
+- **Batching closes the engine trade from ~100× to ~30–50× the flat store.**
+  Per-op cost lands at 2.3–2.7 µs (vs the flat store's 48–89 ns in the
+  previous run — cross-run, so treat the flat side as a band). The unbatched
+  cells re-measured within 1–11 % of the prior run in the same fleet run, so
+  the 3.7×/2.7× amortization ratios are same-fleet and solid.
+- **The batch txn's absolute cost barely moves with 64× the work** (148–171 µs
+  per 64-command txn vs 7–8 µs per 1-command txn ≈ 19–24× for 64× commands):
+  most of the unbatched per-op cost is txn machinery, exactly what the
+  microbench-level `apply_sw_batch_throughput` predicted from the engine side.
+- **Restore via `bulk_load_batch` is 3.5× faster than the per-record path**
+  (2.43 ms for the 2.75 MB image; byte-identity round-trip preserved). Still
+  ~1.8× the flat store's memcpy-style 1.34 ms restore — the price of building
+  real B-trees — and comfortably under the CoW stores' 4.8–9.2 ms.
+- The serialize means in this run flagged +16–56 % vs the prior run on
+  untouched code; see the variance note above — the three same-day runs put a
+  ±35 % band on single-host serialize means, and `journal/REGRESSIONS.md`
+  stays empty.
 
 ## rpc-roundtrip — mutating request/response across whole stacks (cross-host)
 

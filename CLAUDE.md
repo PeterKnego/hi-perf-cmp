@@ -73,7 +73,7 @@ dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust; `aeron_sbe` also Go) and `serialization-{aeron_sbe,sbe_struct,bebop,protobuf,flatbuffers}` (Go), `smr-collections-{insert,update,snapshot,mvcc_insert,mvcc_update,mvcc_snapshot,live_stw,live_mvcc}` (all languages) and `smr-collections-{ultima_insert,ultima_update,ultima_snapshot,live_ultima}` (Rust), `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust; `aeron_sbe` also Go) and `serialization-{aeron_sbe,sbe_struct,bebop,protobuf,flatbuffers}` (Go), `smr-collections-{insert,update,snapshot,mvcc_insert,mvcc_update,mvcc_snapshot,live_stw,live_mvcc}` (all languages) and `smr-collections-{ultima_insert,ultima_update,ultima_snapshot,live_ultima,ultima_batch_insert,ultima_batch_update}` (Rust), `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
 
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt + filesystem-write + thread-handoff experiments

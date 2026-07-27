@@ -18,6 +18,8 @@ pub struct SmrConfig {
     pub iters: usize,
     /// Orders per CoW chunk (CowBook only).
     pub chunk: usize,
+    /// Commands per write-txn in the ultima batched-apply cells.
+    pub apply_batch: usize,
     /// Timed writer ops in the live_* experiments.
     pub live_iters: usize,
     /// Ops between snapshot triggers in the live_* experiments.
@@ -34,6 +36,7 @@ impl SmrConfig {
         let warmup = parse_usize("SMRC_WARMUP", 10_000)?;
         let iters = parse_usize("SMRC_ITERS", 100_000)?;
         let chunk = parse_usize("SMRC_CHUNK", 4_096)?;
+        let apply_batch = parse_usize("SMRC_APPLY_BATCH", 64)?;
         let live_iters = parse_usize("SMRC_LIVE_ITERS", 200_000)?;
         let snap_every = parse_usize("SMRC_SNAP_EVERY", 20_000)?;
         if tick <= 0 {
@@ -51,6 +54,11 @@ impl SmrConfig {
         if chunk > cap {
             return Err("SMRC_CHUNK must be <= SMRC_CAP".into());
         }
+        if apply_batch == 0 || apply_batch > iters {
+            return Err(format!(
+                "SMRC_APPLY_BATCH must be in 1..={iters} (got {apply_batch})"
+            ));
+        }
         if snap_every > live_iters {
             return Err("SMRC_SNAP_EVERY must be <= SMRC_LIVE_ITERS".into());
         }
@@ -63,6 +71,7 @@ impl SmrConfig {
             warmup,
             iters,
             chunk,
+            apply_batch,
             live_iters,
             snap_every,
         })
