@@ -74,8 +74,7 @@ fn main() {
                 // serializer only learns of it via the channel send below,
                 // which already establishes the needed happens-before.
                 busy.store(true, Ordering::Relaxed);
-                tx.send((book.pin_current(), t0))
-                    .expect("serializer alive");
+                tx.send((book.pin_current(), t0)).expect("serializer alive");
             }
         }
         let up = next_update(&mut rng, n);
