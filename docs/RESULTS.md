@@ -25,6 +25,7 @@ code in each language.
 | [20260722T131646Z](../journal/runs/20260722T131646Z-cd050b70cc78/entry.md) | `serialization` grid extended with Go SBE flyweight (`aeron_sbe`), Go SBE struct (`sbe_struct`), and `flatbuffers` (scoped run) |
 | [20260723T081721Z](../journal/runs/20260723T081721Z-95af18f1353d/entry.md) | `serialization` re-measured on the **field-heavy typed-command record** (int/float/bool/string replaces the opaque blob) — all 8 cells, one run (scoped) |
 | [20260727T004025Z](../journal/runs/20260727T004025Z-9aed7e218abe/entry.md) | First `smr-collections` MVCC-grid run: STW vs chunked-CoW vs ultima_db, incl. the `live_*` snapshot-under-writes cells — all 12 cells, one run (scoped) |
+| [20260727T134311Z](../journal/runs/20260727T134311Z-bebcffe49a4d/entry.md) | `smr-collections` re-measure after the ultima_db `VersionPin` patch (pin-at-capture replaces the 16k-retention workaround) — all 12 cells, one run (scoped) |
 
 Unless noted, tables below show the **current baseline** run (20260713T152911Z). The
 July 15 – 27 runs are **scoped** (one focus area each, not a full-matrix
@@ -242,81 +243,107 @@ at an op boundary, serialize proceeds while writes continue), and **ultima_db**
 pattern — one explicit-version write-txn per applied command, snapshot = read-txn
 at a version). All cells encode the identical 2,751,256-byte SBE image,
 golden-verified byte-identical across stores and languages. Numbers below are
-from the scoped 20260727 run (the STW cells were re-measured in the same run,
-so within-table comparisons are same-fleet).
+from the scoped 20260727T134311Z run (all 12 cells re-measured in one run, so
+within-table comparisons are same-fleet).
+
+**Correction vs the first MVCC-grid run (20260727T004025Z):** that run's
+ultima_db cells (~104–113 µs/op, "~1,000× the flat store") were dominated by a
+harness workaround, not engine cost. The adapter retained **16,384 snapshots**
+purely so a captured version number survived the writer→serializer handoff, and
+on the then-pinned engine rev every commit paid an O(retained) auto-GC scan for
+it. ultima_db `8ac858d` added `Store::pin_version` → `VersionPin` (a `Send`
+handle that keeps one version alive); the harness now pins at capture and
+retention stays at the store default. Same workload, same engine architecture —
+the per-op cost below is what the transaction machinery actually costs.
 
 **Steady-state op cost** (mean, ns — the price you pay per applied command):
 
 | op | store | rust | go | java |
 |---|---|---|---|---|
-| insert | flat (stw) | 48 | 94 | 211 |
-| insert | chunked CoW | 77 | 98 | 206 |
-| insert | ultima_db | 103,520 | — | — |
-| update | flat (stw) | 84 | 101 | 154 |
-| update | chunked CoW | 101 | 113 | 133 |
-| update | ultima_db | 113,300 | — | — |
+| insert | flat (stw) | 48 | 100 | 142 |
+| insert | chunked CoW | 77 | 97 | 293 |
+| insert | ultima_db | 8,404 | — | — |
+| update | flat (stw) | 89 | 104 | 132 |
+| update | chunked CoW | 102 | 111 | 124 |
+| update | ultima_db | 6,406 | — | — |
 
 **Snapshot serialize / restore** (mean, single-threaded — the 2.75 MB image):
 
 | store | rust ser | go ser | java ser | rust restore | go restore | java restore |
 |---|---|---|---|---|---|---|
-| flat (stw) | 611 µs | 4.97 ms | 1.13 ms | 1.34 ms | 8.59 ms | 11.3 ms |
-| chunked CoW | 706 µs | 5.10 ms | 715 µs | 5.00 ms | 9.20 ms | 5.41 ms |
-| ultima_db | 1.67 ms | — | — | 7.73 ms | — | — |
+| flat (stw) | 611 µs | 5.01 ms | 790 µs | 1.34 ms | 9.20 ms | 10.7 ms |
+| chunked CoW | 682 µs | 5.08 ms | 706 µs | 4.81 ms | 9.13 ms | 5.42 ms |
+| ultima_db | 1.45 ms | — | — | 8.60 ms | — | — |
 
 **Snapshot under live writes** (`live_*`: 200 K timed updates, a snapshot every
 20 K ops; `writer_max` is the stall the write path actually observed):
 
 | cell | writer p99 | **writer max** | serialize mean | skipped |
 |---|---|---|---|---|
-| live_stw / rust | 150 ns | **721 µs** | 622 µs | 0/10 |
-| live_stw / go | 487 ns | **5.24 ms** | 4.97 ms | 0/10 |
-| live_stw / java | 482 ns | **3.91 ms** | 1.96 ms | 0/10 |
-| live_mvcc / rust | 248 ns | **162 µs** | 667 µs | 0/10 |
-| live_mvcc / go | 523 ns | **203 µs** | 5.22 ms | 2/10 |
-| live_mvcc / java | 468 ns | **2.68 ms** | 3.54 ms | 0/10 |
-| live_ultima / rust | 127 µs | **297 µs** | 2.84 ms | 0/10 |
+| live_stw / rust | 164 ns | **746 µs** | 639 µs | 0/10 |
+| live_stw / go | 166 ns | **5.15 ms** | 4.90 ms | 0/10 |
+| live_stw / java | 482 ns | **3.75 ms** | 1.97 ms | 0/10 |
+| live_mvcc / rust | 239 ns | **258 µs** | 673 µs | 0/10 |
+| live_mvcc / go | 297 ns | **233 µs** | 5.19 ms | 5/10 |
+| live_mvcc / java | 580 ns | **3.04 ms** | 3.83 ms | 0/10 |
+| live_ultima / rust | 8.26 µs | **196 µs** | 1.87 ms | 0/10 |
 
-(`live_ultima`'s writer p50 is 109 µs — the per-op txn cost — so its p99/max
+(`live_ultima`'s writer p50 is 6.6 µs — the per-op txn cost — so its p99/max
 columns are on a different base than the ns-scale flat stores.)
 
 **What we learned:**
 
 - **For the STW store, the stall is exactly the serialize** — `writer_max` ≈
-  snapshot mean in all three languages (721 µs / 5.2 ms / 3.9 ms). And it is
+  snapshot mean in all three languages (746 µs / 5.2 ms / 3.8 ms). And it is
   invisible at p99: a 1-in-20,000 event never shows there, which is why
   `writer_max` is the headline metric for this grid.
 - **Chunked CoW delivers what it promises in Rust and Go**: the writer's worst
-  op drops 721 µs → 162 µs (4.5×) in Rust and 5.24 ms → 203 µs (26×) in Go,
+  op drops 746 µs → 258 µs (2.9×) in Rust and 5.15 ms → 233 µs (22×) in Go,
   while the serialize runs concurrently. The residual max is the op-boundary
-  capture plus first-touch chunk copies, not the encode.
+  capture plus first-touch chunk copies, not the encode. (The Rust/Go maxes
+  moved 15–60 % between the two same-day runs on code-identical cells —
+  single-event maxima carry exactly that much cross-instance noise; the
+  orders-of-magnitude gap vs STW is the finding, not the third digit.)
 - **In Java the new stall source is the collector, not the algorithm**:
-  `live_mvcc` writer_max improves only 1.5× (3.91 → 2.68 ms). CoW chunk copies
+  `live_mvcc` writer_max improves only ~1.2× (3.75 → 3.04 ms). CoW chunk copies
   create garbage, and a GC pause lands on the writer where the serialize used
-  to. The same JVM keeps p99 at 468 ns — the design works; the runtime charges
+  to. The same JVM keeps p99 at 580 ns — the design works; the runtime charges
   for it elsewhere. (Unverified attribution — GC logs would confirm.)
-- **The steady-state CoW tax is small where it was feared and negative where it
-  wasn't**: Rust insert pays +61 % (48 → 77 ns, epoch check + chunk-table
-  indirection on a 48 ns op), Go pays ~5–12 %, and Java's structure-of-arrays
-  chunks actually *beat* the pooled-object book — update 154 → 133 ns and
-  serialize 1.13 ms → 715 µs. Array locality outruns object graphs on the JVM.
-- **ultima_db quantifies the engine-MVCC trade**: ~104–113 µs per applied
-  command (a full begin-write/commit cycle per op, ~1,000× the flat store) buys
-  free snapshots — capture is just a version number, the writer's max stays
-  within ~2.7× of its own p50 while a snapshot streams, and old versions are
-  first-class. For µs-budget SMR apply loops the flat+CoW design wins; where
-  the apply loop already tolerates ~100 µs, the engine's versioning comes at no
-  additional stall.
-- **Go skipped 2 of 10 snapshot triggers in `live_mvcc`** — its 5.2 ms serialize
-  exceeds the ~4 ms trigger window at this cadence. `snap_skipped` surfacing
-  that honestly is the point; snapshot cadence is a per-language tunable, not a
+- **The steady-state CoW tax is small where it was feared**: Rust insert pays
+  +62 % (48 → 77 ns, epoch check + chunk-table indirection on a 48 ns op), Go
+  pays ~0–7 %, and Java's structure-of-arrays chunks still beat the
+  pooled-object book on update (132 → 124 ns) and serialize (790 → 706 µs) —
+  though Java's insert means swung between the two runs (JIT/run variance;
+  its p50s moved far less), so treat Java means as band, not point.
+- **ultima_db's true engine-MVCC trade is ~100×, not ~1,000×**: ~6.4–8.4 µs
+  per applied command (a full begin-write/commit cycle per op, ~75–175× the
+  flat store) buys free snapshots — capture is one `pin_version` call, the
+  writer's worst op while a snapshot streams is 196 µs (**below the STW
+  store's own 746 µs stall**), and old versions are first-class. The earlier
+  ~104–113 µs figure was ~90 % harness: a 16k-snapshot retention window
+  standing in for a version pin, charging every commit an O(retained) GC scan.
+  For sub-µs-budget apply loops the flat+CoW design still wins by ~100×; where
+  the loop tolerates single-digit µs, the engine's versioning now comes at no
+  additional stall — and batching commands per txn (unmeasured here) would
+  amortize further.
+- **The one flagged regression on the patched cells is restore (+11 %,
+  7.7 → 8.6 ms)** — a code path the patch did not touch (per-record insert
+  loop), on a different instance than the baseline run; consistent with the
+  cross-instance variance every previous `journal compare` flag traced to.
+  Serialize improved 13–20 % in the same run. Watch, don't conclude.
+- **Go skipped 5 of 10 snapshot triggers in `live_mvcc`** (2/10 in the prior
+  run) — its ~5.2 ms serialize exceeds the ~4 ms trigger window at this
+  cadence, so skip counts sit on a knife edge. `snap_skipped` surfacing that
+  honestly is the point; snapshot cadence is a per-language tunable, not a
   constant.
-- CoW restore is slower than STW restore in Rust (5.0 vs 1.3 ms — rebuilding
-  through chunk mutators) but faster in Java (5.4 vs 11.3 ms); restore is off
+- CoW restore is slower than STW restore in Rust (4.8 vs 1.3 ms — rebuilding
+  through chunk mutators) but faster in Java (5.4 vs 10.7 ms); restore is off
   the SMR hot path either way (recovery-time only).
 - Deliberately unmeasured: version GC under churn — the workload has no
   cancel/remove op (spec caveat), so the cost of reclaiming dead versions under
-  delete-heavy load is future work.
+  delete-heavy load is future work. (The engine side of this got cheaper
+  regardless: ultima_db `8ac858d` makes snapshot GC O(evicted) per commit
+  instead of O(retained).)
 
 ## rpc-roundtrip — mutating request/response across whole stacks (cross-host)
 
