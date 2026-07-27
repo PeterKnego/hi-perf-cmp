@@ -154,9 +154,14 @@ impl UltimaBook {
             .expect("current version exists")
     }
 
-    pub fn insert(&mut self, order_id: i64, price: i64, qty: i64, side: u8) {
-        self.version += 1;
-        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+    fn apply_insert(
+        &self,
+        wtx: &mut ultima_db::WriteTx,
+        order_id: i64,
+        price: i64,
+        qty: i64,
+        side: u8,
+    ) {
         let t = self.tick_of(price);
         let lid = self.level_id(side, t);
         let slot = (order_id - 1) as u32; // ids are assigned sequentially from 1
@@ -208,12 +213,9 @@ impl UltimaBook {
             }
             meta.update(1, m).expect("meta update");
         }
-        wtx.commit().expect("commit");
     }
 
-    pub fn update(&mut self, order_id: i64, fill_qty: i64) {
-        self.version += 1;
-        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+    fn apply_update(&self, wtx: &mut ultima_db::WriteTx, order_id: i64, fill_qty: i64) {
         let (lid, add) = {
             let mut orders = wtx.open_table::<OrderRec>("orders").expect("orders");
             let mut o = orders.get(order_id as u64).expect("order").clone();
@@ -229,6 +231,47 @@ impl UltimaBook {
             let mut lvl = levels.get(lid).expect("level").clone();
             lvl.qty_total -= add;
             levels.update(lid, lvl).expect("level update");
+        }
+    }
+
+    pub fn insert(&mut self, order_id: i64, price: i64, qty: i64, side: u8) {
+        self.version += 1;
+        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+        self.apply_insert(&mut wtx, order_id, price, qty, side);
+        wtx.commit().expect("commit");
+    }
+
+    pub fn update(&mut self, order_id: i64, fill_qty: i64) {
+        self.version += 1;
+        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+        self.apply_update(&mut wtx, order_id, fill_qty);
+        wtx.commit().expect("commit");
+    }
+
+    /// Apply a batch of insert commands in ONE write txn (the SMR
+    /// consensus-batch pattern). Per-command work is identical to
+    /// `insert` — the cells differ only in txn amortization.
+    pub fn insert_batch_txn(&mut self, cmds: &[(i64, i64, i64, u8)]) {
+        if cmds.is_empty() {
+            return;
+        }
+        self.version += 1;
+        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+        for &(order_id, price, qty, side) in cmds {
+            self.apply_insert(&mut wtx, order_id, price, qty, side);
+        }
+        wtx.commit().expect("commit");
+    }
+
+    /// Batched analog of `update`; see `insert_batch_txn`.
+    pub fn update_batch_txn(&mut self, cmds: &[(i64, i64)]) {
+        if cmds.is_empty() {
+            return;
+        }
+        self.version += 1;
+        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+        for &(order_id, fill_qty) in cmds {
+            self.apply_update(&mut wtx, order_id, fill_qty);
         }
         wtx.commit().expect("commit");
     }
@@ -574,6 +617,72 @@ mod tests {
         let mut bad = buf[..n].to_vec();
         bad[100] ^= 0xFF;
         assert!(restore_ultima(&bad, &c).is_err());
+    }
+
+    #[test]
+    fn batched_insert_matches_golden_bytes() {
+        let c = cfg();
+        let mut ub = UltimaBook::new(&c);
+        let mut rng = SplitMix::new(SEED);
+        let cmds: Vec<(i64, i64, i64, u8)> = (0..c.steady)
+            .map(|i| {
+                let ins = next_insert(&mut rng, i, c.levels, c.tick, c.price_min);
+                (ins.order_id, ins.price, ins.qty, ins.side)
+            })
+            .collect();
+        for chunk in cmds.chunks(c.apply_batch) {
+            ub.insert_batch_txn(chunk);
+        }
+        let mut buf = vec![0u8; 4 * 1024 * 1024];
+        let n = encode_at(&ub.store, ub.current_version(), &mut buf);
+        let golden = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../testdata/golden_snapshot.bin"
+        ))
+        .expect("golden file");
+        assert_eq!(&buf[..n], &golden[..], "batched apply == golden bytes");
+    }
+
+    #[test]
+    fn batched_mixed_ops_match_per_op_apply() {
+        let c = cfg();
+        let mut a = UltimaBook::new(&c);
+        let mut b = UltimaBook::new(&c);
+        let mut r1 = SplitMix::new(SEED);
+        let mut r2 = SplitMix::new(SEED);
+        for i in 0..c.steady {
+            let x = next_insert(&mut r1, i, c.levels, c.tick, c.price_min);
+            a.insert(x.order_id, x.price, x.qty, x.side);
+        }
+        let ins: Vec<(i64, i64, i64, u8)> = (0..c.steady)
+            .map(|i| {
+                let x = next_insert(&mut r2, i, c.levels, c.tick, c.price_min);
+                (x.order_id, x.price, x.qty, x.side)
+            })
+            .collect();
+        for chunk in ins.chunks(c.apply_batch) {
+            b.insert_batch_txn(chunk);
+        }
+        let mut u1 = SplitMix::new(SEED ^ 0x9e37);
+        let mut u2 = SplitMix::new(SEED ^ 0x9e37);
+        for _ in 0..300 {
+            let x = next_update(&mut u1, c.steady);
+            a.update(x.order_id, x.fill_qty);
+        }
+        let ups: Vec<(i64, i64)> = (0..300)
+            .map(|_| {
+                let x = next_update(&mut u2, c.steady);
+                (x.order_id, x.fill_qty)
+            })
+            .collect();
+        for chunk in ups.chunks(c.apply_batch) {
+            b.update_batch_txn(chunk);
+        }
+        let mut buf1 = vec![0u8; 4 * 1024 * 1024];
+        let mut buf2 = vec![0u8; 4 * 1024 * 1024];
+        let n1 = encode_at(&a.store, a.current_version(), &mut buf1);
+        let n2 = encode_at(&b.store, b.current_version(), &mut buf2);
+        assert_eq!(&buf1[..n1], &buf2[..n2], "batched == per-op bytes");
     }
 
     /// The concurrency correctness test for the ultima adapter: a serializer
