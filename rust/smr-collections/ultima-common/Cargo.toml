@@ -13,3 +13,10 @@ smr-collections-common = { path = "../common" }
 booksnap = { package = "booksnap-codec", path = "../booksnap-sbe/generated/booksnap" }
 crc32c = { workspace = true }
 ultima_db = { workspace = true }
+
+[features]
+# Forwards to ultima_db's narrow B-tree fanout (T=8), aimed at write-dominated
+# SMR workloads: smaller nodes mean cheaper copy-on-write clones per touched
+# node (fewer Arc bumps), at some read cost. A/B a cell with
+# `cargo run --release -p <cell> --features fanout-t8`.
+fanout-t8 = ["ultima_db/fanout-t8"]

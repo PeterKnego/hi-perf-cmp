@@ -11,3 +11,6 @@ path = "src/main.rs"
 smr-collections-common = { path = "../common" }
 smr-collections-ultima = { path = "../ultima-common" }
 bench-common = { path = "../../bench-common" }
+
+[features]
+fanout-t8 = ["smr-collections-ultima/fanout-t8"]

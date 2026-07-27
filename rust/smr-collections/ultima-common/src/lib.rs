@@ -165,11 +165,26 @@ impl UltimaBook {
         let t = self.tick_of(price);
         let lid = self.level_id(side, t);
         let slot = (order_id - 1) as u32; // ids are assigned sequentially from 1
-        let mut lvl = {
-            let levels = wtx.open_table::<LevelRec>("levels").expect("levels");
-            levels.get(lid).expect("level").clone()
+        // One `levels` scope, not two: the post-state of the level is fully
+        // determined by its pre-state plus (slot, qty), so it can be written
+        // before the order insert rather than after. Saves one open_table per
+        // insert (4 -> 3) — each open costs a dirty-map lookup plus a metrics
+        // RwLock read and a string-keyed hash lookup. `WriteTx::open_table`
+        // borrows the txn mutably, so only one table can be open at a time:
+        // opens cannot be hoisted out of the per-command work entirely.
+        let prev_tail = {
+            let mut levels = wtx.open_table::<LevelRec>("levels").expect("levels");
+            let mut lvl = levels.get(lid).expect("level").clone();
+            let prev_tail = lvl.tail;
+            if lvl.tail == NIL {
+                lvl.head = slot;
+            }
+            lvl.tail = slot;
+            lvl.qty_total += qty;
+            lvl.count += 1;
+            levels.update(lid, lvl).expect("level update");
+            prev_tail
         };
-        let prev_tail = lvl.tail;
         {
             let mut orders = wtx.open_table::<OrderRec>("orders").expect("orders");
             let id = orders
@@ -190,16 +205,6 @@ impl UltimaBook {
                 p.next = slot;
                 orders.update(pid, p).expect("prev update");
             }
-        }
-        if lvl.tail == NIL {
-            lvl.head = slot;
-        }
-        lvl.tail = slot;
-        lvl.qty_total += qty;
-        lvl.count += 1;
-        {
-            let mut levels = wtx.open_table::<LevelRec>("levels").expect("levels");
-            levels.update(lid, lvl).expect("level update");
         }
         {
             let mut meta = wtx.open_table::<MetaRec>("meta").expect("meta");
