@@ -10,7 +10,7 @@ same-AZ cluster placement group for the 2-node network runs. Uniform harness:
 64-byte payload, 10,000 warmup + 100,000 measured iterations, identical stats
 code in each language.
 
-**Runs recorded** (June 26 – July 22, 2026):
+**Runs recorded** (June 26 – July 27, 2026):
 
 | run | what it measured |
 |---|---|
@@ -19,13 +19,15 @@ code in each language.
 | [20260627T071950Z](../journal/runs/20260627T071950Z-07a4b9a872fc/entry.md) | First `thread-handoff` run (spin/condvar/channel/ring); network + filesystem re-measured |
 | [20260627T193417Z](../journal/runs/20260627T193417Z-003926ca6c91/entry.md) | Optimized SPSC ring (Rust + Go); full matrix re-measured |
 | [20260713T152911Z](../journal/runs/20260713T152911Z-23b9778538e9/entry.md) | First `serialization` run (sbe_gen/aeron_sbe/bincode); full matrix re-measured — **current baseline** |
+| [20260715T111653Z](../journal/runs/20260715T111653Z-9f707777cae2/entry.md) | First `smr-collections` run (LOB insert/update/snapshot, stop-the-world store — scoped run) |
 | [20260716T100733Z](../journal/runs/20260716T100733Z-16a158ef9fd2/entry.md) | Go `serialization` cells added (`bebop`, `protobuf`) alongside the Rust codecs (scoped run) |
 | [20260720T120209Z](../journal/runs/20260720T120209Z-79706160a45d/entry.md) | First `rpc-roundtrip` run (sbe_udp/grpc/bebop_tcp) — mutating cross-host round-trip (scoped run) |
 | [20260722T131646Z](../journal/runs/20260722T131646Z-cd050b70cc78/entry.md) | `serialization` grid extended with Go SBE flyweight (`aeron_sbe`), Go SBE struct (`sbe_struct`), and `flatbuffers` (scoped run) |
 | [20260723T081721Z](../journal/runs/20260723T081721Z-95af18f1353d/entry.md) | `serialization` re-measured on the **field-heavy typed-command record** (int/float/bool/string replaces the opaque blob) — all 8 cells, one run (scoped) |
+| [20260727T004025Z](../journal/runs/20260727T004025Z-9aed7e218abe/entry.md) | First `smr-collections` MVCC-grid run: STW vs chunked-CoW vs ultima_db, incl. the `live_*` snapshot-under-writes cells — all 12 cells, one run (scoped) |
 
 Unless noted, tables below show the **current baseline** run (20260713T152911Z). The
-two July 16 / July 20 runs are **scoped** (one focus area each, not a full-matrix
+July 15 – 27 runs are **scoped** (one focus area each, not a full-matrix
 re-measure), so the baseline pointer is unchanged; their sections cite their own run.
 
 ---
@@ -228,6 +230,93 @@ measured the blob-dominated record and are not comparable to these figures.)
   `sbe_struct` and `protobuf` show decode p99 ~4.3–5.2× their p50 (up to ~5.2 µs),
   the honest cost of rebuilding an owned object graph per record on a garbage-
   collected runtime; the four zero-copy cells stay tight (p99 ~1.5–1.7× p50).
+
+## smr-collections — LOB state store: stop-the-world vs copy-on-write vs MVCC engine (single host)
+
+The in-memory state an SMR state machine replays commands into — a fixed-capacity
+limit-order-book — measured across three store designs on the same deterministic
+workload: the original **flat STW store** (snapshot = serialize a frozen book),
+a **chunked copy-on-write store** (`mvcc_*`: snapshot = O(#chunks) root capture
+at an op boundary, serialize proceeds while writes continue), and **ultima_db**
+(`ultima_*`, Rust only: an MVCC persistent-B-tree engine driven in its SMR
+pattern — one explicit-version write-txn per applied command, snapshot = read-txn
+at a version). All cells encode the identical 2,751,256-byte SBE image,
+golden-verified byte-identical across stores and languages. Numbers below are
+from the scoped 20260727 run (the STW cells were re-measured in the same run,
+so within-table comparisons are same-fleet).
+
+**Steady-state op cost** (mean, ns — the price you pay per applied command):
+
+| op | store | rust | go | java |
+|---|---|---|---|---|
+| insert | flat (stw) | 48 | 94 | 211 |
+| insert | chunked CoW | 77 | 98 | 206 |
+| insert | ultima_db | 103,520 | — | — |
+| update | flat (stw) | 84 | 101 | 154 |
+| update | chunked CoW | 101 | 113 | 133 |
+| update | ultima_db | 113,300 | — | — |
+
+**Snapshot serialize / restore** (mean, single-threaded — the 2.75 MB image):
+
+| store | rust ser | go ser | java ser | rust restore | go restore | java restore |
+|---|---|---|---|---|---|---|
+| flat (stw) | 611 µs | 4.97 ms | 1.13 ms | 1.34 ms | 8.59 ms | 11.3 ms |
+| chunked CoW | 706 µs | 5.10 ms | 715 µs | 5.00 ms | 9.20 ms | 5.41 ms |
+| ultima_db | 1.67 ms | — | — | 7.73 ms | — | — |
+
+**Snapshot under live writes** (`live_*`: 200 K timed updates, a snapshot every
+20 K ops; `writer_max` is the stall the write path actually observed):
+
+| cell | writer p99 | **writer max** | serialize mean | skipped |
+|---|---|---|---|---|
+| live_stw / rust | 150 ns | **721 µs** | 622 µs | 0/10 |
+| live_stw / go | 487 ns | **5.24 ms** | 4.97 ms | 0/10 |
+| live_stw / java | 482 ns | **3.91 ms** | 1.96 ms | 0/10 |
+| live_mvcc / rust | 248 ns | **162 µs** | 667 µs | 0/10 |
+| live_mvcc / go | 523 ns | **203 µs** | 5.22 ms | 2/10 |
+| live_mvcc / java | 468 ns | **2.68 ms** | 3.54 ms | 0/10 |
+| live_ultima / rust | 127 µs | **297 µs** | 2.84 ms | 0/10 |
+
+(`live_ultima`'s writer p50 is 109 µs — the per-op txn cost — so its p99/max
+columns are on a different base than the ns-scale flat stores.)
+
+**What we learned:**
+
+- **For the STW store, the stall is exactly the serialize** — `writer_max` ≈
+  snapshot mean in all three languages (721 µs / 5.2 ms / 3.9 ms). And it is
+  invisible at p99: a 1-in-20,000 event never shows there, which is why
+  `writer_max` is the headline metric for this grid.
+- **Chunked CoW delivers what it promises in Rust and Go**: the writer's worst
+  op drops 721 µs → 162 µs (4.5×) in Rust and 5.24 ms → 203 µs (26×) in Go,
+  while the serialize runs concurrently. The residual max is the op-boundary
+  capture plus first-touch chunk copies, not the encode.
+- **In Java the new stall source is the collector, not the algorithm**:
+  `live_mvcc` writer_max improves only 1.5× (3.91 → 2.68 ms). CoW chunk copies
+  create garbage, and a GC pause lands on the writer where the serialize used
+  to. The same JVM keeps p99 at 468 ns — the design works; the runtime charges
+  for it elsewhere. (Unverified attribution — GC logs would confirm.)
+- **The steady-state CoW tax is small where it was feared and negative where it
+  wasn't**: Rust insert pays +61 % (48 → 77 ns, epoch check + chunk-table
+  indirection on a 48 ns op), Go pays ~5–12 %, and Java's structure-of-arrays
+  chunks actually *beat* the pooled-object book — update 154 → 133 ns and
+  serialize 1.13 ms → 715 µs. Array locality outruns object graphs on the JVM.
+- **ultima_db quantifies the engine-MVCC trade**: ~104–113 µs per applied
+  command (a full begin-write/commit cycle per op, ~1,000× the flat store) buys
+  free snapshots — capture is just a version number, the writer's max stays
+  within ~2.7× of its own p50 while a snapshot streams, and old versions are
+  first-class. For µs-budget SMR apply loops the flat+CoW design wins; where
+  the apply loop already tolerates ~100 µs, the engine's versioning comes at no
+  additional stall.
+- **Go skipped 2 of 10 snapshot triggers in `live_mvcc`** — its 5.2 ms serialize
+  exceeds the ~4 ms trigger window at this cadence. `snap_skipped` surfacing
+  that honestly is the point; snapshot cadence is a per-language tunable, not a
+  constant.
+- CoW restore is slower than STW restore in Rust (5.0 vs 1.3 ms — rebuilding
+  through chunk mutators) but faster in Java (5.4 vs 11.3 ms); restore is off
+  the SMR hot path either way (recovery-time only).
+- Deliberately unmeasured: version GC under churn — the workload has no
+  cancel/remove op (spec caveat), so the cost of reclaiming dead versions under
+  delete-heavy load is future work.
 
 ## rpc-roundtrip — mutating request/response across whole stacks (cross-host)
 
