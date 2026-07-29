@@ -32,7 +32,11 @@ fn main() {
     let warm_batches = cfg.warmup / b;
     for _ in 0..warm_batches {
         let cmds: Vec<_> = (0..b).map(|_| next_cmd(&mut rng)).collect();
-        book.insert_batch_txn(&cmds);
+        if cfg.multi_table {
+            book.insert_batch_txn_multi(&cmds);
+        } else {
+            book.insert_batch_txn(&cmds);
+        }
     }
 
     let batches = cfg.iters / b;
@@ -40,7 +44,11 @@ fn main() {
     for w in batch_ns.iter_mut() {
         let t0 = Instant::now();
         let cmds: Vec<_> = (0..b).map(|_| next_cmd(&mut rng)).collect();
-        book.insert_batch_txn(&cmds);
+        if cfg.multi_table {
+            book.insert_batch_txn_multi(&cmds);
+        } else {
+            book.insert_batch_txn(&cmds);
+        }
         *w = t0.elapsed().as_nanos() as u64;
     }
 

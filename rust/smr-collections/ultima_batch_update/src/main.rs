@@ -34,7 +34,11 @@ fn main() {
                 (u.order_id, u.fill_qty)
             })
             .collect();
-        book.update_batch_txn(&cmds);
+        if cfg.multi_table {
+            book.update_batch_txn_multi(&cmds);
+        } else {
+            book.update_batch_txn(&cmds);
+        }
     }
 
     let batches = cfg.iters / b;
@@ -47,7 +51,11 @@ fn main() {
                 (u.order_id, u.fill_qty)
             })
             .collect();
-        book.update_batch_txn(&cmds);
+        if cfg.multi_table {
+            book.update_batch_txn_multi(&cmds);
+        } else {
+            book.update_batch_txn(&cmds);
+        }
         *w = t0.elapsed().as_nanos() as u64;
     }
 

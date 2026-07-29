@@ -251,6 +251,128 @@ impl UltimaBook {
     /// Apply a batch of insert commands in ONE write txn (the SMR
     /// consensus-batch pattern). Per-command work is identical to
     /// `insert` — the cells differ only in txn amortization.
+    /// Per-command insert through already-open table writers (issue #20): the
+    /// body is identical to `apply_insert`, only the tables are handed in
+    /// (opened once per batch) instead of re-opened here.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_insert_mt(
+        &self,
+        levels: &mut ultima_db::TableWriter<'_, LevelRec>,
+        orders: &mut ultima_db::TableWriter<'_, OrderRec>,
+        meta: &mut ultima_db::TableWriter<'_, MetaRec>,
+        order_id: i64,
+        price: i64,
+        qty: i64,
+        side: u8,
+    ) {
+        let t = self.tick_of(price);
+        let lid = self.level_id(side, t);
+        let slot = (order_id - 1) as u32;
+        let mut lvl = levels.get(lid).expect("level").clone();
+        let prev_tail = lvl.tail;
+        let id = orders
+            .insert(OrderRec {
+                slot,
+                price,
+                qty,
+                filled: 0,
+                side,
+                next: NIL,
+                prev: prev_tail,
+            })
+            .expect("order insert");
+        assert_eq!(id, order_id as u64, "table id must equal orderId");
+        if prev_tail != NIL {
+            let pid = prev_tail as u64 + 1;
+            let mut p = orders.get(pid).expect("prev order").clone();
+            p.next = slot;
+            orders.update(pid, p).expect("prev update");
+        }
+        if lvl.tail == NIL {
+            lvl.head = slot;
+        }
+        lvl.tail = slot;
+        lvl.qty_total += qty;
+        lvl.count += 1;
+        levels.update(lid, lvl).expect("level update");
+        let mut m = meta.get(1).expect("meta rec").clone();
+        m.hwm = slot + 1;
+        if side == 0 && (m.best_bid < 0 || t as i32 > m.best_bid) {
+            m.best_bid = t as i32;
+        }
+        if side == 1 && (m.best_ask < 0 || (t as i32) < m.best_ask) {
+            m.best_ask = t as i32;
+        }
+        meta.update(1, m).expect("meta update");
+    }
+
+    /// Per-command update through already-open writers; body identical to
+    /// `apply_update`.
+    fn apply_update_mt(
+        &self,
+        orders: &mut ultima_db::TableWriter<'_, OrderRec>,
+        levels: &mut ultima_db::TableWriter<'_, LevelRec>,
+        order_id: i64,
+        fill_qty: i64,
+    ) {
+        let mut o = orders.get(order_id as u64).expect("order").clone();
+        let add = fill_qty.min(o.qty - o.filled);
+        o.filled += add;
+        let t = self.tick_of(o.price);
+        let lid = self.level_id(o.side, t);
+        orders.update(order_id as u64, o).expect("order update");
+        let mut lvl = levels.get(lid).expect("level").clone();
+        lvl.qty_total -= add;
+        levels.update(lid, lvl).expect("level update");
+    }
+
+    /// Batched insert opening the three tables ONCE per txn via `open_tables3`
+    /// (issue #20). Golden-equivalent to `insert_batch_txn`; the difference is
+    /// only that the tables are not re-opened per command.
+    pub fn insert_batch_txn_multi(&mut self, cmds: &[(i64, i64, i64, u8)]) {
+        if cmds.is_empty() {
+            return;
+        }
+        self.version += 1;
+        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+        {
+            let (mut levels, mut orders, mut meta) = wtx
+                .open_tables3::<LevelRec, OrderRec, MetaRec>("levels", "orders", "meta")
+                .expect("open_tables3");
+            for &(order_id, price, qty, side) in cmds {
+                self.apply_insert_mt(
+                    &mut levels,
+                    &mut orders,
+                    &mut meta,
+                    order_id,
+                    price,
+                    qty,
+                    side,
+                );
+            }
+        }
+        wtx.commit().expect("commit");
+    }
+
+    /// Batched update opening the two tables ONCE per txn via `open_tables2`.
+    /// Golden-equivalent to `update_batch_txn`.
+    pub fn update_batch_txn_multi(&mut self, cmds: &[(i64, i64)]) {
+        if cmds.is_empty() {
+            return;
+        }
+        self.version += 1;
+        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+        {
+            let (mut orders, mut levels) = wtx
+                .open_tables2::<OrderRec, LevelRec>("orders", "levels")
+                .expect("open_tables2");
+            for &(order_id, fill_qty) in cmds {
+                self.apply_update_mt(&mut orders, &mut levels, order_id, fill_qty);
+            }
+        }
+        wtx.commit().expect("commit");
+    }
+
     pub fn insert_batch_txn(&mut self, cmds: &[(i64, i64, i64, u8)]) {
         if cmds.is_empty() {
             return;
@@ -521,6 +643,7 @@ mod tests {
             iters: 0,
             chunk: 4096,
             apply_batch: 64,
+            multi_table: false,
             live_iters: 200_000,
             snap_every: 20_000,
         }
@@ -641,6 +764,69 @@ mod tests {
         ))
         .expect("golden file");
         assert_eq!(&buf[..n], &golden[..], "batched apply == golden bytes");
+    }
+
+    #[test]
+    fn multitable_insert_matches_golden_bytes() {
+        // The open_tables3 apply path (#20) must produce the same state as the
+        // per-command open path — same golden image.
+        let c = cfg();
+        let mut ub = UltimaBook::new(&c);
+        let mut rng = SplitMix::new(SEED);
+        let cmds: Vec<(i64, i64, i64, u8)> = (0..c.steady)
+            .map(|i| {
+                let ins = next_insert(&mut rng, i, c.levels, c.tick, c.price_min);
+                (ins.order_id, ins.price, ins.qty, ins.side)
+            })
+            .collect();
+        for chunk in cmds.chunks(c.apply_batch) {
+            ub.insert_batch_txn_multi(chunk);
+        }
+        let mut buf = vec![0u8; 4 * 1024 * 1024];
+        let n = encode_at(&ub.store, ub.current_version(), &mut buf);
+        let golden = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../testdata/golden_snapshot.bin"
+        ))
+        .expect("golden file");
+        assert_eq!(&buf[..n], &golden[..], "open_tables3 apply == golden bytes");
+    }
+
+    #[test]
+    fn multitable_mixed_ops_match_single_open() {
+        // open_tables3/2 path == per-command open path over an insert+update mix.
+        let c = cfg();
+        let mut a = UltimaBook::new(&c);
+        let mut b = UltimaBook::new(&c);
+        let mut r1 = SplitMix::new(SEED);
+        let mut r2 = SplitMix::new(SEED);
+        let ins: Vec<(i64, i64, i64, u8)> = (0..c.steady)
+            .map(|i| {
+                let x = next_insert(&mut r1, i, c.levels, c.tick, c.price_min);
+                let _ = next_insert(&mut r2, i, c.levels, c.tick, c.price_min);
+                (x.order_id, x.price, x.qty, x.side)
+            })
+            .collect();
+        for chunk in ins.chunks(c.apply_batch) {
+            a.insert_batch_txn(chunk);
+            b.insert_batch_txn_multi(chunk);
+        }
+        let ups: Vec<(i64, i64)> = (0..300)
+            .map(|_| {
+                let x = next_update(&mut r1, c.steady);
+                let _ = next_update(&mut r2, c.steady);
+                (x.order_id, x.fill_qty)
+            })
+            .collect();
+        for chunk in ups.chunks(c.apply_batch) {
+            a.update_batch_txn(chunk);
+            b.update_batch_txn_multi(chunk);
+        }
+        let mut buf1 = vec![0u8; 4 * 1024 * 1024];
+        let mut buf2 = vec![0u8; 4 * 1024 * 1024];
+        let n1 = encode_at(&a.store, a.current_version(), &mut buf1);
+        let n2 = encode_at(&b.store, b.current_version(), &mut buf2);
+        assert_eq!(&buf1[..n1], &buf2[..n2], "multi-table == single-open bytes");
     }
 
     #[test]

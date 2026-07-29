@@ -99,6 +99,7 @@ smrc_warmup: 10000
 smrc_iters: 100000
 smrc_chunk: 4096
 smrc_apply_batch: 64
+smrc_multi_table: 0  # ultima batch cells: 1 = open_tables3/2 per batch (#20), 0 = per-command open
 smrc_live_iters: 200000
 smrc_snap_every: 20000
 
