@@ -1,0 +1,10 @@
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_insert","metric":"batch_p50","value":141566,"unit":"ns","samples":1562}
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_insert","metric":"batch_p99","value":163276,"unit":"ns","samples":1562}
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_insert","metric":"batch_mean","value":142811.80729833548,"unit":"ns","samples":1562}
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_insert","metric":"per_op_mean","value":2231.434489036492,"unit":"ns","samples":99968}
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_insert","metric":"batch_size","value":64,"unit":"count","samples":1}
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_update","metric":"batch_p50","value":197986,"unit":"ns","samples":1562}
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_update","metric":"batch_p99","value":248891,"unit":"ns","samples":1562}
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_update","metric":"batch_mean","value":199171.15364916774,"unit":"ns","samples":1562}
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_update","metric":"per_op_mean","value":3112.049275768246,"unit":"ns","samples":99968}
+{"language":"rust","focus_area":"smr-collections","experiment":"ultima_batch_update","metric":"batch_size","value":64,"unit":"count","samples":1}
