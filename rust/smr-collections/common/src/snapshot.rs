@@ -172,6 +172,7 @@ mod tests {
             iters: 0,
             chunk: 4096,
             apply_batch: 64,
+            multi_table: false,
             live_iters: 200_000,
             snap_every: 20_000,
         }
@@ -239,6 +240,7 @@ mod tests {
             iters: 0,
             chunk: 4096,
             apply_batch: 64,
+            multi_table: false,
             live_iters: 200_000,
             snap_every: 20_000,
         };

@@ -161,6 +161,7 @@ mod tests {
             iters: 0,
             chunk: 512, // several chunks even at golden scale
             apply_batch: 64,
+            multi_table: false,
             live_iters: 200_000,
             snap_every: 20_000,
         }

@@ -61,7 +61,7 @@ bincode = { version = "2", features = ["serde"] }
 zerocopy = { version = "0.8", features = ["derive"] }
 sbe_gen = "0.7.3"
 crc32c = "0.6"
-ultima_db = { package = "ultima-db", git = "https://github.com/PeterKnego/ultima_db.git", rev = "8ac858d5ac194d08353c732de9e42beef1497a32" }
+ultima_db = { package = "ultima-db", git = "https://github.com/PeterKnego/ultima_db.git", rev = "8831c4eaed9612ba6c8b957e49b4f8505c8a7c0f" }
 
 [profile.release]
 lto = "thin"

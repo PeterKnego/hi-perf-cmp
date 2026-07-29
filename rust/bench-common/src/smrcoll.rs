@@ -20,6 +20,10 @@ pub struct SmrConfig {
     pub chunk: usize,
     /// Commands per write-txn in the ultima batched-apply cells.
     pub apply_batch: usize,
+    /// When true, the ultima batched cells open their tables once per batch
+    /// via `open_tables3`/`open_tables2` (issue #20) instead of re-opening per
+    /// command. Per-command work is identical; this isolates the re-open cost.
+    pub multi_table: bool,
     /// Timed writer ops in the live_* experiments.
     pub live_iters: usize,
     /// Ops between snapshot triggers in the live_* experiments.
@@ -37,6 +41,9 @@ impl SmrConfig {
         let iters = parse_usize("SMRC_ITERS", 100_000)?;
         let chunk = parse_usize("SMRC_CHUNK", 4_096)?;
         let apply_batch = parse_usize("SMRC_APPLY_BATCH", 64)?;
+        let multi_table = std::env::var("SMRC_MULTI_TABLE")
+            .map(|v| v == "1" || v == "true")
+            .unwrap_or(false);
         let live_iters = parse_usize("SMRC_LIVE_ITERS", 200_000)?;
         let snap_every = parse_usize("SMRC_SNAP_EVERY", 20_000)?;
         if tick <= 0 {
@@ -72,6 +79,7 @@ impl SmrConfig {
             iters,
             chunk,
             apply_batch,
+            multi_table,
             live_iters,
             snap_every,
         })

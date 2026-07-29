@@ -28,6 +28,7 @@ code in each language.
 | [20260727T134311Z](../journal/runs/20260727T134311Z-bebcffe49a4d/entry.md) | `smr-collections` re-measure after the ultima_db `VersionPin` patch (pin-at-capture replaces the 16k-retention workaround) — all 12 cells, one run (scoped) |
 | [20260727T164805Z](../journal/runs/20260727T164805Z-ddb09a5d0ff1/entry.md) | ultima cells only: `ultima_batch_insert`/`ultima_batch_update` debut (one txn per 64-command batch) + `bulk_load`-based restore — 6 cells, one run (scoped) |
 | [20260729T202653Z](../journal/runs/20260729T202653Z-8956f783de54/entry.md) / [20260729T202913Z](../journal/runs/20260729T202913Z-6d82089e1182/entry.md) | ultima_db `open_table` handle-caching A/B (engine rev 8ac858d → 2907f56, #19) — same-host before/after, 5 ultima cells (scoped) |
+| [20260729T214946Z](../journal/runs/20260729T214946Z-7f0f0cf5ee6b/entry.md) / [20260729T215021Z](../journal/runs/20260729T215021Z-7f0f0cf5ee6b/entry.md) | multi-table writer A/B (`SMRC_MULTI_TABLE` 0 → 1, `open_tables3`/`open_tables2`, #20) on the #20 engine — same-host, 2 batch cells (scoped) |
 
 Unless noted, tables below show the **current baseline** run (20260713T152911Z). The
 July 15 – 27 runs are **scoped** (one focus area each, not a full-matrix
@@ -388,7 +389,7 @@ uses ultima_db's intended path (`bulk_load_batch`: one atomic O(N)
   ±35 % band on single-host serialize means, and `journal/REGRESSIONS.md`
   stays empty.
 
-#### Engine-side follow-ups (ultima_db #19 fleet-measured, #20 landed)
+#### Engine-side follow-ups (ultima_db #19 and #20, both fleet-measured)
 
 Two ultima_db optimizations the batched cells exposed have since landed on
 ultima_db `main`. **The numbers above are the pre-optimization baseline** (engine
@@ -407,19 +408,29 @@ rev `ddb09a5`'s dep, which pins `8ac858d`); this note records what changed.
   numbers not shown: that A/B ran on a different instance than the 20260727 run
   above, and cross-instance variance on `batch_update` alone is ~21 %; the
   trustworthy figure is the same-host delta.)
-- **#20 — multi-table writer (landed, not yet exercised here).** `open_tables2`/
-  `open_tables3` let a transaction hold several table writers at once, so the
-  batched applier could open its 3 tables **once per batch** instead of once per
-  command — a table-major-access probe on the post-#19 engine put this at
-  **~35–40 % additional per-op**, the largest remaining lever after B-tree
-  fanout. **These cells do not use it yet** (they still open command-major, one
-  table at a time), so no fleet number is claimed for #20 — realizing it needs
-  the cells rewritten onto `open_tables3` and a fresh run. Tracked as future
-  work.
+- **#20 — multi-table writer (fleet-measured, −12 to −13 % on the batch cells).**
+  `open_tables2`/`open_tables3` let a transaction hold several table writers at
+  once, so the batched applier opens its 3 tables **once per batch** (via
+  `open_tables3`, insert) / 2 tables (`open_tables2`, update) instead of once per
+  command. The cells now take that path under `SMRC_MULTI_TABLE=1`; a **same-host
+  A/B** on the post-#19 engine (`8831c4e`, runs 20260729T2149/2150, per-command
+  vs multi-table, per-command work byte-identical by golden test) measured:
+  `ultima_batch_insert` −12.4 % mean / −8.8 % p99, `ultima_batch_update` −12.6 %
+  mean / **−21.7 % p99**.
+  - **Correction to an earlier estimate.** A synthetic table-major *probe* had
+    put this at ~35–40 %; the real number is ~12–13 %. The probe overstated for
+    two reasons: it ran a small config (~550 ns/op) where 3 fixed table-opens are
+    a large fraction, whereas the real cell is ~2.2 µs/op (LEVELS=1024, larger
+    records) so the same 3 opens are ~12 %; and it reordered access table-major,
+    folding in a cache-locality gain that `open_tables3` alone — which keeps
+    command-major access — does not deliver. #19 also already made each open
+    cheap, so removing them entirely on top of #19 saves less than removing the
+    old expensive opens would have. ~12 % same-fleet is the honest figure.
 
 Net trajectory of the engine-MVCC trade vs the flat store, batched: ~100× before
-batching, ~30–50× with batching (above), and #19+#20 together aim it toward the
-low end of that band on a future harness rev.
+batching, ~30–50× with batching (above). #19 (~7–13 %) and #20 (~12 %) each shave
+the batched per-op further — real, same-fleet, and smaller than the headline
+amortization step, as second-order engine wins tend to be.
 
 ## rpc-roundtrip — mutating request/response across whole stacks (cross-host)
 
