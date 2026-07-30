@@ -41,8 +41,8 @@ beyond what the op stream generates.
 
 ## Grid
 
-Nine new experiments, one artifact per experiment per the repo convention
-(`smr-collections-<experiment>`):
+Seven new experiments — 15 artifacts, one per experiment per language, per the
+repo convention (`smr-collections-<experiment>`):
 
 | experiment | languages | store |
 |---|---|---|
@@ -50,22 +50,30 @@ Nine new experiments, one artifact per experiment per the repo convention
 | `mvcc_churn` | rust, go, java | chunked CoW `CowBook` + free list |
 | `ultima_churn` | rust | ultima_db, one txn per command |
 | `ultima_batch_churn` | rust | ultima_db, `SMRC_APPLY_BATCH` commands per txn |
+| `live_stw_churn` | rust, go, java | churn while an STW snapshot serialises |
+| `live_mvcc_churn` | rust, go, java | churn while a CoW root snapshot serialises |
 | `live_ultima_churn` | rust | churn while a snapshot holds a `VersionPin` |
 
 Existing cells are untouched apart from the `require_bump_capacity()` refactor
 (see [Config](#config)) and the schema-v2 golden regeneration (see [Snapshot
 format](#snapshot-format-schema-v2)).
 
-`live_ultima_churn` deliberately has **no churn-mode counterpart for the flat
-and CoW stores**. Its writer-stall number will have only the existing
-non-churn `live_stw`/`live_mvcc` cells as a reference — a stated limitation, not
-an oversight. Adding `live_stw_churn` / `live_mvcc_churn` is two more
-experiments × three languages if the comparator turns out to be needed.
+The three `live_*_churn` cells mirror the existing `live_stw` / `live_mvcc` /
+`live_ultima` trio exactly — same structure, same metrics, same
+`SMRC_LIVE_ITERS` / `SMRC_SNAP_EVERY` cadence — with the churn stream in place
+of the update-only one. That makes the snapshot-under-load comparison
+same-workload across all three store designs, so `live_ultima_churn`'s
+writer-stall number has a like-for-like baseline rather than being read against
+a non-churn reference. It also puts the two most interesting stall questions on
+one row: whether the STW store's stall grows once the serialiser must walk a
+pool with holes in it, and whether the CoW store's first-touch chunk copies get
+materially worse when cancels scatter writes across chunks instead of appending
+to the newest one.
 
 ## The op stream
 
-One shared derivation, byte-identical across all three languages and all four
-store variants — the same discipline as today's `next_insert` / `next_update`.
+One shared derivation, byte-identical across all three languages and all seven
+experiments — the same discipline as today's `next_insert` / `next_update`.
 
 **Pre-build.** Insert `SMRC_STEADY` orders using the *existing* `next_insert`
 stream, so the warm book is bit-identical to the one the current cells start
@@ -193,28 +201,34 @@ Each cell emits **separate distributions per op type from one run**:
 
 | metric | unit | cells |
 |---|---|---|
-| `cancel_p50` / `cancel_p99` / `cancel_mean` | ns | all nine |
-| `insert_p50` / `insert_p99` / `insert_mean` | ns | all nine |
-| `fill_p50` / `fill_p99` / `fill_mean` | ns | all nine |
-| `rss_growth_bytes` | bytes | all nine |
-| `writer_p99` / `writer_max` | ns | `live_ultima_churn` only |
-| `rss_peak_bytes` | bytes | `live_ultima_churn` only |
-| `snapshot_mean` / `snap_skipped` | ns / count | `live_ultima_churn` only |
+| `cancel_p50` / `cancel_p99` / `cancel_mean` | ns | all |
+| `insert_p50` / `insert_p99` / `insert_mean` | ns | all |
+| `fill_p50` / `fill_p99` / `fill_mean` | ns | all |
+| `rss_growth_bytes` | bytes | all |
+| `writer_p99` / `writer_max` | ns | the three `live_*_churn` |
+| `rss_peak_bytes` | bytes | the three `live_*_churn` |
+| `snapshot_mean` / `snap_skipped` | ns / count | the three `live_*_churn` |
 
-`live_ultima_churn` emits the per-op distributions **as well as** the writer
+The `live_*_churn` cells emit the per-op distributions **as well as** the writer
 metrics: `writer_p99`/`writer_max` are the aggregate stall over all op types
 (the headline metric, matching the existing `live_*` cells), while the per-op
-split shows which op absorbs the stall. `snapshot_mean` and `snap_skipped`
-follow the existing `live_*` convention.
+split shows which op absorbs the stall — a cancel that triggers a ladder rescan
+while a serialiser is mid-flight is the plausible worst case, and the split is
+what would surface it. `snapshot_mean` and `snap_skipped` follow the existing
+`live_*` convention; `snap_skipped` matters especially for Go, whose ~5 ms
+serialize already sat on a knife edge against the trigger window in the
+non-churn `live_mvcc` run.
 
 Reusing the existing per-op metric names means the new cancel number drops
 straight into the RESULTS.md per-op tables beside insert and update.
 
 `rss_growth_bytes` (RSS delta across the timed loop, via `/proc/self/statm` on
 Linux) is the metric that answers the version-GC question: if reclamation keeps
-up it is ~0; if it does not, it climbs. For `live_ultima_churn`, `rss_peak_bytes`
-measures memory while reclamation is blocked behind a pinned version — the
-specific failure mode this spec exists to test.
+up it is ~0; if it does not, it climbs. `rss_peak_bytes` on the `live_*_churn`
+cells measures memory while a snapshot is in flight: for `live_ultima_churn`
+that is reclamation blocked behind a pinned version — the specific failure mode
+this spec exists to test — and for `live_mvcc_churn` it is the transient cost of
+first-touch chunk copies, which the same metric captures for free.
 
 `fill_*` samples are ~0.5 % of ops (≈500 samples at the default 100 K iters), so
 its p99 is thin. Reported as-is with that caveat rather than dropped: the cell
@@ -280,7 +294,8 @@ In rough order of what each is worth:
 
 ## Infra & docs changes
 
-- Nine rows in `bench-infra/ansible/group_vars/all.yml`'s `experiments` matrix,
+- Seven rows in `bench-infra/ansible/group_vars/all.yml`'s `experiments` matrix
+  (one per experiment, not per artifact — the matrix fans out over languages),
   `kind: local`, with `languages: [rust]` on `ultima_churn`,
   `ultima_batch_churn`, and `live_ultima_churn`.
 - `smrc_otr_bps: 100` in the same file's smr-collections params block.
@@ -292,8 +307,6 @@ In rough order of what each is worth:
 
 ## Open items deliberately deferred
 
-- `live_stw_churn` / `live_mvcc_churn` — the flat/CoW comparators for
-  `live_ultima_churn` (see [Grid](#grid)).
 - Cancel-heavy behaviour under a *growing* live set (churn plus net inflow),
   which would stress capacity limits rather than reclamation.
 - Recency-biased victim selection, which would model market-maker quote-pulling
