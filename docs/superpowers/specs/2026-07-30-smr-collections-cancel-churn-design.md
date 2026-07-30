@@ -115,11 +115,11 @@ selection is closer to real market-maker behaviour but needs a skew parameter we
 would be inventing. Uniform draw over a dense array with O(1) swap-remove is
 deterministic, cheap, and does not flatter the subject.
 
-The `live[]` bookkeeping runs inside the timed loop and costs a few ns per op.
-It is charged **identically to every cell**, so cross-store and cross-language
-comparisons remain fair; absolute per-op numbers carry it and should be read as
-"op + harness bookkeeping", consistent with how the existing cells carry their
-own workload derivation.
+Op **generation** (the RNG draws and the `live[]` swap-remove) sits **outside**
+the timed region: the driver produces the next op, the clock starts, the store
+applies it, the clock stops. So the per-op numbers are store work only, and are
+directly comparable with the existing `insert`/`update` cells, whose timed
+region is likewise just the store call.
 
 ## Store changes
 
@@ -156,43 +156,82 @@ inserts do; the ladder rescan may touch several level chunks.
 
 ### `UltimaBook` — ultima_db (rust)
 
-Cancel = delete the `orders` row, update the `levels` row, update `meta` (free
-head), within the existing one-txn-per-command / batched-txn structure.
-`ultima_batch_churn` opens its tables once per batch via `open_tables3` under
-`SMRC_MULTI_TABLE`, matching `ultima_batch_insert`. This is the path that
-generates dead versions, and the reason the focus area needs this spec.
+The existing adapter derives the slot from the order ID — `let slot = (order_id
+- 1) as u32`, with an assert that the table id `orders.insert()` returns equals
+`order_id` (`ultima-common/src/lib.rs:167,186`) — and `encode_at` rests on the
+same invariant: *"order ids are sequential from 1 in insertion order: id order
+IS slot order 0..hwm"* (`lib.rs:465`). **Cancel invalidates all of it**: slots
+are recycled, order IDs are sparse, and `delete()` removes the row entirely.
+
+So the adapter changes shape:
+
+- **Slots are allocated, not derived.** A `free` table (`slot → next`) holds the
+  free list; `meta` holds `free_head`. Insert pops the head or bumps `hwm`, and
+  writes the order via `insert_with_id(slot + 1, rec)` rather than `insert()`.
+  The `slot == order_id - 1` assumption and its assert are removed.
+- **Cancel** = `orders.delete(slot + 1)`, update the `levels` row, push the slot
+  onto the `free` table, update `meta` (`free_head`, and `best_bid`/`best_ask`
+  after a rescan). Deletion is what generates the dead versions this spec
+  exists to measure.
+- **Batched cancel** uses `delete_batch`, and `ultima_batch_churn` opens its
+  tables once per batch under `SMRC_MULTI_TABLE`, matching
+  `ultima_batch_insert`.
+
+`ultima_db` supplies the needed primitives: `delete`, `delete_batch`, and
+`insert_with_id` (`table.rs:375,546,600`).
 
 ## Snapshot format (schema v2)
 
-`rust/smr-collections/schema/book_snapshot.xml` gains one field:
+The originally-approved "+4 bytes for `freeHead`" plan **does not work**, and
+this section replaces it. That plan had freed slots thread the free list
+through their own `nextSlot` field inside an orders group that serialises every
+slot `0..hwm`. Flat and CoW can do that — freed slots stay in the pool. ultima
+cannot: a deleted row is gone, so there is nothing left to thread through, and
+the store could not produce a byte-identical image. The cross-store golden test
+would fail, correctly.
+
+v2 is therefore a **real format change**:
+
+1. The `orders` group serialises **live orders only** — count is the live-order
+   count, not `hwm`.
+2. A new `freeSlots` group carries the free list **in list order**:
 
 ```xml
 <field name="freeHead" id="8" type="uint32"/>
+...
+<group name="freeSlots" id="30" dimensionType="groupSizeEncoding">
+  <field name="slot" id="31" type="uint32"/>
+</group>
 ```
 
-in the `BookSnapshot` fixed block, and the schema `version` goes 1 → 2.
-
-Freed slots thread the free list through their existing `nextSlot` field, so the
-list itself already rides in the orders group — **no group field changes**, and
-the orders group still serialises slots `0..hwm` verbatim. Restore reads
-`freeHead` directly and skips `orderId == 0` slots when rebuilding the id-map.
+Every store can produce identical bytes from that: flat and CoW walk their
+chain from `free_head` to emit the group and skip `order_id == 0` slots in the
+orders group; ultima emits its `free` table in list order and its orders table
+as-is. Restore rebuilds the pool from the live orders and re-threads the chain
+from the group in the order given, so free-list order survives exactly.
 
 Consequences, all one-time and taken in a single commit:
 
-- `blockLength` changes; every image grows 4 bytes (2,751,256 → 2,751,260 at the
-  default config). Existing cells' `snapshot_bytes` shifts by that much; the
-  journal `compare` diff is expected and should be noted in the run entry.
+- `blockLength` changes and the image gains a group. Existing cells'
+  `snapshot_bytes` shifts — for an insert/update-only workload the free list is
+  empty, so the delta is the 4-byte `freeHead` plus the 4-byte empty group
+  header (2,751,256 → 2,751,264 at the default config). The journal `compare`
+  diff is expected and should be noted in the run entry.
 - `testdata/golden_snapshot.bin` is regenerated (via the existing
   `SMRC_WRITE_GOLDEN` path) and re-verified by rust, go, and java.
+- All three codecs are regenerated from the schema by the committed scripts:
+  `rust/smr-collections/booksnap-sbe/regen.sh`,
+  `go/internal/smrcoll/regen-booksnap.sh`,
+  `java/smr-collections-common/regen-booksnap.sh` (each needs a JDK).
 - Restore rejects a schema version other than 2.
 
-The alternatives considered were a second schema used only by churn cells (two
-formats and two goldens to keep in sync across three languages) and
-reconstructing the free list by ascending-slot scan at restore time (which
-forces the writer to allocate in ascending order — a heap or bitmap scan, slower
-on the hot path, and it would change what the cancel cell measures). Full-state
-capture in one schema is what the design requires: free-list heads are state,
-and omitting them breaks bit-identical resumption.
+Two alternatives were rejected. **Dropping cross-store byte-identity for the
+churn cells** (keeping only cross-language identity per store) is far less work
+but gives up the property that makes this grid trustworthy — that every variant
+demonstrably computes the same state. **Having ultima tombstone rows via
+`update` instead of `delete`** preserves the old format trivially, but then the
+engine never deletes and version reclamation goes unmeasured, which is the
+entire question this extension exists to answer.
 
 ## Metrics
 
@@ -274,12 +313,15 @@ In rough order of what each is worth:
 1. **Bit-identical resumption.** Run N churn ops → snapshot → restore into a
    fresh store → replay ops N+1..M on both the restored store and the
    never-restarted one → re-snapshot → byte-identical. This proves free-list
-   order survives a snapshot, and it is the entire justification for putting
-   `freeHead` in the schema.
+   order survives a snapshot, and it is the entire justification for the
+   `freeHead` field and the `freeSlots` group.
 2. **Cross-store and cross-language golden.** `Book`, `CowBook`, and
    `UltimaBook` run the identical churn stream and produce identical bytes,
    matching one new golden file verified by rust, go, and java — extending the
-   existing golden pattern.
+   existing golden pattern. This is the test the rejected "+4 bytes" format
+   would have failed, and it is the reason `freeSlots` exists: the three stores
+   hold their free lists in three different places and must still agree on the
+   image byte-for-byte.
 3. **LOB invariants after arbitrary insert/cancel/fill sequences.** Per level:
    `qty_total` equals the summed remaining qty of live orders at that level;
    `count` equals their number; walking `head → next → tail` visits exactly
