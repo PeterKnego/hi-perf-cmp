@@ -4,7 +4,7 @@
 
 **Goal:** Add a cancel op, a free list, and a ~1 % order-to-trade churn workload to the Rust flat (`Book`) and chunked-CoW (`CowBook`) stores, land SBE snapshot schema v2, and ship the four non-ultima Rust cells.
 
-**Architecture:** A shared `Churn` driver in `smr-collections-common` generates a deterministic op stream (even index → insert, odd → cancel/fill) against a `ChurnStore` trait, so every store runs byte-identical ops. Slot recycling uses an intrusive LIFO free list threaded through each freed slot's `next` field, with `free_head` captured in the snapshot so restore reproduces allocation order exactly. Schema v2 serialises live orders only plus an explicit `freeSlots` group, which is the only shape all three stores (including ultima, whose deletes remove rows) can produce identically.
+**Architecture:** A shared `Churn` driver in `smr-collections-common` generates a deterministic op stream (even index → insert, odd → cancel/fill) against a `ChurnStore` trait, so every store runs byte-identical ops. Slot recycling uses an intrusive LIFO free list threaded through each freed slot's `next` field, with `free_head` captured in the snapshot so restore reproduces allocation order exactly. Schema v2 adds only `freeHead` — freed slots stay in the pool, so the chain serialises itself. ultima keeps monotone slots (a B-tree has no pool) and is checked against the flat stores by a representation-free canonical digest rather than by bytes.
 
 **Tech Stack:** Rust edition 2024, Cargo workspace, real-logic `sbe-tool` 1.38.1 (committed generated codec), crc32c.
 
