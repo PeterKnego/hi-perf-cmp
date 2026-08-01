@@ -6,10 +6,10 @@ import org.agrona.DirectBuffer;
 @SuppressWarnings("all")
 public final class BookSnapshotDecoder
 {
-    public static final int BLOCK_LENGTH = 36;
+    public static final int BLOCK_LENGTH = 40;
     public static final int TEMPLATE_ID = 1;
     public static final int SCHEMA_ID = 8;
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
     public static final String SEMANTIC_VERSION = "";
     public static final java.nio.ByteOrder BYTE_ORDER = java.nio.ByteOrder.LITTLE_ENDIAN;
 
@@ -482,6 +482,57 @@ public final class BookSnapshotDecoder
     public int bestAsk()
     {
         return buffer.getInt(offset + 32, BYTE_ORDER);
+    }
+
+
+    public static int freeHeadId()
+    {
+        return 8;
+    }
+
+    public static int freeHeadSinceVersion()
+    {
+        return 0;
+    }
+
+    public static int freeHeadEncodingOffset()
+    {
+        return 36;
+    }
+
+    public static int freeHeadEncodingLength()
+    {
+        return 4;
+    }
+
+    public static String freeHeadMetaAttribute(final MetaAttribute metaAttribute)
+    {
+        if (MetaAttribute.PRESENCE == metaAttribute)
+        {
+            return "required";
+        }
+
+        return "";
+    }
+
+    public static long freeHeadNullValue()
+    {
+        return 4294967295L;
+    }
+
+    public static long freeHeadMinValue()
+    {
+        return 0L;
+    }
+
+    public static long freeHeadMaxValue()
+    {
+        return 4294967294L;
+    }
+
+    public long freeHead()
+    {
+        return (buffer.getInt(offset + 36, BYTE_ORDER) & 0xFFFF_FFFFL);
     }
 
 
@@ -1544,6 +1595,9 @@ public final class BookSnapshotDecoder
         builder.append('|');
         builder.append("bestAsk=");
         builder.append(this.bestAsk());
+        builder.append('|');
+        builder.append("freeHead=");
+        builder.append(this.freeHead());
         builder.append('|');
         builder.append("levels=[");
         final int levelsOriginalOffset = levels.offset;

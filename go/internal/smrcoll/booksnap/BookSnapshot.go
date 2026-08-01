@@ -17,6 +17,7 @@ type BookSnapshot struct {
 	Hwm      uint32
 	BestBid  int32
 	BestAsk  int32
+	FreeHead uint32
 	Levels   []BookSnapshotLevels
 	Orders   []BookSnapshotOrders
 }
@@ -64,6 +65,9 @@ func (b *BookSnapshot) Encode(_m *SbeGoMarshaller, _w io.Writer, doRangeCheck bo
 		return err
 	}
 	if err := _m.WriteInt32(_w, b.BestAsk); err != nil {
+		return err
+	}
+	if err := _m.WriteUint32(_w, b.FreeHead); err != nil {
 		return err
 	}
 	var LevelsBlockLength uint16 = 25
@@ -142,6 +146,13 @@ func (b *BookSnapshot) Decode(_m *SbeGoMarshaller, _r io.Reader, actingVersion u
 		b.BestAsk = b.BestAskNullValue()
 	} else {
 		if err := _m.ReadInt32(_r, &b.BestAsk); err != nil {
+			return err
+		}
+	}
+	if !b.FreeHeadInActingVersion(actingVersion) {
+		b.FreeHead = b.FreeHeadNullValue()
+	} else {
+		if err := _m.ReadUint32(_r, &b.FreeHead); err != nil {
 			return err
 		}
 	}
@@ -230,6 +241,11 @@ func (b *BookSnapshot) RangeCheck(actingVersion uint16, schemaVersion uint16) er
 	if b.BestAskInActingVersion(actingVersion) {
 		if b.BestAsk < b.BestAskMinValue() || b.BestAsk > b.BestAskMaxValue() {
 			return fmt.Errorf("Range check failed on b.BestAsk (%v < %v > %v)", b.BestAskMinValue(), b.BestAsk, b.BestAskMaxValue())
+		}
+	}
+	if b.FreeHeadInActingVersion(actingVersion) {
+		if b.FreeHead < b.FreeHeadMinValue() || b.FreeHead > b.FreeHeadMaxValue() {
+			return fmt.Errorf("Range check failed on b.FreeHead (%v < %v > %v)", b.FreeHeadMinValue(), b.FreeHead, b.FreeHeadMaxValue())
 		}
 	}
 	for i := range b.Levels {
@@ -490,7 +506,7 @@ func BookSnapshotOrdersInit(b *BookSnapshotOrders) {
 }
 
 func (*BookSnapshot) SbeBlockLength() (blockLength uint16) {
-	return 36
+	return 40
 }
 
 func (*BookSnapshot) SbeTemplateId() (templateId uint16) {
@@ -502,7 +518,7 @@ func (*BookSnapshot) SbeSchemaId() (schemaId uint16) {
 }
 
 func (*BookSnapshot) SbeSchemaVersion() (schemaVersion uint16) {
-	return 1
+	return 2
 }
 
 func (*BookSnapshot) SbeSemanticType() (semanticType []byte) {
@@ -805,6 +821,48 @@ func (*BookSnapshot) BestAskMaxValue() int32 {
 
 func (*BookSnapshot) BestAskNullValue() int32 {
 	return math.MinInt32
+}
+
+func (*BookSnapshot) FreeHeadId() uint16 {
+	return 8
+}
+
+func (*BookSnapshot) FreeHeadSinceVersion() uint16 {
+	return 0
+}
+
+func (b *BookSnapshot) FreeHeadInActingVersion(actingVersion uint16) bool {
+	return actingVersion >= b.FreeHeadSinceVersion()
+}
+
+func (*BookSnapshot) FreeHeadDeprecated() uint16 {
+	return 0
+}
+
+func (*BookSnapshot) FreeHeadMetaAttribute(meta int) string {
+	switch meta {
+	case 1:
+		return ""
+	case 2:
+		return ""
+	case 3:
+		return ""
+	case 4:
+		return "required"
+	}
+	return ""
+}
+
+func (*BookSnapshot) FreeHeadMinValue() uint32 {
+	return 0
+}
+
+func (*BookSnapshot) FreeHeadMaxValue() uint32 {
+	return math.MaxUint32 - 1
+}
+
+func (*BookSnapshot) FreeHeadNullValue() uint32 {
+	return math.MaxUint32
 }
 
 func (*BookSnapshotLevels) SideId() uint16 {
@@ -1392,7 +1450,7 @@ func (*BookSnapshotLevels) SbeBlockLength() (blockLength uint) {
 }
 
 func (*BookSnapshotLevels) SbeSchemaVersion() (schemaVersion uint16) {
-	return 1
+	return 2
 }
 
 func (*BookSnapshot) OrdersId() uint16 {
@@ -1416,5 +1474,5 @@ func (*BookSnapshotOrders) SbeBlockLength() (blockLength uint) {
 }
 
 func (*BookSnapshotOrders) SbeSchemaVersion() (schemaVersion uint16) {
-	return 1
+	return 2
 }

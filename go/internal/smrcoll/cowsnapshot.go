@@ -22,6 +22,9 @@ func (s *Snapshotter) EncodeRoot(r *CowRoot) []byte {
 	msg.Hwm = r.Hwm
 	msg.BestBid = r.BestBid
 	msg.BestAsk = r.BestAsk
+	// See Snapshotter.Encode: CowBook has no free list yet either, so this
+	// stays NIL, matching Rust's cancel-free-book output.
+	msg.FreeHead = NIL
 
 	msg.Levels = msg.Levels[:0]
 	for side := uint8(0); side < 2; side++ {

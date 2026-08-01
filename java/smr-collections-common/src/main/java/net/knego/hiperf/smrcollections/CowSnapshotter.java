@@ -38,6 +38,9 @@ public final class CowSnapshotter {
         enc.hwm(u32(r.hwm));
         enc.bestBid(r.bestBid);
         enc.bestAsk(r.bestAsk);
+        // See Snapshotter.encode: CowBook has no free list yet either, so
+        // this stays NIL, matching Rust's cancel-free-book output.
+        enc.freeHead(u32(Book.NIL));
 
         int levelCount = 0;
         for (byte side = 0; side < 2; side++) {
