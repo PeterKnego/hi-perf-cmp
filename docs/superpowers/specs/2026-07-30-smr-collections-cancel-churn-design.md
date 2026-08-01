@@ -306,7 +306,7 @@ Each cell emits **separate distributions per op type from one run**:
 | `cancel_p50` / `cancel_p99` / `cancel_mean` | ns | all **except** `ultima_batch_churn` |
 | `insert_p50` / `insert_p99` / `insert_mean` | ns | all **except** `ultima_batch_churn` |
 | `fill_p50` / `fill_p99` / `fill_mean` | ns | all **except** `ultima_batch_churn` |
-| `rss_growth_bytes` | bytes | all |
+| `rss_growth_bytes` | bytes | the four non-live churn cells |
 | `batch_p50` / `batch_p99` / `batch_mean`, `per_op_mean`, `batch_size` | ns / count | `ultima_batch_churn` only |
 | `writer_p99` / `writer_max` | ns | the three `live_*_churn` |
 | `rss_peak_bytes` | bytes | the three `live_*_churn` |
