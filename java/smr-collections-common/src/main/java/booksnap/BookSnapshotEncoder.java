@@ -6,10 +6,10 @@ import org.agrona.MutableDirectBuffer;
 @SuppressWarnings("all")
 public final class BookSnapshotEncoder
 {
-    public static final int BLOCK_LENGTH = 36;
+    public static final int BLOCK_LENGTH = 40;
     public static final int TEMPLATE_ID = 1;
     public static final int SCHEMA_ID = 8;
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
     public static final String SEMANTIC_VERSION = "";
     public static final java.nio.ByteOrder BYTE_ORDER = java.nio.ByteOrder.LITTLE_ENDIAN;
 
@@ -453,6 +453,58 @@ public final class BookSnapshotEncoder
     public BookSnapshotEncoder bestAsk(final int value)
     {
         buffer.putInt(offset + 32, value, BYTE_ORDER);
+        return this;
+    }
+
+
+    public static int freeHeadId()
+    {
+        return 8;
+    }
+
+    public static int freeHeadSinceVersion()
+    {
+        return 0;
+    }
+
+    public static int freeHeadEncodingOffset()
+    {
+        return 36;
+    }
+
+    public static int freeHeadEncodingLength()
+    {
+        return 4;
+    }
+
+    public static String freeHeadMetaAttribute(final MetaAttribute metaAttribute)
+    {
+        if (MetaAttribute.PRESENCE == metaAttribute)
+        {
+            return "required";
+        }
+
+        return "";
+    }
+
+    public static long freeHeadNullValue()
+    {
+        return 4294967295L;
+    }
+
+    public static long freeHeadMinValue()
+    {
+        return 0L;
+    }
+
+    public static long freeHeadMaxValue()
+    {
+        return 4294967294L;
+    }
+
+    public BookSnapshotEncoder freeHead(final long value)
+    {
+        buffer.putInt(offset + 36, (int)value, BYTE_ORDER);
         return this;
     }
 

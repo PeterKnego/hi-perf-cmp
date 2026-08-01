@@ -11,7 +11,7 @@ pub mod message_header_codec;
 pub mod side;
 
 pub const SBE_SCHEMA_ID: u16 = 8;
-pub const SBE_SCHEMA_VERSION: u16 = 1;
+pub const SBE_SCHEMA_VERSION: u16 = 2;
 pub const SBE_SEMANTIC_VERSION: &str = "";
 
 pub type SbeResult<T> = core::result::Result<T, SbeErr>;

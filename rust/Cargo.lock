@@ -1351,6 +1351,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 
 [[package]]
+name = "smr-collections-churn"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+]
+
+[[package]]
 name = "smr-collections-common"
 version = "0.1.0"
 dependencies = [
@@ -1376,7 +1384,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "smr-collections-live_mvcc_churn"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+]
+
+[[package]]
 name = "smr-collections-live_stw"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+]
+
+[[package]]
+name = "smr-collections-live_stw_churn"
 version = "0.1.0"
 dependencies = [
  "bench-common",
@@ -1390,6 +1414,23 @@ dependencies = [
  "bench-common",
  "smr-collections-common",
  "smr-collections-ultima",
+]
+
+[[package]]
+name = "smr-collections-live_ultima_churn"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+ "smr-collections-ultima",
+]
+
+[[package]]
+name = "smr-collections-mvcc_churn"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
 ]
 
 [[package]]
@@ -1436,6 +1477,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "smr-collections-ultima_batch_churn"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+ "smr-collections-ultima",
+]
+
+[[package]]
 name = "smr-collections-ultima_batch_insert"
 version = "0.1.0"
 dependencies = [
@@ -1446,6 +1496,15 @@ dependencies = [
 
 [[package]]
 name = "smr-collections-ultima_batch_update"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+ "smr-collections-ultima",
+]
+
+[[package]]
+name = "smr-collections-ultima_churn"
 version = "0.1.0"
 dependencies = [
  "bench-common",

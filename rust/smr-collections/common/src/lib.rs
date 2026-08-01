@@ -2,7 +2,9 @@
 //! the SBE snapshot codec (`snapshot`, enabled from Task R3).
 
 pub mod book;
+pub mod churn;
 pub mod cowbook;
 pub mod cowsnap;
+pub mod digest;
 pub mod rng;
 pub mod snapshot;

@@ -46,6 +46,11 @@ public final class Snapshotter {
         enc.hwm(u32(b.hwm));
         enc.bestBid(b.bestBid);
         enc.bestAsk(b.bestAsk);
+        // Java's Book has no free list yet (cancel/fill are Rust-only so
+        // far). Writing NIL is exactly what the Rust encoder produces for a
+        // cancel-free book; leaving the field unset would leave it at 0,
+        // wrongly naming slot 0 as the free-list head.
+        enc.freeHead(u32(Book.NIL));
 
         int levelCount = 0;
         for (Level[] lane : new Level[][] {b.bids, b.asks}) {
