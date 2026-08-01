@@ -117,9 +117,22 @@ deterministic, cheap, and does not flatter the subject.
 
 Op **generation** (the RNG draws and the `live[]` swap-remove) sits **outside**
 the timed region: the driver produces the next op, the clock starts, the store
-applies it, the clock stops. So the per-op numbers are store work only, and are
-directly comparable with the existing `insert`/`update` cells, whose timed
-region is likewise just the store call.
+applies it, the clock stops. So the per-op numbers are store work only.
+
+**They are therefore *not* directly comparable with the existing `insert` /
+`update` cells**, which call `next_insert` / `next_update` *inside* `measure`'s
+closure — their timed region includes two SplitMix draws and the price/qty
+arithmetic. On a 48–89 ns flat-store insert that is roughly 3–5 ns, so
+`churn.insert_mean` will read ~5–8 % faster than `insert.insert_mean` for
+reasons that have nothing to do with the store. That is inside the documented
+±35 % band but it is a *systematic* bias, and the two land on adjacent rows in
+RESULTS.md — so it must be stated in the run entry, not left for a reader to
+trip over. (The batched cells share the asymmetry but at ~0.2 % of a ~160 µs
+txn, which is noise.)
+
+The fix is not to move generation back inside the clock: that would invalidate
+the journaled `insert` / `update` baselines for no gain. The new cells' choice
+is the better one; the comparison just has to be quoted honestly.
 
 ## Store changes
 
@@ -232,6 +245,12 @@ carry, so its `orders` group holds live rows only and its `freeHead` is `NIL`.
 Same schema, two population strategies — the format is capable of both, and the
 difference is a genuine difference in what the two stores *are*.
 
+The golden image is a **cross-language artifact**: `testdata/golden_snapshot.bin`
+is read by Rust, Go and Java tests alike. Regenerating it without regenerating
+all three codecs turns the other two languages' suites red, so the v2 change and
+the three codec regenerations must land **together**, even though the rest of
+the Go and Java work is scoped to later plans.
+
 Consequences, all one-time and taken in a single commit:
 
 - `blockLength` changes; every image grows 4 bytes (2,751,256 → 2,751,260 at the
@@ -284,10 +303,11 @@ Each cell emits **separate distributions per op type from one run**:
 
 | metric | unit | cells |
 |---|---|---|
-| `cancel_p50` / `cancel_p99` / `cancel_mean` | ns | all |
-| `insert_p50` / `insert_p99` / `insert_mean` | ns | all |
-| `fill_p50` / `fill_p99` / `fill_mean` | ns | all |
+| `cancel_p50` / `cancel_p99` / `cancel_mean` | ns | all **except** `ultima_batch_churn` |
+| `insert_p50` / `insert_p99` / `insert_mean` | ns | all **except** `ultima_batch_churn` |
+| `fill_p50` / `fill_p99` / `fill_mean` | ns | all **except** `ultima_batch_churn` |
 | `rss_growth_bytes` | bytes | all |
+| `batch_p50` / `batch_p99` / `batch_mean`, `per_op_mean`, `batch_size` | ns / count | `ultima_batch_churn` only |
 | `writer_p99` / `writer_max` | ns | the three `live_*_churn` |
 | `rss_peak_bytes` | bytes | the three `live_*_churn` |
 | `snapshot_mean` / `snap_skipped` | ns / count | the three `live_*_churn` |
@@ -303,7 +323,19 @@ serialize already sat on a knife edge against the trigger window in the
 non-churn `live_mvcc` run.
 
 Reusing the existing per-op metric names means the new cancel number drops
-straight into the RESULTS.md per-op tables beside insert and update.
+straight into the RESULTS.md per-op tables beside insert and update (subject to
+the timed-region caveat under [The op stream](#the-op-stream)).
+
+**`ultima_batch_churn` is the exception and emits no per-op split.** A batch is
+one transaction; the only honest per-op figure it has is `ns / batch_size`,
+which is identical for every op in the batch regardless of type. Splitting that
+by op type would produce three distributions that are equal by construction —
+`insert_p50 ≈ cancel_p50 ≈ per_op_mean` — and would attribute a single
+expensive ladder rescan equally across all 64 ops. A reader comparing
+`ultima_batch_churn.cancel_p99` against `churn.cancel_p99` would be comparing a
+real distribution against an apportionment artifact. It therefore emits exactly
+what `ultima_batch_insert` emits: `batch_*`, `per_op_mean`, `batch_size` — plus
+`rss_growth_bytes`, which is the metric this cell exists for.
 
 `rss_growth_bytes` (RSS delta across the timed loop, via `/proc/self/statm` on
 Linux) is the metric that answers the version-GC question: if reclamation keeps
