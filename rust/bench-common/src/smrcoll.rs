@@ -28,6 +28,9 @@ pub struct SmrConfig {
     pub live_iters: usize,
     /// Ops between snapshot triggers in the live_* experiments.
     pub snap_every: usize,
+    /// Order-to-trade ratio in basis points: the share of departures that are
+    /// fills rather than cancels. 100 = 1 %, the real-exchange figure.
+    pub otr_bps: u64,
 }
 
 impl SmrConfig {
@@ -46,6 +49,7 @@ impl SmrConfig {
             .unwrap_or(false);
         let live_iters = parse_usize("SMRC_LIVE_ITERS", 200_000)?;
         let snap_every = parse_usize("SMRC_SNAP_EVERY", 20_000)?;
+        let otr_bps = parse_usize("SMRC_OTR_BPS", 100)? as u64;
         if tick <= 0 {
             return Err("SMRC_TICK must be > 0".into());
         }
@@ -55,8 +59,8 @@ impl SmrConfig {
         if steady > cap || steady > 65_535 {
             return Err("SMRC_STEADY must be <= SMRC_CAP and <= 65535".into());
         }
-        if warmup + iters > cap {
-            return Err("SMRC_WARMUP + SMRC_ITERS must be <= SMRC_CAP".into());
+        if otr_bps > 10_000 {
+            return Err(format!("SMRC_OTR_BPS must be in 0..=10000 (got {otr_bps})"));
         }
         if chunk > cap {
             return Err("SMRC_CHUNK must be <= SMRC_CAP".into());
@@ -82,7 +86,17 @@ impl SmrConfig {
             multi_table,
             live_iters,
             snap_every,
+            otr_bps,
         })
+    }
+
+    /// Cells that bump-allocate (no free list) need a pool slot for every op
+    /// they will ever run. Churn cells recycle slots and must NOT call this.
+    pub fn require_bump_capacity(&self) -> Result<(), String> {
+        if self.warmup + self.iters > self.cap {
+            return Err("SMRC_WARMUP + SMRC_ITERS must be <= SMRC_CAP".into());
+        }
+        Ok(())
     }
 }
 
@@ -190,6 +204,23 @@ pub fn emit_live(
     emit_int(experiment, "snapshot_bytes", snap_len as u64, "bytes", 1);
 }
 
+/// Resident set size in bytes, from Linux `/proc/self/statm` field 2
+/// (resident pages). Returns 0 where unreadable — the bench hosts are
+/// x86-64 Linux with 4 KiB pages, which is the only case that must be right.
+pub fn rss_bytes() -> u64 {
+    let Ok(s) = std::fs::read_to_string("/proc/self/statm") else {
+        return 0;
+    };
+    match s
+        .split_whitespace()
+        .nth(1)
+        .and_then(|f| f.parse::<u64>().ok())
+    {
+        Some(pages) => pages * 4096,
+        None => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,5 +260,58 @@ mod tests {
         unsafe { std::env::set_var("SMRC_CHUNK", "999999999") };
         assert!(SmrConfig::from_env().is_err());
         unsafe { std::env::remove_var("SMRC_CHUNK") };
+    }
+
+    #[test]
+    fn smrc_otr_bps_defaults_to_100() {
+        let _g = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::remove_var("SMRC_OTR_BPS") };
+        let c = SmrConfig::from_env().expect("defaults parse");
+        assert_eq!(c.otr_bps, 100, "default OTR is 1% = 100 bps");
+    }
+
+    #[test]
+    fn smrc_otr_bps_rejects_over_10000() {
+        let _g = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("SMRC_OTR_BPS", "10001") };
+        let r = SmrConfig::from_env();
+        unsafe { std::env::remove_var("SMRC_OTR_BPS") };
+        assert!(r.is_err(), "OTR above 100% must be rejected");
+    }
+
+    #[test]
+    fn churn_sized_run_parses_but_fails_bump_capacity() {
+        let _g = ENV_LOCK.lock().unwrap();
+        // warmup + iters > cap is legal for a slot-recycling churn cell and
+        // illegal for a bump-allocating insert cell.
+        unsafe {
+            std::env::set_var("SMRC_CAP", "1024");
+            std::env::set_var("SMRC_STEADY", "512");
+            std::env::set_var("SMRC_WARMUP", "1000");
+            std::env::set_var("SMRC_ITERS", "10000");
+            std::env::set_var("SMRC_CHUNK", "256");
+        }
+        let c = SmrConfig::from_env().expect("churn-sized config must parse");
+        let bump = c.require_bump_capacity();
+        unsafe {
+            for k in [
+                "SMRC_CAP",
+                "SMRC_STEADY",
+                "SMRC_WARMUP",
+                "SMRC_ITERS",
+                "SMRC_CHUNK",
+            ] {
+                std::env::remove_var(k);
+            }
+        }
+        assert!(bump.is_err(), "bump-allocating cells must reject it");
+    }
+
+    #[test]
+    fn rss_bytes_is_nonzero_on_linux() {
+        assert!(
+            rss_bytes() > 0,
+            "RSS must be readable from /proc/self/statm"
+        );
     }
 }

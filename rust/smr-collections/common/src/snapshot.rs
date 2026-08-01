@@ -175,6 +175,7 @@ mod tests {
             multi_table: false,
             live_iters: 200_000,
             snap_every: 20_000,
+            otr_bps: 100,
         }
     }
 
@@ -243,6 +244,7 @@ mod tests {
             multi_table: false,
             live_iters: 200_000,
             snap_every: 20_000,
+            otr_bps: 100,
         };
         let mut buf = vec![0u8; 4 * 1024 * 1024];
         let n = encode(&build(&c, c.steady), &mut buf);

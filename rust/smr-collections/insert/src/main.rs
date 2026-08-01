@@ -15,6 +15,10 @@ fn main() {
             std::process::exit(1);
         }
     };
+    if let Err(m) = cfg.require_bump_capacity() {
+        eprintln!("smr-collections-{EXPERIMENT}: {m}");
+        std::process::exit(1);
+    }
     let mut book = Book::new(&cfg);
     let mut rng = SplitMix::new(SEED);
     let mut i = 0usize;

@@ -646,6 +646,7 @@ mod tests {
             multi_table: false,
             live_iters: 200_000,
             snap_every: 20_000,
+            otr_bps: 100,
         }
     }
 

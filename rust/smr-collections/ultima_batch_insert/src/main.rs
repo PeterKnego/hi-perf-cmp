@@ -19,6 +19,10 @@ fn main() {
             std::process::exit(1);
         }
     };
+    if let Err(m) = cfg.require_bump_capacity() {
+        eprintln!("smr-collections-{EXPERIMENT}: {m}");
+        std::process::exit(1);
+    }
     let b = cfg.apply_batch;
     let mut book = UltimaBook::new(&cfg);
     let mut rng = SplitMix::new(SEED);
