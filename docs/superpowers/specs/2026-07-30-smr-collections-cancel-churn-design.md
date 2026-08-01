@@ -424,6 +424,34 @@ In rough order of what each is worth:
   heading — written **only after a real AWS `bench-infra` run**. Local/loopback
   smoke runs are fitness checks and are never journaled.
 
+### Must be recorded in the next run's journal entry
+
+Composition changes made while implementing this spec. Each moves a number for
+reasons unrelated to the store being measured, so a reader comparing against the
+existing baseline needs them stated:
+
+1. **`snapshot_bytes` shifts +4 for every existing cell** — the schema-v2
+   `freeHead` field. Expect a `journal compare` flag on cells whose code did not
+   change.
+2. **Churn per-op means read ~5–8 % fast against the `insert`/`update` cells.**
+   The churn cells exclude op generation from the timed region; the existing
+   cells include it (they call `next_insert`/`next_update` inside `measure`'s
+   closure). ~3–5 ns on a 48–89 ns op — inside the ±35 % band, but systematic,
+   and the two land on adjacent rows.
+3. **`ultima_insert` / `ultima_update` gained an id-map probe.** The adapter can
+   no longer use `order_id` as the row id, so it carries a `HashMap<i64, u64>`.
+   A few ns on a ~7 µs op. This *removes* an unearned advantage — the flat store
+   always paid that probe — rather than adding a tax.
+4. **`ultima_batch_churn` emits no per-op split**, unlike every other churn
+   cell. See [Metrics](#metrics) for why.
+5. **`rss_growth_bytes` includes ~1.2 MB of harness sample buffers** whose pages
+   are first touched inside the timed loop. Identical across cells, so it does
+   not distort the comparison, but the flat/CoW cells will report ~1.2 MB rather
+   than the ~0 the metric name implies.
+6. **ultima's `hwm` now means "rows ever inserted"**, not a live-set high-water
+   mark, so under churn it grows unbounded and can exceed `capacity`. Nothing
+   sizes anything from it today; a `debug_assert!` names the bound.
+
 ## Open items deliberately deferred
 
 - Cancel-heavy behaviour under a *growing* live set (churn plus net inflow),

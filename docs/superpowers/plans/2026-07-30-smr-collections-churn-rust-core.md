@@ -2026,7 +2026,7 @@ Identical in shape to `churn/src/main.rs` from Task 6 with `UltimaBook::new(&cfg
 
 - [ ] **Step 2: `ultima_batch_churn`**
 
-Follow `ultima_batch_insert/src/main.rs`: collect `cfg.apply_batch` ops from `churn.next_op()` into a `Vec<ChurnOp>`, then apply the whole batch in one txn, timing the batch. Because a batch mixes op types, emit `batch_mean` for the txn plus the per-op-type split derived from `batch_ns / batch_len` — mirror whatever `ultima_batch_insert` already does for `batch_*` rather than inventing a convention.
+Follow `ultima_batch_insert/src/main.rs`: collect `cfg.apply_batch` ops from `churn.next_op()` into a `Vec<ChurnOp>`, then apply the whole batch in one txn, timing the batch. Emit exactly what `ultima_batch_insert` emits (`batch_*`, `per_op_mean`, `batch_size`) plus `rss_growth_bytes` — **no per-op-type split**: `ns / batch_size` is identical for every op in a batch, so splitting it by type yields three distributions equal by construction.
 
 Route inserts, cancels, and fills within a batch through the multi-table path under `SMRC_MULTI_TABLE`, matching the existing batched cells.
 
