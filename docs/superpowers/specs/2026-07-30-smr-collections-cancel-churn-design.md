@@ -190,8 +190,12 @@ never reused, and the changes are small:
   row, update `meta` (`best_bid`/`best_ask` after a rescan), and drop the map
   entry. That is the whole op — deletion is what generates the dead versions
   this spec exists to measure.
-- **Batched cancel** uses `delete_batch`, and `ultima_batch_churn` opens its
-  tables once per batch under `SMRC_MULTI_TABLE`, matching
+- **Batched cancel** deletes one row per command, like the existing batched
+  insert/update paths — what a batch amortizes is the **transaction**, not the
+  row operations. (`delete_batch` is not usable here: neighbour links are fixed
+  during each unlink, so deferring the deletes to the end of the txn would leave
+  stale rows visible to later unlinks in the same batch.) `ultima_batch_churn`
+  opens its tables once per batch under `SMRC_MULTI_TABLE`, matching
   `ultima_batch_insert`.
 - **`encode_at`** no longer assumes `0..hwm` is dense: it counts live rows and
   emits each with its own slot.
