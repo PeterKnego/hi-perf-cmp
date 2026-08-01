@@ -1625,20 +1625,26 @@ mod tests {
 
     #[test]
     fn digest_ignores_slot_numbering() {
-        // Two books with the same logical content but different allocation
-        // history must digest identically.
+        // Two books with the same logical content but genuinely different
+        // slot->order mappings must digest identically. Note the scenario has
+        // to be built so the layouts actually diverge: burning a slot and
+        // immediately reusing it reproduces the original layout exactly and
+        // proves nothing.
         let c = cfg();
         let mut a = Book::new(&c);
-        a.insert(1, 5, 10, 0);
-        a.insert(3, 5, 20, 0);
+        a.insert(1, 5, 10, 0); // slot 0
+        a.insert(3, 5, 20, 0); // slot 1
 
         let mut d = Book::new(&c);
-        d.insert(9, 5, 99, 0); // burns slot 0
-        d.cancel(9);
-        d.insert(1, 5, 10, 0); // reuses slot 0
-        d.insert(3, 5, 20, 0);
+        d.insert(5, 5, 99, 0); // slot 0
+        d.insert(1, 5, 10, 0); // slot 1
+        d.insert(3, 5, 20, 0); // slot 2
+        d.cancel(5); // frees slot 0; orders 1 and 3 stay at slots 1 and 2
 
-        assert_ne!(d.free_head, a.free_head, "histories really do differ");
+        // Same logical book, different addresses for it.
+        assert_ne!(a.get_slot(1), d.get_slot(1), "layouts really do differ");
+        assert_ne!(a.get_slot(3), d.get_slot(3), "layouts really do differ");
+        assert_ne!(a.free_head, d.free_head, "free lists really do differ");
         assert_eq!(digest_book(&a), digest_book(&d));
     }
 }
