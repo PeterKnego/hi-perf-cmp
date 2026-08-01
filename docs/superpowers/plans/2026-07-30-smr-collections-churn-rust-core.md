@@ -1478,14 +1478,21 @@ fn main() {
     let mut rss_peak = rss_bytes();
     for k in 0..cfg.live_iters {
         let op = churn.next_op();
+        let fired = k % cfg.snap_every == 0;
         let t0 = Instant::now();
-        if k % cfg.snap_every == 0 {
+        if fired {
             snap_len = encode(&book, &mut buf);
             snap_ns.push(t0.elapsed().as_nanos() as u64);
-            rss_peak = rss_peak.max(rss_bytes());
         }
         Churn::apply(&mut book, op);
         let ns = t0.elapsed().as_nanos() as u64;
+        // Sample RSS only AFTER the clock closes. `rss_bytes()` reads
+        // /proc/self/statm — microseconds against 50-300 ns ops — so calling it
+        // inside the timed region would inflate `writer_max`, the one metric
+        // this cell exists to report precisely.
+        if fired {
+            rss_peak = rss_peak.max(rss_bytes());
+        }
         writer_ns[k] = ns;
         match op {
             ChurnOp::Insert { .. } => s.insert_ns.push(ns),
@@ -2010,7 +2017,7 @@ Route inserts, cancels, and fills within a batch through the multi-table path un
 
 - [ ] **Step 3: `live_ultima_churn`**
 
-Mirror `live_ultima/src/main.rs` with the churn stream, `pin_current()` at the snapshot trigger, and the `rss_peak_bytes` / per-op-split additions from Task 6 Step 4.
+Mirror `live_ultima/src/main.rs` with the churn stream, `pin_current()` at the snapshot trigger, and the `rss_peak_bytes` / per-op-split additions from Task 6 Step 4 — **including Task 6's rule that `rss_bytes()` is sampled only after the timed window closes**, never inside it.
 
 - [ ] **Step 4: Build and smoke-run**
 
