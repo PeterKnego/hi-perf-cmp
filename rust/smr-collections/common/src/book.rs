@@ -61,6 +61,7 @@ impl Hasher for NoHash {
 }
 pub type IdMap = HashMap<i64, u32, BuildHasherDefault<NoHash>>;
 
+#[derive(Debug)]
 pub struct Book {
     pub price_min: i64,
     pub tick: i64,

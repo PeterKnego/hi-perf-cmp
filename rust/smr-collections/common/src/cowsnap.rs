@@ -47,6 +47,10 @@ pub fn encode_root(root: &Root, buf: &mut [u8]) -> usize {
         enc.hwm(root.hwm);
         enc.best_bid(root.best_bid);
         enc.best_ask(root.best_ask);
+        // CowBook has no free list yet (cancel/fill are Book-only, task 2);
+        // NIL here mirrors what Book.free_head is for any cancel-free run,
+        // keeping byte-parity with snapshot::encode for the same logical state.
+        enc.free_head(NIL);
 
         let mut lg = enc.levels_encoder(level_count, LevelsEncoder::default());
         for side in 0..2u8 {

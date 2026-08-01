@@ -7,7 +7,7 @@ pub use crate::SBE_SCHEMA_ID;
 pub use crate::SBE_SCHEMA_VERSION;
 pub use crate::SBE_SEMANTIC_VERSION;
 
-pub const SBE_BLOCK_LENGTH: u16 = 36;
+pub const SBE_BLOCK_LENGTH: u16 = 40;
 pub const SBE_TEMPLATE_ID: u16 = 1;
 
 pub mod encoder {
@@ -174,6 +174,22 @@ pub mod encoder {
         pub fn best_ask(&mut self, value: i32) -> &mut Self {
             let offset = self.offset + 32;
             self.get_buf_mut().put_i32_at(offset, value);
+            self
+        }
+
+        /// primitive field 'freeHead'
+        /// - min value: 0
+        /// - max value: 4294967294
+        /// - null value: 0xffffffff_u32
+        /// - characterEncoding: null
+        /// - semanticType: null
+        /// - encodedOffset: 36
+        /// - encodedLength: 4
+        /// - version: 0
+        #[inline]
+        pub fn free_head(&mut self, value: u32) -> &mut Self {
+            let offset = self.offset + 36;
+            self.get_buf_mut().put_u32_at(offset, value);
             self
         }
 
@@ -703,6 +719,12 @@ pub mod decoder {
             self.get_buf().get_i32_at(self.offset + 32)
         }
 
+        /// primitive field - 'REQUIRED'
+        #[inline]
+        pub fn free_head(&self) -> u32 {
+            self.get_buf().get_u32_at(self.offset + 36)
+        }
+
         /// GROUP DECODER (id=10)
         #[inline]
         pub fn levels_decoder(self) -> LevelsDecoder<Self> {
@@ -780,7 +802,7 @@ pub mod decoder {
             self
         }
 
-        /// group token - Token{signal=BEGIN_GROUP, name='levels', referencedName='null', description='null', packageName='null', id=10, version=0, deprecated=0, encodedLength=25, offset=36, componentTokenCount=27, encoding=Encoding{presence=REQUIRED, primitiveType=null, byteOrder=LITTLE_ENDIAN, minValue=null, maxValue=null, nullValue=null, constValue=null, characterEncoding='null', epoch='null', timeUnit=null, semanticType='null'}}
+        /// group token - Token{signal=BEGIN_GROUP, name='levels', referencedName='null', description='null', packageName='null', id=10, version=0, deprecated=0, encodedLength=25, offset=40, componentTokenCount=27, encoding=Encoding{presence=REQUIRED, primitiveType=null, byteOrder=LITTLE_ENDIAN, minValue=null, maxValue=null, nullValue=null, constValue=null, characterEncoding='null', epoch='null', timeUnit=null, semanticType='null'}}
         #[inline]
         pub fn parent(&mut self) -> SbeResult<P> {
             self.parent.take().ok_or(SbeErr::ParentNotSet)

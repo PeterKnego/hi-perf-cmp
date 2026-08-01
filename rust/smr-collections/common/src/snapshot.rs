@@ -47,6 +47,7 @@ pub fn encode(book: &Book, buf: &mut [u8]) -> usize {
         enc.hwm(book.hwm);
         enc.best_bid(book.best_bid);
         enc.best_ask(book.best_ask);
+        enc.free_head(book.free_head);
 
         let mut lg = enc.levels_encoder(level_count, LevelsEncoder::default());
         for (side, lane) in [(0u8, &book.bids), (1u8, &book.asks)] {
@@ -97,6 +98,12 @@ pub fn restore(bytes: &[u8], cfg: &SmrConfig) -> Result<Book, String> {
     }
     let mut book = Book::new(cfg);
     let header = MessageHeaderDecoder::default().wrap(ReadBuf::new(&bytes[..sbe_len]), 0);
+    let schema_version = header.version();
+    if schema_version != 2 {
+        return Err(format!(
+            "unsupported snapshot schema version {schema_version} (expected 2)"
+        ));
+    }
     let dec = BookSnapshotDecoder::default().header(header, 0);
     book.price_min = dec.price_min();
     book.tick = dec.tick_size();
@@ -104,6 +111,14 @@ pub fn restore(bytes: &[u8], cfg: &SmrConfig) -> Result<Book, String> {
     book.hwm = dec.hwm();
     book.best_bid = dec.best_bid();
     book.best_ask = dec.best_ask();
+    if dec.capacity() as usize != cfg.cap {
+        return Err(format!(
+            "snapshot capacity {} != SMRC_CAP {}",
+            dec.capacity(),
+            cfg.cap
+        ));
+    }
+    book.free_head = dec.free_head();
 
     let mut lg = dec.levels_decoder();
     let lc = lg.count();
@@ -140,7 +155,9 @@ pub fn restore(bytes: &[u8], cfg: &SmrConfig) -> Result<Book, String> {
             side: side_u8(og.side()),
         };
         book.pool[slot] = o;
-        book.idmap.insert(o.order_id, slot as u32);
+        if o.order_id != 0 {
+            book.idmap.insert(o.order_id, slot as u32);
+        }
     }
     Ok(book)
 }
@@ -256,5 +273,90 @@ mod tests {
             &buf[..n],
         )
         .expect("write golden");
+    }
+
+    fn build_with_cancels(c: &SmrConfig, n: usize, cancel_every: usize) -> Book {
+        let mut b = Book::new(c);
+        let mut rng = SplitMix::new(SEED);
+        for i in 0..n {
+            let ins = next_insert(&mut rng, i, c.levels, c.tick, c.price_min);
+            b.insert(ins.order_id, ins.price, ins.qty, ins.side);
+            if i % cancel_every == cancel_every - 1 {
+                b.cancel(ins.order_id);
+            }
+        }
+        b
+    }
+
+    #[test]
+    fn round_trip_preserves_free_list_order() {
+        let c = cfg();
+        let b = build_with_cancels(&c, c.steady, 4);
+        assert_ne!(b.free_head, crate::book::NIL, "test needs a non-empty list");
+        let mut buf = vec![0u8; 4 * 1024 * 1024];
+        let n = encode(&b, &mut buf);
+        let r = restore(&buf[..n], &c).expect("restore");
+        assert_eq!(r.free_head, b.free_head, "free list head survives");
+        // Walk both chains and compare slot-for-slot.
+        let walk = |bk: &Book| {
+            let mut v = Vec::new();
+            let mut s = bk.free_head;
+            while s != crate::book::NIL {
+                v.push(s);
+                s = bk.pool[s as usize].next;
+            }
+            v
+        };
+        assert_eq!(walk(&r), walk(&b), "free list order survives exactly");
+    }
+
+    #[test]
+    fn restore_after_cancels_reencodes_identically() {
+        let c = cfg();
+        let b = build_with_cancels(&c, c.steady, 4);
+        let mut buf1 = vec![0u8; 4 * 1024 * 1024];
+        let n1 = encode(&b, &mut buf1);
+        let r = restore(&buf1[..n1], &c).expect("restore");
+        let mut buf2 = vec![0u8; 4 * 1024 * 1024];
+        let n2 = encode(&r, &mut buf2);
+        assert_eq!(&buf1[..n1], &buf2[..n2]);
+    }
+
+    #[test]
+    fn freed_slots_round_trip_without_polluting_the_id_map() {
+        let c = cfg();
+        let b = build_with_cancels(&c, c.steady, 4);
+        let mut buf = vec![0u8; 4 * 1024 * 1024];
+        let n = encode(&b, &mut buf);
+        let r = restore(&buf[..n], &c).expect("restore");
+        for slot in 0..b.hwm {
+            let id = b.pool[slot as usize].order_id;
+            if id != 0 {
+                assert_eq!(r.get_slot(id), slot, "live order {id} keeps its slot");
+            } else {
+                assert_eq!(
+                    r.pool[slot as usize].order_id, 0,
+                    "slot {slot} stays marked free"
+                );
+            }
+        }
+        // order_id 0 is the freed marker, never a real key.
+        assert!(
+            !r.idmap.contains_key(&0),
+            "freed slots must not enter the id-map"
+        );
+    }
+
+    #[test]
+    fn wrong_schema_version_is_rejected() {
+        let c = cfg();
+        let mut buf = vec![0u8; 4 * 1024 * 1024];
+        let n = encode(&build(&c, c.steady), &mut buf);
+        buf[6] = 1; // messageHeader.version is the 4th u16
+        // recompute the crc so version, not corruption, is what fails
+        let crc = crc32c::crc32c(&buf[..n - 4]);
+        buf[n - 4..n].copy_from_slice(&crc.to_le_bytes());
+        let e = restore(&buf[..n], &c).expect_err("v1 image must be rejected");
+        assert!(e.contains("version"), "error names the version: {e}");
     }
 }

@@ -424,6 +424,10 @@ pub fn encode_at(store: &Store, version: u64, buf: &mut [u8]) -> usize {
         enc.hwm(m.hwm);
         enc.best_bid(m.best_bid);
         enc.best_ask(m.best_ask);
+        // The ultima variant has no free list yet (cancel/fill are Book-only,
+        // task 2); NIL mirrors what Book.free_head is for any cancel-free
+        // run, keeping byte-parity with snapshot::encode for the same state.
+        enc.free_head(NIL);
 
         let mut lg = enc.levels_encoder(level_count, LevelsEncoder::default());
         // Level ids are side*nLevels + tick + 1: id order IS bids-then-asks,
