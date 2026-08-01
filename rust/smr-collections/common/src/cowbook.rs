@@ -34,6 +34,7 @@ pub struct Root {
     pub best_bid: i32,
     pub best_ask: i32,
     pub chunk: usize,
+    pub free_head: u32,
     order_chunks: Vec<Arc<OrderChunk>>,
     bid_chunks: Vec<Arc<LevelChunk>>,
     ask_chunks: Vec<Arc<LevelChunk>>,
@@ -71,6 +72,7 @@ pub struct CowBook {
     pub hwm: u32,
     pub best_bid: i32,
     pub best_ask: i32,
+    pub free_head: u32,
     pub(crate) idmap: IdMap,
 }
 
@@ -119,6 +121,7 @@ impl CowBook {
             hwm: 0,
             best_bid: -1,
             best_ask: -1,
+            free_head: NIL,
             idmap: IdMap::with_capacity_and_hasher(cfg.cap, BuildHasherDefault::default()),
         }
     }
@@ -181,8 +184,7 @@ impl CowBook {
     /// Same op semantics as `Book::insert` (keep in lockstep).
     pub fn insert(&mut self, order_id: i64, price: i64, qty: i64, side: u8) {
         let t = self.tick_of(price);
-        let slot = self.hwm;
-        self.hwm += 1;
+        let slot = self.alloc_slot();
         let prev_tail = self.level(side, t).tail;
         *self.order_mut(slot) = Order {
             order_id,
@@ -227,6 +229,118 @@ impl CowBook {
         self.level_mut(side, t).qty_total -= add;
     }
 
+    #[inline]
+    fn alloc_slot(&mut self) -> u32 {
+        if self.free_head != NIL {
+            let slot = self.free_head;
+            self.free_head = self.order(slot).next;
+            slot
+        } else {
+            if self.hwm == self.capacity {
+                panic!("order pool exhausted: SMRC_CAP={} reached", self.capacity);
+            }
+            let slot = self.hwm;
+            self.hwm += 1;
+            slot
+        }
+    }
+
+    #[inline]
+    fn free_slot(&mut self, slot: u32) {
+        let head = self.free_head;
+        let o = self.order_mut(slot);
+        o.order_id = 0;
+        o.next = head;
+        o.prev = NIL;
+        self.free_head = slot;
+    }
+
+    fn unlink(&mut self, slot: u32, side: u8, t: u32, rem: i64) {
+        let (prev, next) = {
+            let o = self.order(slot);
+            (o.prev, o.next)
+        };
+        if prev != NIL {
+            self.order_mut(prev).next = next;
+        }
+        if next != NIL {
+            self.order_mut(next).prev = prev;
+        }
+        let lvl = self.level_mut(side, t);
+        if lvl.head == slot {
+            lvl.head = next;
+        }
+        if lvl.tail == slot {
+            lvl.tail = prev;
+        }
+        lvl.qty_total -= rem;
+        lvl.count -= 1;
+    }
+
+    /// Read-only ladder rescan — uses `level()`, not `level_mut()`, so it
+    /// never triggers a copy-on-write of an untouched chunk.
+    fn repair_best(&mut self, side: u8, t: u32) {
+        if side == 0 {
+            if self.best_bid != t as i32 || self.level(0, t).head != NIL {
+                return;
+            }
+            let mut nb = -1i32;
+            for i in (0..=t).rev() {
+                if self.level(0, i).head != NIL {
+                    nb = i as i32;
+                    break;
+                }
+            }
+            self.best_bid = nb;
+        } else {
+            if self.best_ask != t as i32 || self.level(1, t).head != NIL {
+                return;
+            }
+            let mut na = -1i32;
+            for i in t..self.n_levels {
+                if self.level(1, i).head != NIL {
+                    na = i as i32;
+                    break;
+                }
+            }
+            self.best_ask = na;
+        }
+    }
+
+    /// Same op semantics as `Book::cancel` (keep in lockstep).
+    pub fn cancel(&mut self, order_id: i64) {
+        let slot = self
+            .idmap
+            .remove(&order_id)
+            .expect("cancel: unknown order id");
+        let (side, price, rem) = {
+            let o = self.order(slot);
+            (o.side, o.price, o.qty - o.filled)
+        };
+        let t = self.tick_of(price);
+        self.unlink(slot, side, t, rem);
+        self.free_slot(slot);
+        self.repair_best(side, t);
+    }
+
+    /// Same op semantics as `Book::fill` (keep in lockstep).
+    pub fn fill(&mut self, order_id: i64) {
+        let slot = self
+            .idmap
+            .remove(&order_id)
+            .expect("fill: unknown order id");
+        let (side, price, rem) = {
+            let o = self.order_mut(slot);
+            let rem = o.qty - o.filled;
+            o.filled = o.qty;
+            (o.side, o.price, rem)
+        };
+        let t = self.tick_of(price);
+        self.unlink(slot, side, t, rem);
+        self.free_slot(slot);
+        self.repair_best(side, t);
+    }
+
     /// Freeze the current state: clone the chunk-ref tables (O(#chunks)) and
     /// bump the generation so the writer copies-on-write from here on.
     pub fn capture(&mut self) -> Root {
@@ -239,6 +353,7 @@ impl CowBook {
             best_bid: self.best_bid,
             best_ask: self.best_ask,
             chunk: self.chunk,
+            free_head: self.free_head,
             order_chunks: self.order_chunks.clone(),
             bid_chunks: self.bid_chunks.clone(),
             ask_chunks: self.ask_chunks.clone(),
@@ -253,6 +368,18 @@ impl CowBook {
 
     pub fn level_qty(&self, side: u8, tick: u32) -> i64 {
         self.level(side, tick).qty_total
+    }
+}
+
+impl crate::churn::ChurnStore for CowBook {
+    fn insert(&mut self, order_id: i64, price: i64, qty: i64, side: u8) {
+        CowBook::insert(self, order_id, price, qty, side)
+    }
+    fn cancel(&mut self, order_id: i64) {
+        CowBook::cancel(self, order_id)
+    }
+    fn fill(&mut self, order_id: i64) {
+        CowBook::fill(self, order_id)
     }
 }
 
@@ -372,5 +499,42 @@ mod tests {
         let r2 = cb.capture();
         assert_eq!(r1.order(0).filled, 0);
         assert_eq!(r2.order(0).filled, 4);
+    }
+
+    #[test]
+    fn cowbook_cancel_matches_book_cancel() {
+        let c = cfg();
+        let mut b = Book::new(&c);
+        let mut cb = CowBook::new(&c);
+        let mut ch = crate::churn::Churn::new(&c);
+        ch.prebuild(&mut b, 500);
+        let mut ch2 = crate::churn::Churn::new(&c);
+        ch2.prebuild(&mut cb, 500);
+        for _ in 0..5_000 {
+            let op = ch.next_op();
+            let op2 = ch2.next_op();
+            assert_eq!(op, op2, "the two drivers must stay in lockstep");
+            crate::churn::Churn::apply(&mut b, op);
+            crate::churn::Churn::apply(&mut cb, op2);
+        }
+        assert_eq!(cb.free_head, b.free_head, "free heads agree");
+        assert_eq!(cb.hwm, b.hwm(), "hwm agrees");
+        assert_eq!(cb.best_bid, b.best_bid(), "best bid agrees");
+        assert_eq!(cb.best_ask, b.best_ask(), "best ask agrees");
+        for t in 0..c.levels {
+            assert_eq!(cb.level_qty(0, t), b.level_qty(0, t), "bid level {t}");
+            assert_eq!(cb.level_qty(1, t), b.level_qty(1, t), "ask level {t}");
+        }
+    }
+
+    #[test]
+    fn capture_carries_free_head() {
+        let c = cfg();
+        let mut cb = CowBook::new(&c);
+        cb.insert(1, 5, 10, 0);
+        cb.insert(2, 5, 10, 0);
+        cb.cancel(1);
+        let root = cb.capture();
+        assert_eq!(root.free_head, cb.free_head);
     }
 }

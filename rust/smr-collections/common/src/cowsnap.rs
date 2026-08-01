@@ -47,10 +47,7 @@ pub fn encode_root(root: &Root, buf: &mut [u8]) -> usize {
         enc.hwm(root.hwm);
         enc.best_bid(root.best_bid);
         enc.best_ask(root.best_ask);
-        // CowBook has no free list yet (cancel/fill are Book-only, task 2);
-        // NIL here mirrors what Book.free_head is for any cancel-free run,
-        // keeping byte-parity with snapshot::encode for the same logical state.
-        enc.free_head(NIL);
+        enc.free_head(root.free_head);
 
         let mut lg = enc.levels_encoder(level_count, LevelsEncoder::default());
         for side in 0..2u8 {
@@ -102,6 +99,12 @@ pub fn restore_cow(bytes: &[u8], cfg: &SmrConfig) -> Result<CowBook, String> {
     }
     let mut book = CowBook::new(cfg);
     let header = MessageHeaderDecoder::default().wrap(ReadBuf::new(&bytes[..sbe_len]), 0);
+    let schema_version = header.version();
+    if schema_version != 2 {
+        return Err(format!(
+            "unsupported snapshot schema version {schema_version} (expected 2)"
+        ));
+    }
     let dec = BookSnapshotDecoder::default().header(header, 0);
     book.price_min = dec.price_min();
     book.tick = dec.tick_size();
@@ -109,6 +112,14 @@ pub fn restore_cow(bytes: &[u8], cfg: &SmrConfig) -> Result<CowBook, String> {
     book.hwm = dec.hwm();
     book.best_bid = dec.best_bid();
     book.best_ask = dec.best_ask();
+    if dec.capacity() as usize != cfg.cap {
+        return Err(format!(
+            "snapshot capacity {} != SMRC_CAP {}",
+            dec.capacity(),
+            cfg.cap
+        ));
+    }
+    book.free_head = dec.free_head();
 
     let mut lg = dec.levels_decoder();
     let lc = lg.count();
@@ -141,7 +152,9 @@ pub fn restore_cow(bytes: &[u8], cfg: &SmrConfig) -> Result<CowBook, String> {
         o.side = side;
         o.next = next;
         o.prev = prev;
-        book.idmap.insert(order_id, slot);
+        if o.order_id != 0 {
+            book.idmap.insert(order_id, slot);
+        }
     }
     Ok(book)
 }
@@ -293,5 +306,28 @@ mod tests {
         }
         let got = ser.join().expect("serializer");
         assert_eq!(&want[..wn], &got[..], "concurrent capture == STW replay");
+    }
+
+    #[test]
+    fn cow_churn_image_matches_flat_churn_image() {
+        let c = golden_cfg();
+        let mut b = crate::book::Book::new(&c);
+        let mut cb = CowBook::new(&c);
+        let mut cha = crate::churn::Churn::new(&c);
+        let mut chb = crate::churn::Churn::new(&c);
+        cha.prebuild(&mut b, c.steady);
+        chb.prebuild(&mut cb, c.steady);
+        for _ in 0..10_000 {
+            let op = cha.next_op();
+            let op2 = chb.next_op();
+            crate::churn::Churn::apply(&mut b, op);
+            crate::churn::Churn::apply(&mut cb, op2);
+        }
+        let mut flat = vec![0u8; 4 * 1024 * 1024];
+        let mut cow = vec![0u8; 4 * 1024 * 1024];
+        let fl = crate::snapshot::encode(&b, &mut flat);
+        let root = cb.capture();
+        let cl = encode_root(&root, &mut cow);
+        assert_eq!(&flat[..fl], &cow[..cl], "CoW image == flat image");
     }
 }
