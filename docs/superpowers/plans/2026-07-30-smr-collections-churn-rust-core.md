@@ -1825,7 +1825,12 @@ Keep `let slot = (order_id - 1) as u32;` — with no recycling it stays a valid 
 Add to `impl UltimaBook`, mirroring `apply_update`'s structure:
 
 ```rust
-    fn apply_cancel(&self, wtx: &mut ultima_db::WriteTx, order_id: i64, to_filled: bool) {
+    /// Remove a resting order. A cancel and a full fill are the same operation
+    /// here: the row is deleted either way, and the level loses the same
+    /// remaining quantity. The flat store distinguishes them only in the
+    /// `filled` field it leaves behind in a freed pool slot, which ultima has
+    /// no equivalent of.
+    fn apply_cancel(&self, wtx: &mut ultima_db::WriteTx, order_id: i64) {
         let (lid, side, t, rem, prev, next, slot) = {
             let mut orders = wtx.open_table::<OrderRec>("orders").expect("orders");
             let o = orders.get(order_id as u64).expect("order").clone();
@@ -1848,7 +1853,6 @@ Add to `impl UltimaBook`, mirroring `apply_update`'s structure:
             orders.delete(order_id as u64).expect("order delete");
             (lid, o.side, t, rem, o.prev, o.next, o.slot)
         };
-        let _ = to_filled; // a full fill and a cancel remove the same quantity
         let emptied = {
             let mut levels = wtx.open_table::<LevelRec>("levels").expect("levels");
             let mut lvl = levels.get(lid).expect("level").clone();
@@ -1912,15 +1916,13 @@ Add to `impl UltimaBook`, mirroring `apply_update`'s structure:
     pub fn cancel(&mut self, order_id: i64) {
         self.version += 1;
         let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
-        self.apply_cancel(&mut wtx, order_id, false);
+        self.apply_cancel(&mut wtx, order_id);
         wtx.commit().expect("commit");
     }
 
+    /// See `apply_cancel`: a full fill and a cancel are the same op here.
     pub fn fill(&mut self, order_id: i64) {
-        self.version += 1;
-        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
-        self.apply_cancel(&mut wtx, order_id, true);
-        wtx.commit().expect("commit");
+        self.cancel(order_id)
     }
 ```
 
