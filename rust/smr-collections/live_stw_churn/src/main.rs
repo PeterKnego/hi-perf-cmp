@@ -38,14 +38,21 @@ fn main() {
     let mut rss_peak = rss_bytes();
     for (k, w) in writer_ns.iter_mut().enumerate() {
         let op = churn.next_op();
+        let fired = k % cfg.snap_every == 0;
         let t0 = Instant::now();
-        if k % cfg.snap_every == 0 {
+        if fired {
             snap_len = encode(&book, &mut buf);
             snap_ns.push(t0.elapsed().as_nanos() as u64);
-            rss_peak = rss_peak.max(rss_bytes());
         }
         Churn::apply(&mut book, op);
         let ns = t0.elapsed().as_nanos() as u64;
+        // Sample RSS only AFTER the clock closes. rss_bytes() reads
+        // /proc/self/statm — microseconds against 50-300 ns ops — so calling
+        // it inside the timed region would inflate writer_max, the one metric
+        // this cell exists to report precisely.
+        if fired {
+            rss_peak = rss_peak.max(rss_bytes());
+        }
         *w = ns;
         match op {
             ChurnOp::Insert { .. } => s.insert_ns.push(ns),

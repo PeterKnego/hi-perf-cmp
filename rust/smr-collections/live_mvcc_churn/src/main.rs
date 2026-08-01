@@ -63,8 +63,10 @@ fn main() {
     let mut rss_peak = rss_bytes();
     for (k, w) in writer_ns.iter_mut().enumerate() {
         let op = churn.next_op();
+        let fired = k % cfg.snap_every == 0;
         let t0 = Instant::now();
-        if k % cfg.snap_every == 0 {
+        let mut captured = false;
+        if fired {
             if busy.load(Ordering::Acquire) {
                 skipped += 1;
             } else {
@@ -73,11 +75,23 @@ fn main() {
                 // which already establishes the needed happens-before.
                 busy.store(true, Ordering::Relaxed);
                 tx.send((book.capture(), t0)).expect("serializer alive");
-                rss_peak = rss_peak.max(rss_bytes());
+                captured = true;
             }
         }
         Churn::apply(&mut book, op);
         let ns = t0.elapsed().as_nanos() as u64;
+        // Sample RSS only AFTER the clock closes, and only on an iteration
+        // that actually captured. rss_bytes() reads /proc/self/statm —
+        // microseconds against 50-300 ns ops — so calling it inside the timed
+        // region would inflate writer_max, the one metric this cell exists to
+        // report precisely. This sample only sees the writer-side capture()
+        // cost, not the encode: encode_root() runs concurrently on the
+        // serializer thread, so growth from it and from ongoing CoW chunk
+        // copies lags behind this point by design; the sample taken after
+        // `ser.join()` below catches the final in-flight window's growth.
+        if captured {
+            rss_peak = rss_peak.max(rss_bytes());
+        }
         *w = ns;
         match op {
             ChurnOp::Insert { .. } => s.insert_ns.push(ns),
@@ -87,6 +101,11 @@ fn main() {
     }
     drop(tx);
     let (mut snap_ns, snap_len) = ser.join().expect("serializer join");
+    // Catch growth from the final in-flight window: the last capture's
+    // encode_root() and any CoW chunk copies made since may still have been
+    // landing concurrently with the loop above, so only a post-join sample
+    // sees their full effect.
+    rss_peak = rss_peak.max(rss_bytes());
     // The first recorded duration is the warm handshake above (the serializer
     // is a single-consumer FIFO over the channel, so send order == process
     // order) — exclude it from the emitted stats and counts.
