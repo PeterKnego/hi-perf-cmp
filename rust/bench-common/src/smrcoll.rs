@@ -49,7 +49,7 @@ impl SmrConfig {
             .unwrap_or(false);
         let live_iters = parse_usize("SMRC_LIVE_ITERS", 200_000)?;
         let snap_every = parse_usize("SMRC_SNAP_EVERY", 20_000)?;
-        let otr_bps = parse_usize("SMRC_OTR_BPS", 100)? as u64;
+        let otr_bps = parse_usize_allow_zero("SMRC_OTR_BPS", 100)? as u64;
         if tick <= 0 {
             return Err("SMRC_TICK must be > 0".into());
         }
@@ -113,6 +113,19 @@ fn parse_usize(key: &str, default: usize) -> Result<usize, String> {
             }
             Ok(v)
         }
+    }
+}
+
+/// Like `parse_usize`, but `0` is a legal value. Only `SMRC_OTR_BPS` uses
+/// this: a pure-cancel run (`SMRC_OTR_BPS=0`) is a legitimate experiment, and
+/// the other `SMRC_*` knobs' zero-rejection stays as-is.
+fn parse_usize_allow_zero(key: &str, default: usize) -> Result<usize, String> {
+    match std::env::var(key) {
+        Err(_) => Ok(default),
+        Ok(s) => s
+            .trim()
+            .parse()
+            .map_err(|_| format!("{key}: not an integer: {s:?}")),
     }
 }
 
@@ -268,6 +281,17 @@ mod tests {
         unsafe { std::env::remove_var("SMRC_OTR_BPS") };
         let c = SmrConfig::from_env().expect("defaults parse");
         assert_eq!(c.otr_bps, 100, "default OTR is 1% = 100 bps");
+    }
+
+    #[test]
+    fn smrc_otr_bps_zero_is_legal() {
+        let _g = ENV_LOCK.lock().unwrap();
+        // A pure-cancel run (no fills) is a legitimate experiment; unlike the
+        // other SMRC_* knobs, zero must not be rejected here.
+        unsafe { std::env::set_var("SMRC_OTR_BPS", "0") };
+        let c = SmrConfig::from_env();
+        unsafe { std::env::remove_var("SMRC_OTR_BPS") };
+        assert_eq!(c.expect("OTR=0 must parse").otr_bps, 0);
     }
 
     #[test]

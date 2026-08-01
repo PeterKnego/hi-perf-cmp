@@ -207,6 +207,12 @@ impl Book {
         let o = &mut self.pool[slot as usize];
         o.order_id = 0; // freed marker: the snapshot walk skips these
         o.next = head;
+        // Not load-bearing for the free list itself (nothing reads a freed
+        // slot's `prev`), but IS load-bearing for snapshot byte-identity: the
+        // freed slot's `prev` field is still serialized verbatim, so leaving
+        // stale data here would make the image depend on what the slot held
+        // before it was freed rather than being deterministic from the op
+        // stream alone.
         o.prev = NIL;
         self.free_head = slot;
     }

@@ -27,7 +27,7 @@
     <field name="hwm"      id="5" type="uint32"/>
     <field name="bestBid"  id="6" type="int32"/>
     <field name="bestAsk"  id="7" type="int32"/>
-    <field name="freeHead"  id="8" type="uint32"/>
+    <field name="freeHead" id="8" type="uint32"/>
 
     <group name="levels" id="10" dimensionType="groupSizeEncoding">
       <field name="side"       id="11" type="Side"/>

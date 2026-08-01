@@ -20,8 +20,7 @@ fn main() {
     let mut book = Book::new(&cfg);
     let mut churn = Churn::new(&cfg);
     churn.prebuild(&mut book, cfg.steady);
-    let rss0 = rss_bytes();
-    let samples = run_churn(&cfg, &mut book, &mut churn);
+    let (samples, rss0) = run_churn(&cfg, &mut book, &mut churn);
     let rss1 = rss_bytes();
     emit_churn(EXPERIMENT, &samples, rss1.saturating_sub(rss0));
 }

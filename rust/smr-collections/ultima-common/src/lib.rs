@@ -244,6 +244,20 @@ impl UltimaBook {
         {
             let mut meta = wtx.open_table::<MetaRec>("meta").expect("meta");
             let mut m = meta.get(1).expect("meta rec").clone();
+            // `slot` is monotone in total inserts (ultima never recycles a
+            // row), while `m.capacity` stays `SMRC_CAP`: a churn run long
+            // enough (`SMRC_WARMUP + SMRC_ITERS` inserts, since cancels never
+            // free a slot here) can walk `slot` past `m.capacity` with
+            // nothing else noticing — the emitted image would then silently
+            // carry `slot > capacity`. Nothing consumes it that way today;
+            // this turns a future silent corruption into a test failure.
+            debug_assert!(
+                slot < m.capacity,
+                "ultima adapter slot {slot} reached SMRC_CAP {} \
+                 (ultima never recycles row ids, so total inserts across a run \
+                 must stay <= capacity)",
+                m.capacity
+            );
             m.hwm = slot + 1;
             if side == 0 && (m.best_bid < 0 || t as i32 > m.best_bid) {
                 m.best_bid = t as i32;
@@ -456,6 +470,14 @@ impl UltimaBook {
         lvl.count += 1;
         levels.update(lid, lvl).expect("level update");
         let mut m = meta.get(1).expect("meta rec").clone();
+        // See the identical debug_assert in `apply_insert`.
+        debug_assert!(
+            slot < m.capacity,
+            "ultima adapter slot {slot} reached SMRC_CAP {} \
+             (ultima never recycles row ids, so total inserts across a run \
+             must stay <= capacity)",
+            m.capacity
+        );
         m.hwm = slot + 1;
         if side == 0 && (m.best_bid < 0 || t as i32 > m.best_bid) {
             m.best_bid = t as i32;
@@ -1318,7 +1340,7 @@ mod tests {
 
     #[test]
     fn ultima_churn_matches_flat_digest() {
-        let c = cfg();
+        let c = churn_cfg();
         let mut flat = smr_collections_common::book::Book::new(&c);
         let mut ult = UltimaBook::new(&c);
         let mut cha = smr_collections_common::churn::Churn::new(&c);
@@ -1368,9 +1390,24 @@ mod tests {
         }
     }
 
+    /// Like `cfg()`, but with `SMRC_CAP` sized for a churn RUN rather than a
+    /// static book. Ultima never recycles a row id (see the `debug_assert!`
+    /// in `apply_insert`), so `cap` here bounds total inserts across the
+    /// whole run — `steady` prebuild plus every insert the churn stream
+    /// draws — not the live set. `cfg()` itself must stay at its golden-file
+    /// capacity (4096) since several tests compare bytes against a fixed
+    /// golden image; this is a separate config for tests that run enough
+    /// churn ops to walk ultima's monotone slot counter past that.
+    fn churn_cfg() -> SmrConfig {
+        SmrConfig {
+            cap: 200_000,
+            ..cfg()
+        }
+    }
+
     #[test]
     fn churn_on_a_thin_book_matches_flat_digest() {
-        let c = thin_cfg();
+        let c = thin_churn_cfg();
         let mut flat = smr_collections_common::book::Book::new(&c);
         let mut ult = UltimaBook::new(&c);
         let mut cha = smr_collections_common::churn::Churn::new(&c);
@@ -1481,10 +1518,17 @@ mod tests {
     /// `thin_cfg()` (few levels, few live orders, so lanes DO empty and
     /// `apply_cancel_mt`'s `emptied` rescan branch — the one piece of
     /// genuinely new logic in the multi-table batch path — actually runs).
-    fn batched_cancel_matches_per_op_cancel_at(c: SmrConfig) {
+    /// `certify_rescan`: when true, a parallel flat `Book` runs the identical
+    /// insert+cancel sequence and the test asserts its best bid/ask actually
+    /// moved — i.e. that a level really emptied and `apply_cancel_mt`'s
+    /// `emptied` rescan branch was exercised, not just reached by a
+    /// seed/config coincidence that a future change to `SEED`, `next_insert`
+    /// or `thin_cfg()` could silently break.
+    fn batched_cancel_matches_per_op_cancel_at(c: SmrConfig, certify_rescan: bool) {
         let mut per_op = UltimaBook::new(&c);
         let mut batched = UltimaBook::new(&c);
         let mut multi = UltimaBook::new(&c);
+        let mut flat = Book::new(&c);
         let mut rng = SplitMix::new(SEED);
         let ins: Vec<(i64, i64, i64, u8)> = (0..c.steady)
             .map(|i| {
@@ -1496,6 +1540,7 @@ mod tests {
             per_op.insert(id, p, q, s);
             batched.insert(id, p, q, s);
             multi.insert(id, p, q, s);
+            flat.insert(id, p, q, s);
         }
         // A scattered subset, so head, middle and tail links all get
         // unlinked; at `thin_cfg()` this also empties levels and forces a
@@ -1509,8 +1554,10 @@ mod tests {
             !victims.is_empty(),
             "the subset must actually cancel something"
         );
+        let (pb, pa) = (flat.best_bid, flat.best_ask);
         for &id in &victims {
             per_op.cancel(id);
+            flat.cancel(id);
         }
         for chunk in victims.chunks(c.apply_batch) {
             batched.cancel_batch_txn(chunk);
@@ -1527,14 +1574,112 @@ mod tests {
             digest_ultima(&multi.store, multi.current_version()),
             "cancel_batch_txn_multi == per-op cancel"
         );
+        if certify_rescan {
+            assert!(
+                flat.best_bid != pb || flat.best_ask != pa,
+                "this config no longer empties a best level, so it stopped \
+                 exercising apply_cancel_mt's `emptied` rescan branch — the \
+                 whole reason this config is used here"
+            );
+        }
     }
 
     #[test]
     fn batched_cancel_matches_per_op_cancel() {
         // Both batched cancel paths must land the same book as the per-op
         // one, at a config where lanes never empty and one where they do —
-        // see the doc comment on the shared body above.
-        batched_cancel_matches_per_op_cancel_at(cfg());
-        batched_cancel_matches_per_op_cancel_at(thin_cfg());
+        // see the doc comment on the shared body above. Only the latter is
+        // certified to actually reach the rescan branch: the whole point of
+        // running both configs is that `cfg()` does NOT.
+        batched_cancel_matches_per_op_cancel_at(cfg(), false);
+        batched_cancel_matches_per_op_cancel_at(thin_cfg(), true);
+    }
+
+    /// Like `thin_cfg()` (few levels, few live orders, so lanes actually
+    /// empty and the ladder rescan runs), but with `SMRC_CAP` sized for a
+    /// churn RUN rather than a static book: ultima never recycles a row id,
+    /// so `cap` here bounds total inserts across the whole run (prebuild +
+    /// timed ops), not the live set — see the `debug_assert!` in
+    /// `apply_insert`/`apply_insert_mt`.
+    fn thin_churn_cfg() -> SmrConfig {
+        SmrConfig {
+            cap: 200_000,
+            ..thin_cfg()
+        }
+    }
+
+    /// Coverage for `churn_batch_txn`/`churn_batch_txn_multi`, which
+    /// `batched_mixed_ops_match_per_op_apply` and
+    /// `batched_cancel_matches_per_op_cancel` do NOT exercise: those drive
+    /// either all-insert or all-cancel batches, never a batch that mixes
+    /// them. With victims drawn uniformly from the live set and
+    /// `apply_batch=64`, an insert-then-cancel-of-the-same-order within one
+    /// uncommitted transaction happens routinely — that is the path where
+    /// `apply_cancel_mt` unlinks a row inserted earlier in the SAME txn, and
+    /// this test is what proves it lands the same book as applying the
+    /// identical stream one op at a time.
+    #[test]
+    fn batched_churn_matches_per_op_apply_and_rescans() {
+        let c = thin_churn_cfg();
+        let mut flat = Book::new(&c); // rescan witness only, see below
+        let mut per_op = UltimaBook::new(&c);
+        let mut batched = UltimaBook::new(&c);
+        let mut multi = UltimaBook::new(&c);
+
+        let mut ch_flat = smr_collections_common::churn::Churn::new(&c);
+        let mut ch_per_op = smr_collections_common::churn::Churn::new(&c);
+        let mut ch_batched = smr_collections_common::churn::Churn::new(&c);
+        let mut ch_multi = smr_collections_common::churn::Churn::new(&c);
+        ch_flat.prebuild(&mut flat, c.steady);
+        ch_per_op.prebuild(&mut per_op, c.steady);
+        ch_batched.prebuild(&mut batched, c.steady);
+        ch_multi.prebuild(&mut multi, c.steady);
+
+        // All four Churn instances are seeded identically (`op_stream_is_deterministic`
+        // proves this), so they draw the exact same op sequence independently.
+        let total_ops = 20_000usize;
+        let b = c.apply_batch;
+        let batches = total_ops / b;
+        let mut best_moves = 0usize;
+        let (mut pb, mut pa) = (flat.best_bid, flat.best_ask);
+        for _ in 0..batches {
+            let ops_batched: Vec<_> = (0..b).map(|_| ch_batched.next_op()).collect();
+            let ops_multi: Vec<_> = (0..b).map(|_| ch_multi.next_op()).collect();
+            batched.churn_batch_txn(&ops_batched);
+            multi.churn_batch_txn_multi(&ops_multi);
+            for _ in 0..b {
+                let op = ch_flat.next_op();
+                let op2 = ch_per_op.next_op();
+                smr_collections_common::churn::Churn::apply(&mut flat, op);
+                smr_collections_common::churn::Churn::apply(&mut per_op, op2);
+                if flat.best_bid != pb || flat.best_ask != pa {
+                    best_moves += 1;
+                }
+                pb = flat.best_bid;
+                pa = flat.best_ask;
+            }
+        }
+
+        let want = digest_ultima(&per_op.store, per_op.current_version());
+        assert_eq!(
+            want,
+            digest_ultima(&batched.store, batched.current_version()),
+            "churn_batch_txn diverged from per-op Churn::apply"
+        );
+        assert_eq!(
+            want,
+            digest_ultima(&multi.store, multi.current_version()),
+            "churn_batch_txn_multi diverged from per-op Churn::apply"
+        );
+        // The flat book run alongside is a rescan witness only (its own
+        // digest is not compared): thin_churn_cfg()'s few levels/few live
+        // orders must actually empty a best level under this op stream, or
+        // this test would silently stop covering apply_cancel_mt's `emptied`
+        // branch inside a batch.
+        assert!(
+            best_moves > 100,
+            "this test is only meaningful if the ladder rescan runs inside a \
+             batch; best moved only {best_moves} times"
+        );
     }
 }

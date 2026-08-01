@@ -167,10 +167,15 @@ mod tests {
         d.insert(3, 5, 20, 0); // slot 2
         d.cancel(5); // frees slot 0; orders 1 and 3 stay at slots 1 and 2
 
-        let root_a = a;
+        // Same divergence certification as the sibling test above, on the
+        // Book/CowBook pair instead of Book/Book.
+        assert_ne!(a.get_slot(1), d.get_slot(1), "layouts really do differ");
+        assert_ne!(a.get_slot(3), d.get_slot(3), "layouts really do differ");
+        assert_ne!(a.free_head, d.free_head, "free lists really do differ");
+
         let root_d = d.capture();
 
         // Capture creates a frozen view; verify the digests still agree.
-        assert_eq!(digest_book(&root_a), digest_root(&root_d));
+        assert_eq!(digest_book(&a), digest_root(&root_d));
     }
 }

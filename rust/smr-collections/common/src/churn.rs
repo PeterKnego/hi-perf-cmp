@@ -6,7 +6,7 @@
 
 use crate::book::workload::next_insert;
 use crate::rng::{SEED, SplitMix};
-use bench_common::smrcoll::{SmrConfig, emit_int, emit_latency};
+use bench_common::smrcoll::{SmrConfig, emit_int, emit_latency, rss_bytes};
 use std::time::Instant;
 
 /// The three ops a churn stream drives into a store.
@@ -132,12 +132,25 @@ pub struct ChurnSamples {
 }
 
 /// Warm up, then time `cfg.iters` ops into per-op-type sample vectors.
-/// Only the store call is inside the clock.
-pub fn run_churn<S: ChurnStore>(cfg: &SmrConfig, store: &mut S, churn: &mut Churn) -> ChurnSamples {
+/// Only the store call is inside the clock. `rss_growth_bytes` is defined as
+/// the RSS delta across the *timed* loop, so the RSS baseline is sampled here
+/// — after warmup, at the clock boundary — and handed back to the caller
+/// rather than sampled by the caller before this function (which would count
+/// `cfg.warmup` untimed ops as growth). That baseline is asymmetric across
+/// stores if sampled too early: the flat/CoW stores preallocate their pool at
+/// construction so warmup costs them ~0 RSS, while ultima's B-tree genuinely
+/// grows during warmup — sampling before warmup would attribute that growth
+/// to the wrong side of the loop boundary.
+pub fn run_churn<S: ChurnStore>(
+    cfg: &SmrConfig,
+    store: &mut S,
+    churn: &mut Churn,
+) -> (ChurnSamples, u64) {
     for _ in 0..cfg.warmup {
         let op = churn.next_op();
         Churn::apply(store, op);
     }
+    let rss0 = rss_bytes();
     let half = cfg.iters / 2 + 1;
     let mut s = ChurnSamples {
         insert_ns: Vec::with_capacity(half),
@@ -155,7 +168,7 @@ pub fn run_churn<S: ChurnStore>(cfg: &SmrConfig, store: &mut S, churn: &mut Chur
             ChurnOp::Fill(_) => s.fill_ns.push(ns),
         }
     }
-    s
+    (s, rss0)
 }
 
 /// Emit the per-op-type distributions plus RSS growth. A distribution with no
@@ -297,5 +310,35 @@ mod tests {
             &buf[..n],
         )
         .expect("write churn golden");
+    }
+
+    /// Anchors `golden_churn_snapshot.bin` to an actual assertion. Without
+    /// this, the committed 93 KB binary is exported by
+    /// `export_churn_golden_when_requested` but nothing ever reads it back —
+    /// `cow_churn_image_matches_flat_churn_image` only compares the flat and
+    /// CoW stores to EACH OTHER, which is symmetric: a change to the op
+    /// stream or the encoding would move both together and pass silently.
+    /// This test builds the same book the export test does (same config, same
+    /// op count) and checks its bytes against the committed golden. It must
+    /// NOT regenerate the golden on mismatch — a mismatch here is a real
+    /// finding about what changed, not something to paper over.
+    #[test]
+    fn churn_image_matches_golden_bytes() {
+        let c = cfg();
+        let mut ch = Churn::new(&c);
+        let mut b = Book::new(&c);
+        ch.prebuild(&mut b, c.steady);
+        for _ in 0..10_000 {
+            let op = ch.next_op();
+            Churn::apply(&mut b, op);
+        }
+        let mut buf = vec![0u8; 4 * 1024 * 1024];
+        let n = encode(&b, &mut buf);
+        let golden = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../testdata/golden_churn_snapshot.bin"
+        ))
+        .expect("golden churn file");
+        assert_eq!(&buf[..n], &golden[..], "churn image bytes == golden bytes");
     }
 }
