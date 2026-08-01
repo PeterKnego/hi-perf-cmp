@@ -72,6 +72,10 @@ pub struct Book {
     pub best_bid: i32,
     pub best_ask: i32,
     pub idmap: IdMap,
+    /// Head of the intrusive LIFO free list (`NIL` when empty). Freed slots
+    /// chain through their own `next` field. This is state a snapshot must
+    /// capture — restore reproduces allocation order from it.
+    pub free_head: u32,
 }
 
 impl Book {
@@ -99,6 +103,7 @@ impl Book {
             best_bid: -1,
             best_ask: -1,
             idmap: IdMap::with_capacity_and_hasher(cfg.cap, BuildHasherDefault::default()),
+            free_head: NIL,
         }
     }
 
@@ -118,8 +123,7 @@ impl Book {
 
     pub fn insert(&mut self, order_id: i64, price: i64, qty: i64, side: u8) {
         let t = self.tick_of(price);
-        let slot = self.hwm;
-        self.hwm += 1;
+        let slot = self.alloc_slot();
         let prev_tail = self.lane(side)[t as usize].tail;
         self.pool[slot as usize] = Order {
             order_id,
@@ -178,6 +182,123 @@ impl Book {
     pub fn level_qty(&self, side: u8, tick: u32) -> i64 {
         let lane = if side == 0 { &self.bids } else { &self.asks };
         lane[tick as usize].qty_total
+    }
+
+    #[inline]
+    fn alloc_slot(&mut self) -> u32 {
+        if self.free_head != NIL {
+            let slot = self.free_head;
+            self.free_head = self.pool[slot as usize].next;
+            slot
+        } else {
+            if self.hwm as usize == self.pool.len() {
+                panic!("order pool exhausted: SMRC_CAP={} reached", self.pool.len());
+            }
+            let slot = self.hwm;
+            self.hwm += 1;
+            slot
+        }
+    }
+
+    #[inline]
+    fn free_slot(&mut self, slot: u32) {
+        let head = self.free_head;
+        let o = &mut self.pool[slot as usize];
+        o.order_id = 0; // freed marker: the snapshot walk skips these
+        o.next = head;
+        o.prev = NIL;
+        self.free_head = slot;
+    }
+
+    /// Unlink `slot` from its level's intrusive FIFO and debit `rem` from the
+    /// level's remaining quantity.
+    fn unlink(&mut self, slot: u32, side: u8, t: u32, rem: i64) {
+        let (prev, next) = {
+            let o = &self.pool[slot as usize];
+            (o.prev, o.next)
+        };
+        if prev != NIL {
+            self.pool[prev as usize].next = next;
+        }
+        if next != NIL {
+            self.pool[next as usize].prev = prev;
+        }
+        let lvl = &mut self.lane(side)[t as usize];
+        if lvl.head == slot {
+            lvl.head = next;
+        }
+        if lvl.tail == slot {
+            lvl.tail = prev;
+        }
+        lvl.qty_total -= rem;
+        lvl.count -= 1;
+    }
+
+    /// After a removal emptied level `t`, restore the cached best for `side`.
+    /// O(levels) worst case and deliberately on the timed path — real books
+    /// maintain this, and hiding it would hide the worst-case cancel.
+    fn repair_best(&mut self, side: u8, t: u32) {
+        if side == 0 {
+            if self.best_bid != t as i32 || self.bids[t as usize].head != NIL {
+                return;
+            }
+            let mut nb = -1i32;
+            for i in (0..=t as usize).rev() {
+                if self.bids[i].head != NIL {
+                    nb = i as i32;
+                    break;
+                }
+            }
+            self.best_bid = nb;
+        } else {
+            if self.best_ask != t as i32 || self.asks[t as usize].head != NIL {
+                return;
+            }
+            let mut na = -1i32;
+            for i in t as usize..self.n_levels as usize {
+                if self.asks[i].head != NIL {
+                    na = i as i32;
+                    break;
+                }
+            }
+            self.best_ask = na;
+        }
+    }
+
+    /// Remove a resting order. Its remaining quantity leaves the level.
+    pub fn cancel(&mut self, order_id: i64) {
+        let slot = self
+            .idmap
+            .remove(&order_id)
+            .expect("cancel: unknown order id");
+        let (side, price, rem) = {
+            let o = &self.pool[slot as usize];
+            (o.side, o.price, o.qty - o.filled)
+        };
+        let t = self.tick_of(price);
+        self.unlink(slot, side, t, rem);
+        self.free_slot(slot);
+        self.repair_best(side, t);
+    }
+
+    /// Fill an order to completion, then remove it. Same structural work as
+    /// `cancel`; the difference is that the departing quantity is booked as
+    /// filled rather than withdrawn.
+    pub fn fill(&mut self, order_id: i64) {
+        let slot = self
+            .idmap
+            .remove(&order_id)
+            .expect("fill: unknown order id");
+        let (side, price, rem) = {
+            let o = &mut self.pool[slot as usize];
+            let rem = o.qty - o.filled;
+            o.filled = o.qty;
+            (o.side, o.price, rem)
+        };
+        let t = self.tick_of(price);
+        self.unlink(slot, side, t, rem);
+        self.free_slot(slot);
+        self.repair_best(side, t);
     }
 }
 
@@ -291,5 +412,91 @@ mod tests {
         for ((side, t), q) in expect {
             assert_eq!(b.level_qty(side, t as u32), q, "level {side}/{t}");
         }
+    }
+
+    #[test]
+    fn cancel_unlinks_middle_of_level_fifo() {
+        let mut b = Book::new(&cfg());
+        b.insert(1, 5, 10, 0);
+        b.insert(2, 5, 7, 0);
+        b.insert(3, 5, 3, 0);
+        b.cancel(2);
+        assert_eq!(b.level_qty(0, 5), 13, "middle order's qty leaves the level");
+        let lvl = &b.bids[5];
+        assert_eq!(lvl.count, 2);
+        assert_eq!(lvl.head, 0, "head unchanged");
+        assert_eq!(lvl.tail, 2, "tail unchanged");
+        assert_eq!(b.pool[0].next, 2, "head now links past the cancelled slot");
+        assert_eq!(b.pool[2].prev, 0);
+    }
+
+    #[test]
+    fn cancel_head_and_tail_fix_level_ends() {
+        let mut b = Book::new(&cfg());
+        b.insert(1, 5, 10, 0);
+        b.insert(2, 5, 7, 0);
+        b.cancel(1); // head
+        assert_eq!(b.bids[5].head, 1, "head advances to the survivor");
+        assert_eq!(b.pool[1].prev, NIL);
+        b.cancel(2); // tail, level now empty
+        assert_eq!(b.bids[5].head, NIL);
+        assert_eq!(b.bids[5].tail, NIL);
+        assert_eq!(b.bids[5].count, 0);
+        assert_eq!(b.level_qty(0, 5), 0);
+    }
+
+    #[test]
+    fn cancel_emptying_best_level_rescans() {
+        let mut b = Book::new(&cfg());
+        b.insert(1, 3, 10, 0);
+        b.insert(2, 9, 10, 0); // best bid = 9
+        b.insert(3, 4, 10, 1);
+        b.insert(4, 2, 10, 1); // best ask = 2
+        assert_eq!(b.best_bid(), 9);
+        assert_eq!(b.best_ask(), 2);
+        b.cancel(2);
+        assert_eq!(b.best_bid(), 3, "best bid falls back to the next occupied");
+        b.cancel(4);
+        assert_eq!(b.best_ask(), 4, "best ask rises to the next occupied");
+        b.cancel(1);
+        assert_eq!(b.best_bid(), -1, "no bids left");
+    }
+
+    #[test]
+    fn cancelled_slots_are_reused_lifo() {
+        let mut b = Book::new(&cfg());
+        b.insert(1, 5, 10, 0); // slot 0
+        b.insert(2, 5, 10, 0); // slot 1
+        b.insert(3, 5, 10, 0); // slot 2
+        b.cancel(1); // free: 0
+        b.cancel(3); // free: 2 -> 0
+        assert_eq!(b.free_head, 2);
+        b.insert(4, 5, 10, 0);
+        assert_eq!(b.get_slot(4), 2, "LIFO: most recently freed slot first");
+        b.insert(5, 5, 10, 0);
+        assert_eq!(b.get_slot(5), 0);
+        b.insert(6, 5, 10, 0);
+        assert_eq!(b.get_slot(6), 3, "free list empty -> bump hwm");
+        assert_eq!(b.hwm(), 4);
+    }
+
+    #[test]
+    fn freed_slot_is_marked_with_zero_order_id() {
+        let mut b = Book::new(&cfg());
+        b.insert(1, 5, 10, 0);
+        b.cancel(1);
+        assert_eq!(b.pool[0].order_id, 0, "freed marker for the snapshot walk");
+    }
+
+    #[test]
+    fn fill_completes_then_frees_the_slot() {
+        let mut b = Book::new(&cfg());
+        b.insert(1, 5, 10, 0);
+        b.update(1, 4); // partial: remaining 6
+        assert_eq!(b.level_qty(0, 5), 6);
+        b.fill(1);
+        assert_eq!(b.level_qty(0, 5), 0, "remaining 6 leaves the level");
+        assert_eq!(b.bids[5].count, 0);
+        assert_eq!(b.free_head, 0, "slot recycled like a cancel");
     }
 }
