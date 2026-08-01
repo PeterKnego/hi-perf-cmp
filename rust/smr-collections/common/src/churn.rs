@@ -1,8 +1,15 @@
 //! The churn workload: a deterministic insert/cancel/fill stream at a
 //! configurable order-to-trade ratio (default 1 %, the real-exchange figure).
 //! Op *generation* is deliberately outside the timed region — the driver
-//! produces an op, the caller times only the store's application of it, so
-//! per-op numbers stay comparable with the insert/update cells.
+//! produces an op, the caller times only the store's application of it, so the
+//! per-op numbers are store work alone.
+//!
+//! Note this makes them NOT directly comparable with the older `insert` /
+//! `update` cells, which call `next_insert` / `next_update` *inside*
+//! `measure`'s closure and so time their own generation (~3-5 ns on a 48-89 ns
+//! op). The choice here is the better one, but the difference is systematic and
+//! the two land on adjacent rows in RESULTS.md — see the design spec's
+//! "Must be recorded in the next run's journal entry".
 
 use crate::book::workload::next_insert;
 use crate::rng::{SEED, SplitMix};
@@ -150,13 +157,21 @@ pub fn run_churn<S: ChurnStore>(
         let op = churn.next_op();
         Churn::apply(store, op);
     }
-    let rss0 = rss_bytes();
+    // Allocate AND first-touch the sample buffers before taking the RSS
+    // baseline. `Vec::with_capacity` reserves address space without touching
+    // pages, so those ~1.2 MB would fault in during the timed loop and be
+    // counted as store growth. `vec![0; n]` writes every page; `clear()` keeps
+    // the capacity, so the timed loop still never allocates.
     let half = cfg.iters / 2 + 1;
     let mut s = ChurnSamples {
-        insert_ns: Vec::with_capacity(half),
-        cancel_ns: Vec::with_capacity(half),
-        fill_ns: Vec::with_capacity(half),
+        insert_ns: vec![0u64; half],
+        cancel_ns: vec![0u64; half],
+        fill_ns: vec![0u64; half],
     };
+    s.insert_ns.clear();
+    s.cancel_ns.clear();
+    s.fill_ns.clear();
+    let rss0 = rss_bytes();
     for _ in 0..cfg.iters {
         let op = churn.next_op();
         let t0 = Instant::now();

@@ -444,10 +444,10 @@ existing baseline needs them stated:
    always paid that probe — rather than adding a tax.
 4. **`ultima_batch_churn` emits no per-op split**, unlike every other churn
    cell. See [Metrics](#metrics) for why.
-5. **`rss_growth_bytes` includes ~1.2 MB of harness sample buffers** whose pages
-   are first touched inside the timed loop. Identical across cells, so it does
-   not distort the comparison, but the flat/CoW cells will report ~1.2 MB rather
-   than the ~0 the metric name implies.
+5. *(Closed before merge — kept for the record.)* `rss_growth_bytes` briefly
+   included ~1.2 MB of harness sample buffers whose pages were first touched
+   inside the timed loop. `run_churn` now first-touches them before taking the
+   baseline, so the metric reports store growth only.
 6. **ultima's `hwm` now means "rows ever inserted"**, not a live-set high-water
    mark, so under churn it grows unbounded and can exceed `capacity`. Nothing
    sizes anything from it today; a `debug_assert!` names the bound.
