@@ -5,5 +5,6 @@ pub mod book;
 pub mod churn;
 pub mod cowbook;
 pub mod cowsnap;
+pub mod digest;
 pub mod rng;
 pub mod snapshot;
