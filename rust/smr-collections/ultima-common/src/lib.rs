@@ -10,6 +10,7 @@ use booksnap::message_header_codec::MessageHeaderDecoder;
 use booksnap::side::Side;
 use booksnap::{Encoder, ReadBuf, WriteBuf};
 use smr_collections_common::book::{NIL, NoHash};
+use smr_collections_common::churn::ChurnOp;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
@@ -641,6 +642,72 @@ impl UltimaBook {
         }
         wtx.commit().expect("commit");
     }
+
+    /// Apply a batch of mixed churn ops (insert/cancel/fill — the churn stream
+    /// never emits a partial-fill `update`) in ONE write txn, opening tables
+    /// per command. Analog of `insert_batch_txn`/`cancel_batch_txn` for a
+    /// stream that mixes op types instead of running one type at a time. A
+    /// fill removes the row the same way a cancel does (see `apply_cancel`),
+    /// so both route through the same call.
+    pub fn churn_batch_txn(&mut self, ops: &[ChurnOp]) {
+        if ops.is_empty() {
+            return;
+        }
+        self.version += 1;
+        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+        for &op in ops {
+            match op {
+                ChurnOp::Insert {
+                    order_id,
+                    price,
+                    qty,
+                    side,
+                } => self.apply_insert(&mut wtx, order_id, price, qty, side),
+                ChurnOp::Cancel(id) | ChurnOp::Fill(id) => self.apply_cancel(&mut wtx, id),
+            }
+        }
+        wtx.commit().expect("commit");
+    }
+
+    /// Multi-table analog of `churn_batch_txn`: opens orders/levels/meta ONCE
+    /// per txn via `open_tables3` (issue #20), matching
+    /// `insert_batch_txn_multi`/`cancel_batch_txn_multi`. `meta` is in the set
+    /// because an emptied best level makes a cancel/fill rescan the ladder,
+    /// same as `cancel_batch_txn_multi`.
+    pub fn churn_batch_txn_multi(&mut self, ops: &[ChurnOp]) {
+        if ops.is_empty() {
+            return;
+        }
+        self.version += 1;
+        let mut wtx = self.store.begin_write(Some(self.version)).expect("wtx");
+        {
+            let (mut orders, mut levels, mut meta) = wtx
+                .open_tables3::<OrderRec, LevelRec, MetaRec>("orders", "levels", "meta")
+                .expect("open_tables3");
+            for &op in ops {
+                match op {
+                    ChurnOp::Insert {
+                        order_id,
+                        price,
+                        qty,
+                        side,
+                    } => self.apply_insert_mt(
+                        &mut levels,
+                        &mut orders,
+                        &mut meta,
+                        order_id,
+                        price,
+                        qty,
+                        side,
+                    ),
+                    ChurnOp::Cancel(id) | ChurnOp::Fill(id) => {
+                        self.apply_cancel_mt(&mut orders, &mut levels, &mut meta, id)
+                    }
+                }
+            }
+        }
+        wtx.commit().expect("commit");
+    }
 }
 
 impl smr_collections_common::churn::ChurnStore for UltimaBook {
@@ -680,9 +747,12 @@ pub fn encode_at(store: &Store, version: u64, buf: &mut [u8]) -> usize {
         enc.hwm(m.hwm);
         enc.best_bid(m.best_bid);
         enc.best_ask(m.best_ask);
-        // The ultima variant has no free list yet (cancel/fill are Book-only,
-        // task 2); NIL mirrors what Book.free_head is for any cancel-free
-        // run, keeping byte-parity with snapshot::encode for the same state.
+        // ultima never recycles a slot: row ids come from the table's
+        // auto-increment counter and march on monotonically, so there is no
+        // free list to encode here — this is a permanent design property, not
+        // a not-yet-implemented one. NIL mirrors what Book.free_head is for
+        // any cancel-free run, keeping byte-parity with snapshot::encode for
+        // the same state.
         enc.free_head(NIL);
 
         let mut lg = enc.levels_encoder(level_count, LevelsEncoder::default());
@@ -1365,6 +1435,18 @@ mod tests {
         same(&flat, &ult, "after inserts");
         assert_eq!((flat.best_bid, flat.best_ask), (3, 0), "starting bests");
 
+        // Partial fills before the cancels below, so `rem = o.qty - o.filled`
+        // on the cancel/fill path below is exercised at a nonzero `filled` —
+        // otherwise a level's `qty_total` debit diverging from the flat book
+        // only at `filled > 0` would go unnoticed (the churn stream itself
+        // never emits a partial-fill `update`, only insert/cancel/fill).
+        flat.update(5, 4);
+        ult.update(5, 4);
+        same(&flat, &ult, "partial fill before cancel");
+        flat.update(9, 3);
+        ult.update(9, 3);
+        same(&flat, &ult, "partial fill before a later fill");
+
         flat.cancel(5);
         ult.cancel(5);
         assert_eq!(flat.best_bid, 2, "bids fall to the NEAREST occupied below");
@@ -1393,10 +1475,13 @@ mod tests {
         same(&flat, &ult, "book empty after the last order fills");
     }
 
-    #[test]
-    fn batched_cancel_matches_per_op_cancel() {
-        // Both batched cancel paths must land the same book as the per-op one.
-        let c = cfg();
+    /// Shared body for `batched_cancel_matches_per_op_cancel`, run at two
+    /// configs: `cfg()` (head/middle/tail links unlinked, but at ~15.6 live
+    /// orders per lane a level essentially never fully empties) and
+    /// `thin_cfg()` (few levels, few live orders, so lanes DO empty and
+    /// `apply_cancel_mt`'s `emptied` rescan branch — the one piece of
+    /// genuinely new logic in the multi-table batch path — actually runs).
+    fn batched_cancel_matches_per_op_cancel_at(c: SmrConfig) {
         let mut per_op = UltimaBook::new(&c);
         let mut batched = UltimaBook::new(&c);
         let mut multi = UltimaBook::new(&c);
@@ -1412,8 +1497,9 @@ mod tests {
             batched.insert(id, p, q, s);
             multi.insert(id, p, q, s);
         }
-        // A scattered subset, so head, middle and tail links all get unlinked
-        // and some levels empty out and force a ladder rescan.
+        // A scattered subset, so head, middle and tail links all get
+        // unlinked; at `thin_cfg()` this also empties levels and forces a
+        // ladder rescan (see the doc comment above).
         let victims: Vec<i64> = ins
             .iter()
             .map(|&(id, ..)| id)
@@ -1441,5 +1527,14 @@ mod tests {
             digest_ultima(&multi.store, multi.current_version()),
             "cancel_batch_txn_multi == per-op cancel"
         );
+    }
+
+    #[test]
+    fn batched_cancel_matches_per_op_cancel() {
+        // Both batched cancel paths must land the same book as the per-op
+        // one, at a config where lanes never empty and one where they do —
+        // see the doc comment on the shared body above.
+        batched_cancel_matches_per_op_cancel_at(cfg());
+        batched_cancel_matches_per_op_cancel_at(thin_cfg());
     }
 }

@@ -1417,6 +1417,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "smr-collections-live_ultima_churn"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+ "smr-collections-ultima",
+]
+
+[[package]]
 name = "smr-collections-mvcc_churn"
 version = "0.1.0"
 dependencies = [
@@ -1468,6 +1477,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "smr-collections-ultima_batch_churn"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+ "smr-collections-ultima",
+]
+
+[[package]]
 name = "smr-collections-ultima_batch_insert"
 version = "0.1.0"
 dependencies = [
@@ -1478,6 +1496,15 @@ dependencies = [
 
 [[package]]
 name = "smr-collections-ultima_batch_update"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+ "smr-collections-common",
+ "smr-collections-ultima",
+]
+
+[[package]]
+name = "smr-collections-ultima_churn"
 version = "0.1.0"
 dependencies = [
  "bench-common",
