@@ -170,21 +170,34 @@ would mean benchmarking the emulation, which is the distortion this repo exists
 to avoid. So the adapter keeps `slot = order_id - 1` as a **monotone handle**,
 never reused, and the changes are small:
 
-- **Insert** switches from `orders.insert()` (auto-increment id, asserted equal
-  to `order_id`) to `insert_with_id(order_id as u64, rec)`. The churn stream's
-  order IDs are sparse (1, 3, 5, …), which the auto-increment id could not
-  match; an explicit id makes that a non-issue and the assert goes away.
-- **Cancel** = `orders.delete(order_id as u64)`, update the `levels` row, update
-  `meta` (`best_bid`/`best_ask` after a rescan). That is the whole op — deletion
-  is what generates the dead versions this spec exists to measure.
+- **Insert** keeps `orders.insert()` (auto-increment id) and records the mapping
+  in an adapter-side `HashMap<i64, u64>` from `order_id` to row id; `slot` is
+  taken from the returned auto id. The churn stream's order IDs are sparse
+  (1, 3, 5, …) so they can no longer double as row ids, and the old
+  `assert_eq!(id, order_id)` goes away.
+
+  *(An earlier draft of this spec called for `insert_with_id(order_id, rec)`.
+  That method exists on `Table<R>` but **not** on the `TableWriter` that
+  `WriteTx::open_table` returns, so it is unreachable from the adapter at the
+  pinned rev `8831c4e`.)*
+
+  The map is not a tax the comparison has to apologise for — it makes the grid
+  **fairer**. The flat `Book` pays an id-map probe on every update/cancel/fill;
+  ultima previously got that free by using `order_id` as the row id. With the
+  map, both stores do the same shape of work: an index lookup followed by a
+  storage access.
+- **Cancel** = look up the row id, `orders.delete(row_id)`, update the `levels`
+  row, update `meta` (`best_bid`/`best_ask` after a rescan), and drop the map
+  entry. That is the whole op — deletion is what generates the dead versions
+  this spec exists to measure.
 - **Batched cancel** uses `delete_batch`, and `ultima_batch_churn` opens its
   tables once per batch under `SMRC_MULTI_TABLE`, matching
   `ultima_batch_insert`.
 - **`encode_at`** no longer assumes `0..hwm` is dense: it counts live rows and
   emits each with its own slot.
 
-`ultima_db` supplies the primitives: `delete`, `delete_batch`, and
-`insert_with_id` (`table.rs:375,546,600`).
+`ultima_db` supplies the primitives:
+`delete` and `delete_batch` (`table.rs:375,546`).
 
 **Consequence to report, not discover.** Because slots are never reused,
 ultima's key space grows with *total ops* while the flat store's pool stays

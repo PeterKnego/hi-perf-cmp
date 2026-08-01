@@ -1816,22 +1816,31 @@ Append to `mod tests` in `rust/smr-collections/ultima-common/src/lib.rs`:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```sh
-cd rust && cargo test -p smr-collections-ultima-common ultima_churn
+cd rust && cargo test -p smr-collections-ultima ultima_churn
 ```
 
 Expected: FAIL — `no method named cancel found for struct UltimaBook`.
 
-- [ ] **Step 3: Switch insert to an explicit id**
+- [ ] **Step 3: Map order IDs to row ids**
 
-In `apply_insert` (and its `_mt` twin), the churn stream's sparse order IDs make the auto-increment id wrong. Replace the `orders.insert(...)` call and its assert with:
+`insert_with_id` exists on `Table<R>` but **not** on the `TableWriter` that `WriteTx::open_table` returns, so it is unreachable here at pinned rev `8831c4e`. Instead, give `UltimaBook` an adapter-side map:
 
 ```rust
-            orders
-                .insert_with_id(order_id as u64, OrderRec { /* fields unchanged */ })
-                .expect("order insert");
+    /// order_id -> ultima row id. The churn stream's order IDs are sparse
+    /// (1, 3, 5, …) so they can no longer double as row ids. This mirrors the
+    /// flat `Book`'s id-map, which pays the same probe on every
+    /// update/cancel/fill — ultima previously got that lookup free.
+    ids: std::collections::HashMap<i64, u64>,
 ```
 
-Keep `let slot = (order_id - 1) as u32;` — with no recycling it stays a valid monotone handle. Delete the `assert_eq!(id, order_id as u64, …)` line, which no longer has a meaning.
+In `apply_insert` (and its `_mt` twin), keep `orders.insert(...)`, take `slot` from the returned auto id, record the mapping, and delete the `assert_eq!(id, order_id as u64, …)` line, which no longer has a meaning:
+
+```rust
+            let row = orders.insert(OrderRec { /* fields unchanged */ }).expect("order insert");
+            let slot = (row - 1) as u32;
+```
+
+`apply_update` and `apply_cancel` resolve `order_id` through the map before touching the table; `apply_cancel` also removes the entry. Neighbour links still address orders by `slot`, so a link's row id is `slot + 1` — unchanged from today, because slots are never recycled and the auto id is monotone.
 
 - [ ] **Step 4: Implement cancel and fill**
 
@@ -1984,7 +1993,7 @@ A free function alongside `encode_at`, producing bytes identical to `digest_book
 - [ ] **Step 8: Run tests to verify they pass**
 
 ```sh
-cd rust && cargo test -p smr-collections-ultima-common
+cd rust && cargo test -p smr-collections-ultima
 ```
 
 Expected: PASS, including the pre-existing `ultima_matches_golden_bytes` and `batched_insert_matches_golden_bytes` — an insert-only workload deletes nothing, so those still byte-match the regenerated golden.
