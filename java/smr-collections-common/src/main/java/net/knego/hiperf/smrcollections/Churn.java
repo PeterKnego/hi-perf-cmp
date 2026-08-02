@@ -161,6 +161,49 @@ public final class Churn {
         return s;
     }
 
+    /** Target fill() invocations for {@link #warmJit}: HotSpot's C2 tier threshold. */
+    private static final long WARM_TARGET_FILLS = 5_000L;
+    /** Safety cap on warmJit's op count so a tiny SMRC_OTR_BPS cannot make the pre-run unbounded. */
+    private static final long WARM_MAX_OPS = 20_000_000L;
+
+    /**
+     * Throwaway JVM pre-run: drives a SCRATCH store + a SCRATCH {@code Churn} through a full
+     * prebuild plus enough ops to push {@code fill()} through HotSpot's C2 compile threshold
+     * (Tier4InvocationThreshold, 5,000 invocations) before the real measurement begins.
+     *
+     * <p>{@code fill_*} is ~0.5 % of ops at the default {@code SMRC_OTR_BPS=100} — roughly 500
+     * samples over {@code cfg.warmup()+cfg.iters()} at fleet defaults, nowhere near enough to
+     * tier up on its own. {@code insert}/{@code cancel} do not need this: they are two orders of
+     * magnitude more frequent and clear 5,000 calls from the ordinary warmup+timed loop alone.
+     *
+     * <p>Mirrors the existing pre-touch idiom used by the live cells ({@code s.encode(book)}
+     * before the timed loop, so the {@code k = 0} trigger measures steady-state cost rather than
+     * first-touch). This is that same idiom for JIT tiering rather than page faults: everything
+     * driven through {@code scratchStore} here is discarded by the caller. The real store and the
+     * real {@code Churn} are constructed fresh afterwards (the latter always re-seeded from
+     * {@link Workload#SEED}), so the measured op stream and every emitted number are unaffected.
+     *
+     * <p><b>Do not delete this as dead code</b> — its output is never read on purpose; what
+     * matters is the JIT tiering it leaves behind in the process.
+     */
+    public static void warmJit(SmrConfig cfg, Store scratchStore) {
+        if (cfg.otrBps() <= 0) {
+            // No fill ever occurs at OTR=0 (real run included), so there is nothing to warm.
+            return;
+        }
+        Churn scratchChurn = new Churn(cfg);
+        scratchChurn.prebuild(scratchStore, cfg.steady());
+        // fills/op = 0.5 * otrBps/10000 (half of ops depart, otrBps/10000 of departures fill), so
+        // ops for WARM_TARGET_FILLS fills = WARM_TARGET_FILLS * 20_000 / otrBps. At the default
+        // otrBps=100 that is 1,000,000 ops.
+        long prerunOps = Math.min(WARM_MAX_OPS, (WARM_TARGET_FILLS * 20_000L) / cfg.otrBps());
+        Op op = new Op();
+        for (long k = 0; k < prerunOps; k++) {
+            scratchChurn.nextOp(op);
+            apply(scratchStore, op);
+        }
+    }
+
     /**
      * Emit the per-op-type distributions plus RSS growth. A distribution with no samples is
      * skipped rather than emitted as zeros — at SMRC_OTR_BPS=0 there are no fills, and a

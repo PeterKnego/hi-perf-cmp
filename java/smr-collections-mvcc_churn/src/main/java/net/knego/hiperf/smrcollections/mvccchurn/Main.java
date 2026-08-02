@@ -16,6 +16,10 @@ public final class Main {
     public static void main(String[] args) {
         try {
             SmrConfig cfg = SmrConfig.fromEnv();
+            // Throwaway JVM pre-run: warms fill() to HotSpot's C2 tier on a scratch store before
+            // the real one is built, so fill_p50/p99 aren't measured on cold interpreted/C1 code.
+            // Discarded; does not touch the measured stream. See Churn.warmJit's javadoc.
+            Churn.warmJit(cfg, new CowBook(cfg));
             CowBook book = new CowBook(cfg);
             Churn churn = new Churn(cfg);
             churn.prebuild(book, cfg.steady());
