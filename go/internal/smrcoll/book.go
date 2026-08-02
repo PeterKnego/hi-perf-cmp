@@ -1,6 +1,10 @@
 package smrcoll
 
-import "github.com/peterknego/hi-perf-cmp/go/internal/bench"
+import (
+	"fmt"
+
+	"github.com/peterknego/hi-perf-cmp/go/internal/bench"
+)
 
 // NIL sentinel handle (empty head/tail, link end).
 const NIL uint32 = 0xFFFFFFFF
@@ -95,6 +99,7 @@ type Book struct {
 	Bids, Asks       []Level
 	Pool             []Order
 	Hwm              uint32
+	FreeHead         uint32
 	BestBid, BestAsk int32
 	ids              *idMap
 }
@@ -110,7 +115,7 @@ func NewBook(cfg bench.SmrConfig) *Book {
 	return &Book{
 		PriceMin: cfg.PriceMin, Tick: cfg.Tick, NLevels: cfg.Levels,
 		Bids: bids, Asks: asks, Pool: make([]Order, cfg.Cap),
-		Hwm: 0, BestBid: -1, BestAsk: -1, ids: newIDMap(cfg.Cap),
+		Hwm: 0, FreeHead: NIL, BestBid: -1, BestAsk: -1, ids: newIDMap(cfg.Cap),
 	}
 }
 
@@ -124,8 +129,7 @@ func (b *Book) lane(side uint8) []Level {
 
 func (b *Book) Insert(orderID, price, qty int64, side uint8) {
 	t := b.tickOf(price)
-	slot := b.Hwm
-	b.Hwm++
+	slot := b.allocSlot()
 	lane := b.lane(side)
 	lvl := &lane[t]
 	prevTail := lvl.Tail
@@ -171,6 +175,111 @@ func (b *Book) LevelQty(side uint8, tick uint32) int64 {
 func (b *Book) rebuildIDs() {
 	b.ids = newIDMap(len(b.Pool))
 	for slot := uint32(0); slot < b.Hwm; slot++ {
-		b.ids.put(b.Pool[slot].OrderID, slot)
+		if b.Pool[slot].OrderID != 0 {
+			b.ids.put(b.Pool[slot].OrderID, slot)
+		}
 	}
+}
+
+func (b *Book) allocSlot() uint32 {
+	if b.FreeHead != NIL {
+		slot := b.FreeHead
+		b.FreeHead = b.Pool[slot].Next
+		return slot
+	}
+	if int(b.Hwm) == len(b.Pool) {
+		panic(fmt.Sprintf("order pool exhausted: SMRC_CAP=%d reached", len(b.Pool)))
+	}
+	slot := b.Hwm
+	b.Hwm++
+	return slot
+}
+
+func (b *Book) freeSlot(slot uint32) {
+	head := b.FreeHead
+	o := &b.Pool[slot]
+	o.OrderID = 0 // freed marker: the snapshot walk skips these
+	o.Next = head
+	o.Prev = NIL
+	b.FreeHead = slot
+}
+
+// unlink removes slot from its level's intrusive FIFO and debits rem from the
+// level's remaining quantity.
+func (b *Book) unlink(slot uint32, side uint8, t uint32, rem int64) {
+	prev, next := b.Pool[slot].Prev, b.Pool[slot].Next
+	if prev != NIL {
+		b.Pool[prev].Next = next
+	}
+	if next != NIL {
+		b.Pool[next].Prev = prev
+	}
+	lvl := &b.lane(side)[t]
+	if lvl.Head == slot {
+		lvl.Head = next
+	}
+	if lvl.Tail == slot {
+		lvl.Tail = prev
+	}
+	lvl.QtyTotal -= rem
+	lvl.Count--
+}
+
+// repairBest restores the cached best for side after a removal emptied level
+// t. O(levels) worst case and deliberately on the timed path — real books
+// maintain this, and hiding it would hide the worst-case cancel.
+func (b *Book) repairBest(side uint8, t uint32) {
+	if side == 0 {
+		if b.BestBid != int32(t) || b.Bids[t].Head != NIL {
+			return
+		}
+		nb := int32(-1)
+		for i := int(t); i >= 0; i-- {
+			if b.Bids[i].Head != NIL {
+				nb = int32(i)
+				break
+			}
+		}
+		b.BestBid = nb
+		return
+	}
+	if b.BestAsk != int32(t) || b.Asks[t].Head != NIL {
+		return
+	}
+	na := int32(-1)
+	for i := int(t); i < int(b.NLevels); i++ {
+		if b.Asks[i].Head != NIL {
+			na = int32(i)
+			break
+		}
+	}
+	b.BestAsk = na
+}
+
+// Cancel removes a resting order; its remaining quantity leaves the level.
+func (b *Book) Cancel(orderID int64) {
+	slot := b.ids.get(orderID)
+	o := b.Pool[slot]
+	rem := o.Qty - o.Filled
+	t := b.tickOf(o.Price)
+	b.ids.del(orderID)
+	b.unlink(slot, o.Side, t, rem)
+	b.freeSlot(slot)
+	b.repairBest(o.Side, t)
+}
+
+// Fill completes an order then removes it. Same structural work as Cancel;
+// the difference is that the departing quantity is booked as filled rather
+// than withdrawn.
+func (b *Book) Fill(orderID int64) {
+	slot := b.ids.get(orderID)
+	o := &b.Pool[slot]
+	rem := o.Qty - o.Filled
+	o.Filled = o.Qty
+	side, price := o.Side, o.Price
+	t := b.tickOf(price)
+	b.ids.del(orderID)
+	b.unlink(slot, side, t, rem)
+	b.freeSlot(slot)
+	b.repairBest(side, t)
 }
