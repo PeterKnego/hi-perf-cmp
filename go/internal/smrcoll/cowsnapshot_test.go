@@ -199,3 +199,24 @@ func TestCowCancelImageMatchesFlatImage(t *testing.T) {
 		t.Fatalf("CoW image differs from flat: %d vs %d bytes", len(cow), len(flat))
 	}
 }
+
+// TestCowChurnImageMatchesFlatChurnImage is the churn-driven analogue of
+// TestCowCancelImageMatchesFlatImage: it runs the real insert/cancel/fill
+// stream (not a hand-rolled id%3 pattern) through both stores, so it is also
+// the only test in the Go tree that exercises CowBook.Fill.
+func TestCowChurnImageMatchesFlatChurnImage(t *testing.T) {
+	c := churnCfg()
+	b, cb := NewBook(c), NewCowBook(c)
+	cha, chb := NewChurn(c), NewChurn(c)
+	cha.Prebuild(b, c.Steady)
+	chb.Prebuild(cb, c.Steady)
+	for i := 0; i < 10000; i++ {
+		ApplyChurn(b, cha.NextOp())
+		ApplyChurn(cb, chb.NextOp())
+	}
+	flat := append([]byte(nil), NewSnapshotter().Encode(b)...)
+	cow := NewSnapshotter().EncodeRoot(cb.Capture())
+	if !bytes.Equal(flat, cow) {
+		t.Fatalf("CoW churn image differs from flat: %d vs %d bytes", len(cow), len(flat))
+	}
+}
