@@ -29,6 +29,7 @@ code in each language.
 | [20260727T164805Z](../journal/runs/20260727T164805Z-ddb09a5d0ff1/entry.md) | ultima cells only: `ultima_batch_insert`/`ultima_batch_update` debut (one txn per 64-command batch) + `bulk_load`-based restore — 6 cells, one run (scoped) |
 | [20260729T202653Z](../journal/runs/20260729T202653Z-8956f783de54/entry.md) / [20260729T202913Z](../journal/runs/20260729T202913Z-6d82089e1182/entry.md) | ultima_db `open_table` handle-caching A/B (engine rev 8ac858d → 2907f56, #19) — same-host before/after, 5 ultima cells (scoped) |
 | [20260729T214946Z](../journal/runs/20260729T214946Z-7f0f0cf5ee6b/entry.md) / [20260729T215021Z](../journal/runs/20260729T215021Z-7f0f0cf5ee6b/entry.md) | multi-table writer A/B (`SMRC_MULTI_TABLE` 0 → 1, `open_tables3`/`open_tables2`, #20) on the #20 engine — same-host, 2 batch cells (scoped) |
+| [20260802T132729Z](../journal/runs/20260802T132729Z-7ab2574456c8/entry.md) | First **cancel-heavy churn** run: cancel op + ~1 % order-to-trade workload across all three languages (15 churn cells) — full 89-cell matrix, one run |
 
 Unless noted, tables below show the **current baseline** run (20260713T152911Z). The
 July 15 – 27 runs are **scoped** (one focus area each, not a full-matrix
@@ -432,6 +433,111 @@ batching, ~30–50× with batching (above). #19 (~7–13 %) and #20 (~12 %) each
 the batched per-op further — real, same-fleet, and smaller than the headline
 amortization step, as second-order engine wins tend to be.
 
+### Cancel-heavy churn (run 20260802T132729Z)
+
+Everything above was measured on a workload where **nothing is ever removed**.
+That is the friendliest possible case for an MVCC engine: a delete frees
+nothing, it writes a new version that lives until no reader can reach it. Real
+order flow is the opposite — roughly **1 % of orders end in a trade**, so ~99 %
+leave the book by cancellation, and a matching engine's state store spends its
+life recycling slots rather than filling them.
+
+The `churn` cells add a third command — remove — and make it dominant:
+alternating insert / departure, where a departure is a cancel 99 % of the time
+and a full fill 1 % (`SMRC_OTR_BPS`, default 100 bps). The live set stays
+exactly constant while turnover runs continuously. All figures below are from
+one run on one fleet, so within-table comparisons are same-host.
+
+**Steady-state op cost** (mean, ns):
+
+| op | store | rust | go | java |
+|---|---|---|---|---|
+| insert | flat (stw) | 56 | 92 | 247 |
+| **cancel** | flat (stw) | **125** | **136** | **240** |
+| fill | flat (stw) | 127 | 136 | 345 |
+| insert | chunked CoW | 70 | 97 | 109 |
+| **cancel** | chunked CoW | **258** | **133** | **164** |
+| insert | ultima_db | 9,608 | — | — |
+| **cancel** | ultima_db | **10,312** | — | — |
+
+**The engine trade under cancellation** (same-run, per applied command):
+
+| cell | per-op mean | vs same-run insert/update |
+|---|---|---|
+| `ultima_batch_insert` | 2,356 ns | — |
+| `ultima_batch_update` | 3,111 ns | — |
+| **`ultima_batch_churn`** | **4,456 ns** | **1.4–1.9×** |
+| `ultima_insert` (unbatched) | 8,768 ns | — |
+| **`ultima_churn`** (unbatched) | **10,312 ns** | **+18 %** |
+
+**Snapshot under churn** (`writer_max` — the stall the write path observed):
+
+| cell | rust | go | java |
+|---|---|---|---|
+| `live_stw` (no churn) | 574 µs | 5.22 ms | 3.90 ms |
+| `live_stw_churn` | 684 µs | 5.37 ms | 6.04 ms |
+| `live_mvcc` (no churn) | 124 µs | 244 µs | 2.88 ms |
+| `live_mvcc_churn` | **204 µs** | **305 µs** | **239 µs** |
+| `live_ultima_churn` | 199 µs | — | — |
+
+**What we learned:**
+
+- **Cancel costs about 2× an insert on the flat store** (125 vs 56 ns in Rust),
+  and its `cancel_p99` of 410 ns is the O(levels) best-price rescan surfacing in
+  the tail — exactly where it was designed to. The rescan is deliberately on the
+  timed path: real books maintain the cached best, and hiding it would hide the
+  worst-case cancel.
+- **Cancellation makes the engine-MVCC trade worse by about a third, not by an
+  order of magnitude.** Batched ultima_db costs 4,456 ns/op under churn against
+  2,356/3,111 for insert/update on the same host — so ~36× the flat store's
+  cancel, where the insert/update-only workload had put the trade at ~30–50×.
+  The pessimistic reading (that deletes would collapse the engine's position)
+  did not materialise; the optimistic one (that the earlier numbers were
+  representative) was also wrong.
+- **Chunked CoW pays for cancel in Rust but not in Go.** Rust's CoW cancel is
+  2.1× its flat cancel (258 vs 125 ns) — the op touches the order chunk, the
+  level chunk, then rescans through chunk indirection. Go's is at parity
+  (133 vs 136) and Java's CoW is *cheaper* than its flat store. Unexplained by
+  this run.
+- **CoW's snapshot-stall advantage widens sharply under churn, and Java may
+  finally see it.** Java's STW→CoW improvement is 1.35× without churn and 25×
+  with it (6.04 ms → 239 µs) — which would invert the earlier finding that
+  Java's CoW gains are eaten by GC. **Read this as suggestive, not
+  established:** `writer_max` is a single-event maximum over 10 triggers, so
+  whether a GC pause lands is close to a coin flip. It needs a repeat run.
+- **`snapshot_bytes` shifted +4 bytes on every pre-existing cell**
+  (2,751,256 → 2,751,260) — the schema-v2 `freeHead` field, a one-time
+  change, not a regression. Churn cells read 2,751,305: a churned pool carries
+  freed slots.
+- **Eight cells flagged by `journal compare`, none confirmed.**
+  `ultima_batch_insert` +20.5 % and `ultima_batch_update` +14.3 % against the
+  scoped 20260729 A/B run — but that was a different instance draw, this grid
+  carries a documented ~21 % cross-instance band on `batch_update` alone, and
+  both cells changed composition this cycle (the adapter gained an
+  `order_id → row id` map and `OrderRec` grew 4 bytes).
+  [`journal/REGRESSIONS.md`](../journal/REGRESSIONS.md) stays empty.
+
+**Caveats these numbers must carry:**
+
+- **Java's `fill_mean` is not yet comparable.** It sits at 1.44× its own
+  `cancel_mean` (345 vs 240 ns) where Rust and Go are at ~1.0×. `fill` is 0.5 %
+  of ops by design, so it barely reaches HotSpot's compile thresholds; the JVM
+  pre-run added for this cycle brought `fill_p50` into line (231 vs 215) but the
+  mean still carries a cold tail.
+- **Per-op splits inside the `live_*` cells are polluted by the trigger op** —
+  Go's `live_stw_churn` reports `insert_mean` 642 ns against `insert_p50`
+  133 ns, because the ops that trigger a snapshot absorb the whole serialize.
+  `writer_max` remains the headline for those cells; read the split for *which*
+  op absorbed the stall, not as a latency.
+- **Java's RSS figures are a JVM artifact** — heap, metaspace and code cache,
+  not store growth. Java-vs-Java trend only.
+- **Churn per-op means read ~5–8 % fast** against the older `insert`/`update`
+  cells, which time their own op generation where the churn cells do not.
+  Adjacent rows in the tables above; systematic, not noise.
+- **Still unmeasured:** version GC under a *growing* live set. This workload
+  holds the live set exactly constant by construction, so reclamation is
+  measured at steady state only.
+
 ## rpc-roundtrip — mutating request/response across whole stacks (cross-host)
 
 A new focus area that fuses `serialization` and `network-rtt`: unlike the byte
@@ -517,6 +623,21 @@ remains empty.
    0-alloc), and FlatBuffers is also the priciest to *encode* (817 ns, bottom-up
    builder) with the largest wire — so for a hot replay path prefer a fixed-layout
    zero-copy codec (SBE) over an offset-table one (FlatBuffers).
+7. **FSM state store, measured on the workload that actually occurs** (~99 %
+   cancellations, not insert/update-only): a flat pooled store with an intrusive
+   free list applies a cancel in **125 ns** (Rust) — about 2× an insert, with the
+   O(levels) best-price rescan showing up in `cancel_p99` at 410 ns. An MVCC
+   B-tree engine driven in its SMR pattern costs **~36× that batched**
+   (4,456 ns/op at B=64) and ~82× unbatched; cancellation worsens the engine's
+   position by about a third versus the insert/update-only figure, which is real
+   but far short of a collapse. For a sub-µs apply budget the flat store still
+   wins decisively; where single-digit µs is affordable, the engine buys
+   stall-free snapshots by construction. **The snapshot side is where the choice
+   is starkest:** under churn, a stop-the-world serialize stalls the writer for
+   0.7–6.0 ms depending on language, while chunked copy-on-write holds it to
+   204–305 µs — and that gap is much wider under cancellation than without it.
+   Choose stop-the-world only if you can snapshot on a non-voting replica.
+
 6. **RPC framework vs hand-rolled stack:** for a mutating request/response on
    the replication path, a hand-rolled UDP + zero-copy SBE stack round-trips in
    ~26 µs; full gRPC (HTTP/2 + protobuf) costs **~4.8×** that (~126 µs) for its
