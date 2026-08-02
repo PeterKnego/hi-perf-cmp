@@ -476,6 +476,24 @@ existing baseline needs them stated:
    at this configuration. The behaviour the code comment justifies ("probe
    chains never accumulate tombstones") is true here for a reason unrelated
    to the compaction logic that implements it.
+8. **Java `rss_peak_bytes` is not cross-language comparable in absolute
+   terms.** It is an absolute RSS reading, so Java's includes JVM heap,
+   metaspace and code cache — tens of MB that Rust and Go do not carry.
+   `rss_growth_bytes` is a delta and better behaved, but for Java it still
+   picks up JIT code-cache and heap-sizing growth where the other two report
+   near zero. Read Java's as a Java-vs-Java trend, not a cross-language
+   ranking.
+9. **Java's four churn cells (`churn`, `mvcc_churn`, `live_stw_churn`,
+   `live_mvcc_churn`) run a throwaway JVM pre-run** before the measured loop:
+   a scratch store plus a scratch `Churn` are driven through a full prebuild
+   plus ~1,000,000 ops (at the default `SMRC_OTR_BPS=100`) and discarded, so
+   that `fill()` — ~0.5 % of ops, too rare to reach HotSpot's C2 compile
+   threshold from the timed loop alone — is JIT-warm like `insert`/`cancel`
+   before it is measured. Rust and Go are AOT-compiled and have no equivalent
+   step. Consequence: Java's churn cells' wall-clock is longer by the
+   pre-run's duration; the measured op stream itself is unaffected, since the
+   real store and the real `Churn` (re-seeded from `Workload.SEED`) are built
+   fresh afterwards.
 
 ## Open items deliberately deferred
 
