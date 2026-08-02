@@ -50,9 +50,34 @@ public final class SmrCollections {
         }
         emitLatency(experiment, "writer", writerNs);
         emitInt(experiment, "writer_max", max, "ns", writerNs.length);
-        emitLatency(experiment, "snapshot", snapNs);
+        // A distribution with no samples is skipped rather than emitted as zeros — if every
+        // timed capture was skipped (serializer busy the whole run), snapNs is empty and
+        // Stats.percentile would throw (idx = -1). Mirrors Churn.emit's same-shaped guard.
+        // writer_*, snap_count, snap_skipped and snapshot_bytes still emit unconditionally: a
+        // zero snapshot count is real information.
+        if (snapNs.length > 0) {
+            emitLatency(experiment, "snapshot", snapNs);
+        }
         emitInt(experiment, "snap_count", snapNs.length, "count", 1);
         emitInt(experiment, "snap_skipped", skipped, "count", 1);
         emitInt(experiment, "snapshot_bytes", snapLen, "bytes", 1);
+    }
+
+    /**
+     * Resident set size in bytes, from Linux /proc/self/statm field 2 (resident pages), or 0
+     * where unreadable. The bench hosts are x86-64 Linux with 4 KiB pages, which is the only
+     * case that must be right. Allocates, so callers must keep it out of timed regions.
+     */
+    public static long rssBytes() {
+        try {
+            String s = java.nio.file.Files.readString(java.nio.file.Path.of("/proc/self/statm"));
+            String[] f = s.trim().split("\\s+");
+            if (f.length < 2) {
+                return 0L;
+            }
+            return Long.parseLong(f[1]) * 4096L;
+        } catch (Exception e) {
+            return 0L;
+        }
     }
 }

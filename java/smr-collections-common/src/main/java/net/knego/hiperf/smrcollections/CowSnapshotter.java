@@ -38,9 +38,7 @@ public final class CowSnapshotter {
         enc.hwm(u32(r.hwm));
         enc.bestBid(r.bestBid);
         enc.bestAsk(r.bestAsk);
-        // See Snapshotter.encode: CowBook has no free list yet either, so
-        // this stays NIL, matching Rust's cancel-free-book output.
-        enc.freeHead(u32(Book.NIL));
+        enc.freeHead(u32(r.freeHead));
 
         int levelCount = 0;
         for (byte side = 0; side < 2; side++) {
@@ -114,6 +112,10 @@ public final class CowSnapshotter {
         }
         MessageHeaderDecoder header = new MessageHeaderDecoder();
         header.wrap(buf, 0);
+        if (header.version() != BookSnapshotEncoder.SCHEMA_VERSION) {
+            throw new IllegalArgumentException("unsupported snapshot schema version "
+                    + header.version() + " (expected " + BookSnapshotEncoder.SCHEMA_VERSION + ")");
+        }
         BookSnapshotDecoder dec = new BookSnapshotDecoder();
         dec.wrap(buf, header.encodedLength(), header.blockLength(), header.version());
 
@@ -123,6 +125,18 @@ public final class CowSnapshotter {
         b.hwm = (int) dec.hwm();
         b.bestBid = dec.bestBid();
         b.bestAsk = dec.bestAsk();
+        if ((int) dec.capacity() != cfg.cap()) {
+            throw new IllegalArgumentException(
+                    "snapshot capacity " + dec.capacity() + " != SMRC_CAP " + cfg.cap());
+        }
+        // nLevels is final on CowBook (from cfg), so unlike Snapshotter.restore there is nothing
+        // to assign — but the wire value must still be checked, or a mismatched image is silently
+        // accepted instead of failing loudly like the capacity gate above.
+        if ((int) dec.nLevels() != cfg.levels()) {
+            throw new IllegalArgumentException(
+                    "snapshot nLevels " + dec.nLevels() + " != SMRC_LEVELS " + cfg.levels());
+        }
+        b.freeHead = (int) dec.freeHead();
 
         BookSnapshotDecoder.LevelsDecoder levels = dec.levels();
         while (levels.hasNext()) {

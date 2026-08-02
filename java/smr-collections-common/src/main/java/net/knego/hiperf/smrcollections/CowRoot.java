@@ -9,13 +9,18 @@ public final class CowRoot {
     public final int hwm;
     public final int bestBid;
     public final int bestAsk;
+
+    /** Same semantics as {@link Book#freeHead}: NIL when empty. Part of the frozen view. */
+    public final int freeHead;
+
     final int chunk;
     final CowBook.OrderChunk[] orderChunks;
     final CowBook.LvlChunk[] bidChunks;
     final CowBook.LvlChunk[] askChunks;
 
     CowRoot(long priceMin, long tick, int nLevels, int capacity, int hwm, int bestBid, int bestAsk,
-            int chunk, CowBook.OrderChunk[] orderChunks, CowBook.LvlChunk[] bidChunks, CowBook.LvlChunk[] askChunks) {
+            int freeHead, int chunk, CowBook.OrderChunk[] orderChunks, CowBook.LvlChunk[] bidChunks,
+            CowBook.LvlChunk[] askChunks) {
         this.priceMin = priceMin;
         this.tick = tick;
         this.nLevels = nLevels;
@@ -23,6 +28,7 @@ public final class CowRoot {
         this.hwm = hwm;
         this.bestBid = bestBid;
         this.bestAsk = bestAsk;
+        this.freeHead = freeHead;
         this.chunk = chunk;
         this.orderChunks = orderChunks;
         this.bidChunks = bidChunks;

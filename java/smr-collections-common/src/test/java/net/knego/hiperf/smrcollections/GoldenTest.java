@@ -14,7 +14,7 @@ class GoldenTest {
         // Gradle test working dir is the subproject dir (java/smr-collections-common).
         Path golden = Path.of("..", "..", "rust", "smr-collections", "testdata", "golden_snapshot.bin");
         byte[] want = Files.readAllBytes(golden);
-        SmrConfig c = new SmrConfig(4096, 64, 1, 0, 2000, 0, 0, 4096, 200000, 20000);
+        SmrConfig c = new SmrConfig(4096, 64, 1, 0, 2000, 0, 0, 4096, 200000, 20000, 100);
         Book b = new Book(c);
         Workload.SplitMix rng = new Workload.SplitMix(Workload.SEED);
         Workload.Insert ins = new Workload.Insert();

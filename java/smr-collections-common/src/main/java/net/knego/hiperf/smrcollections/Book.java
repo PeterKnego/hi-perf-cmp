@@ -4,7 +4,7 @@ import net.knego.hiperf.common.SmrConfig;
 import org.agrona.collections.Long2ObjectHashMap;
 
 /** Fixed-capacity limit order book: flat ladder + pooled orders + Agrona id-map. */
-public final class Book {
+public final class Book implements Churn.Store {
     /** Sentinel handle (empty head/tail, link end). As unsigned = 0xFFFFFFFF. */
     public static final int NIL = -1;
 
@@ -18,6 +18,13 @@ public final class Book {
     public int bestBid = -1;
     public int bestAsk = -1;
     public final Long2ObjectHashMap<Order> ids;
+
+    /**
+     * Head of the intrusive LIFO free list (NIL when empty). Freed slots chain through their own
+     * `next` field. This is state a snapshot must capture — restore reproduces allocation order
+     * from it.
+     */
+    public int freeHead = NIL;
 
     public Book(SmrConfig cfg) {
         this.priceMin = cfg.priceMin();
@@ -46,7 +53,7 @@ public final class Book {
 
     public void insert(long orderId, long price, long qty, byte side) {
         int t = tickOf(price);
-        int slot = hwm++;
+        int slot = allocSlot();
         Level lvl = lane(side)[t];
         Order o = pool[slot];
         o.orderId = orderId;
@@ -72,6 +79,109 @@ public final class Book {
         if (side == 1 && (bestAsk < 0 || t < bestAsk)) {
             bestAsk = t;
         }
+    }
+
+    private int allocSlot() {
+        if (freeHead != NIL) {
+            int slot = freeHead;
+            freeHead = pool[slot].next;
+            return slot;
+        }
+        if (hwm == pool.length) {
+            throw new IllegalStateException("order pool exhausted: SMRC_CAP=" + pool.length + " reached");
+        }
+        return hwm++;
+    }
+
+    private void freeSlot(int slot) {
+        Order o = pool[slot];
+        o.orderId = 0; // freed marker: the snapshot walk skips these
+        o.next = freeHead;
+        o.prev = NIL;
+        freeHead = slot;
+    }
+
+    /** Unlink slot from its level's intrusive FIFO and debit rem from the level's remaining qty. */
+    private void unlink(int slot, byte side, int t, long rem) {
+        Order o = pool[slot];
+        int prev = o.prev;
+        int next = o.next;
+        if (prev != NIL) {
+            pool[prev].next = next;
+        }
+        if (next != NIL) {
+            pool[next].prev = prev;
+        }
+        Level lvl = lane(side)[t];
+        if (lvl.head == slot) {
+            lvl.head = next;
+        }
+        if (lvl.tail == slot) {
+            lvl.tail = prev;
+        }
+        lvl.qtyTotal -= rem;
+        lvl.count--;
+    }
+
+    /**
+     * Restore the cached best for side after a removal emptied level t. O(levels) worst case and
+     * deliberately on the timed path — real books maintain this, and hiding it would hide the
+     * worst-case cancel.
+     */
+    private void repairBest(byte side, int t) {
+        if (side == 0) {
+            if (bestBid != t || bids[t].head != NIL) {
+                return;
+            }
+            int nb = -1;
+            for (int i = t; i >= 0; i--) {
+                if (bids[i].head != NIL) {
+                    nb = i;
+                    break;
+                }
+            }
+            bestBid = nb;
+            return;
+        }
+        if (bestAsk != t || asks[t].head != NIL) {
+            return;
+        }
+        int na = -1;
+        for (int i = t; i < nLevels; i++) {
+            if (asks[i].head != NIL) {
+                na = i;
+                break;
+            }
+        }
+        bestAsk = na;
+    }
+
+    /** Remove a resting order; its remaining quantity leaves the level. */
+    public void cancel(long orderId) {
+        Order o = ids.remove(orderId);
+        long rem = o.qty - o.filled;
+        byte side = o.side;
+        int t = tickOf(o.price);
+        int slot = o.slot;
+        unlink(slot, side, t, rem);
+        freeSlot(slot);
+        repairBest(side, t);
+    }
+
+    /**
+     * Fill an order to completion, then remove it. Same structural work as cancel; the difference
+     * is that the departing quantity is booked as filled rather than withdrawn.
+     */
+    public void fill(long orderId) {
+        Order o = ids.remove(orderId);
+        long rem = o.qty - o.filled;
+        o.filled = o.qty;
+        byte side = o.side;
+        int t = tickOf(o.price);
+        int slot = o.slot;
+        unlink(slot, side, t, rem);
+        freeSlot(slot);
+        repairBest(side, t);
     }
 
     public void update(long orderId, long fillQty) {
@@ -105,7 +215,9 @@ public final class Book {
     public void rebuildIds() {
         ids.clear();
         for (int slot = 0; slot < hwm; slot++) {
-            ids.put(pool[slot].orderId, pool[slot]);
+            if (pool[slot].orderId != 0) {
+                ids.put(pool[slot].orderId, pool[slot]);
+            }
         }
     }
 }

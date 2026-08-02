@@ -46,6 +46,15 @@ experiments:
   - { focus_area: smr-collections,  experiment: live_ultima,     kind: local, languages: [rust] }
   - { focus_area: smr-collections,  experiment: ultima_batch_insert, kind: local, languages: [rust] }
   - { focus_area: smr-collections,  experiment: ultima_batch_update, kind: local, languages: [rust] }
+  # Churn: cancel-heavy workload at a real-exchange order-to-trade ratio
+  # (~1% of orders trade). ultima_* are Rust-only; the rest are all three.
+  - { focus_area: smr-collections,  experiment: churn,             kind: local }
+  - { focus_area: smr-collections,  experiment: mvcc_churn,        kind: local }
+  - { focus_area: smr-collections,  experiment: live_stw_churn,    kind: local }
+  - { focus_area: smr-collections,  experiment: live_mvcc_churn,   kind: local }
+  - { focus_area: smr-collections,  experiment: ultima_churn,       kind: local, languages: [rust] }
+  - { focus_area: smr-collections,  experiment: ultima_batch_churn, kind: local, languages: [rust] }
+  - { focus_area: smr-collections,  experiment: live_ultima_churn,  kind: local, languages: [rust] }
   # rpc-roundtrip is per-language like serialization above: sbe_udp is Rust
   # only, grpc/bebop_tcp are Go only (Java not planned) — see the cross_host
   # `languages` filter fix in ansible/roles/run/tasks/main.yml.
@@ -102,6 +111,7 @@ smrc_apply_batch: 64
 smrc_multi_table: 0  # ultima batch cells: 1 = open_tables3/2 per batch (#20), 0 = per-command open
 smrc_live_iters: 200000
 smrc_snap_every: 20000
+smrc_otr_bps: 100  # churn cells: order-to-trade ratio in basis points (100 = 1%)
 
 # rpc-roundtrip params (cross-host: node0 client, node1 responder). Three
 # whole-stack cells over one shared ~250-byte payload. Ports distinct from

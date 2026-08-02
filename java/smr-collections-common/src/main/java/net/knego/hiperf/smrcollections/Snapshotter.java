@@ -46,11 +46,7 @@ public final class Snapshotter {
         enc.hwm(u32(b.hwm));
         enc.bestBid(b.bestBid);
         enc.bestAsk(b.bestAsk);
-        // Java's Book has no free list yet (cancel/fill are Rust-only so
-        // far). Writing NIL is exactly what the Rust encoder produces for a
-        // cancel-free book; leaving the field unset would leave it at 0,
-        // wrongly naming slot 0 as the free-list head.
-        enc.freeHead(u32(Book.NIL));
+        enc.freeHead(u32(b.freeHead));
 
         int levelCount = 0;
         for (Level[] lane : new Level[][] {b.bids, b.asks}) {
@@ -102,7 +98,11 @@ public final class Snapshotter {
         return lastLen;
     }
 
-    /** View of the last-encoded image (indices 0..returnedLength). */
+    /**
+     * View of the last-encoded image (indices 0..returnedLength). Invalidated by the next call to
+     * {@link #encode}, which reuses this same backing array — callers that need the bytes to
+     * survive past the next encode must copy them first.
+     */
     public byte[] backing() {
         return backing;
     }
@@ -126,15 +126,28 @@ public final class Snapshotter {
         }
         MessageHeaderDecoder header = new MessageHeaderDecoder();
         header.wrap(buf, 0);
+        if (header.version() != BookSnapshotEncoder.SCHEMA_VERSION) {
+            throw new IllegalArgumentException("unsupported snapshot schema version "
+                    + header.version() + " (expected " + BookSnapshotEncoder.SCHEMA_VERSION + ")");
+        }
         BookSnapshotDecoder dec = new BookSnapshotDecoder();
         dec.wrap(buf, header.encodedLength(), header.blockLength(), header.version());
 
         Book b = new Book(cfg);
-        b.nLevels = (int) dec.nLevels();
         b.hwm = (int) dec.hwm();
         b.bestBid = dec.bestBid();
         b.bestAsk = dec.bestAsk();
         // priceMin/tick are final (from cfg); the wire values equal cfg by construction.
+        if ((int) dec.capacity() != cfg.cap()) {
+            throw new IllegalArgumentException(
+                    "snapshot capacity " + dec.capacity() + " != SMRC_CAP " + cfg.cap());
+        }
+        if ((int) dec.nLevels() != cfg.levels()) {
+            throw new IllegalArgumentException(
+                    "snapshot nLevels " + dec.nLevels() + " != SMRC_LEVELS " + cfg.levels());
+        }
+        b.nLevels = (int) dec.nLevels();
+        b.freeHead = (int) dec.freeHead();
 
         BookSnapshotDecoder.LevelsDecoder levels = dec.levels();
         while (levels.hasNext()) {

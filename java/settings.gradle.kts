@@ -22,4 +22,8 @@ include(
     "smr-collections-mvcc_snapshot",
     "smr-collections-live_stw",
     "smr-collections-live_mvcc",
+    "smr-collections-churn",
+    "smr-collections-mvcc_churn",
+    "smr-collections-live_stw_churn",
+    "smr-collections-live_mvcc_churn",
 )

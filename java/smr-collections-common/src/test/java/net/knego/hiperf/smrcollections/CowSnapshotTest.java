@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class CowSnapshotTest {
 
     private static SmrConfig goldenCfg() {
-        return new SmrConfig(4096, 64, 1, 0, 2000, 0, 0, 512, 200000, 20000);
+        return new SmrConfig(4096, 64, 1, 0, 2000, 0, 0, 512, 200000, 20000, 100);
     }
 
     private static CowBook buildCow(SmrConfig c, int n) {
@@ -143,5 +143,62 @@ class CowSnapshotTest {
         ser.join();
         assertArrayEquals(want, got, "concurrent capture == STW replay");
         assertEquals(want.length, got.length);
+    }
+
+    @Test
+    void cowCancelImageMatchesFlatImage() {
+        SmrConfig c = new SmrConfig(4096, 64, 1L, 0L, 2000, 0, 0, 512, 200_000, 20_000, 100);
+        Book b = new Book(c);
+        CowBook cb = new CowBook(c);
+        Workload.SplitMix r1 = new Workload.SplitMix(Workload.SEED);
+        Workload.SplitMix r2 = new Workload.SplitMix(Workload.SEED);
+        Workload.Insert i1 = new Workload.Insert();
+        Workload.Insert i2 = new Workload.Insert();
+        for (int i = 0; i < c.steady(); i++) {
+            Workload.nextInsert(r1, i, c.levels(), c.tick(), c.priceMin(), i1);
+            Workload.nextInsert(r2, i, c.levels(), c.tick(), c.priceMin(), i2);
+            b.insert(i1.orderId, i1.price, i1.qty, i1.side);
+            cb.insert(i2.orderId, i2.price, i2.qty, i2.side);
+        }
+        for (long id = 1; id <= c.steady(); id += 3) {
+            b.cancel(id);
+            cb.cancel(id);
+        }
+        Snapshotter s1 = new Snapshotter(4 * 1024 * 1024);
+        int n1 = s1.encode(b);
+        byte[] flat = java.util.Arrays.copyOf(s1.backing(), n1);
+        CowSnapshotter s2 = new CowSnapshotter(4 * 1024 * 1024);
+        int n2 = s2.encodeRoot(cb.capture());
+        byte[] cow = java.util.Arrays.copyOf(s2.backing(), n2);
+        assertArrayEquals(flat, cow, "CoW image == flat image");
+    }
+
+    /**
+     * The churn-driven analogue of {@link #cowCancelImageMatchesFlatImage}: runs the real
+     * insert/cancel/fill stream (not a hand-rolled id%3 pattern) through both stores, so it is
+     * also the only test in the Java tree that exercises {@link CowBook#fill}.
+     */
+    @Test
+    void cowChurnImageMatchesFlatChurnImage() {
+        SmrConfig c = new SmrConfig(4096, 64, 1L, 0L, 2000, 0, 0, 512, 200_000, 20_000, 100);
+        Book b = new Book(c);
+        CowBook cb = new CowBook(c);
+        Churn cha = new Churn(c);
+        Churn chb = new Churn(c);
+        Churn.Op oa = new Churn.Op();
+        Churn.Op ob = new Churn.Op();
+        cha.prebuild(b, c.steady());
+        chb.prebuild(cb, c.steady());
+        for (int i = 0; i < 10_000; i++) {
+            cha.nextOp(oa);
+            chb.nextOp(ob);
+            Churn.apply(b, oa);
+            Churn.apply(cb, ob);
+        }
+        Snapshotter s1 = new Snapshotter(4 * 1024 * 1024);
+        byte[] flat = java.util.Arrays.copyOf(s1.backing(), s1.encode(b));
+        CowSnapshotter s2 = new CowSnapshotter(4 * 1024 * 1024);
+        byte[] cow = java.util.Arrays.copyOf(s2.backing(), s2.encodeRoot(cb.capture()));
+        assertArrayEquals(flat, cow, "CoW churn image == flat churn image");
     }
 }

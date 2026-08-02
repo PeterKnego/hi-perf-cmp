@@ -39,6 +39,7 @@
     export SMRC_MULTI_TABLE="{{ smrc_multi_table | default('0') }}"
     export SMRC_LIVE_ITERS="{{ smrc_live_iters }}"
     export SMRC_SNAP_EVERY="{{ smrc_snap_every }}"
+    export SMRC_OTR_BPS="{{ smrc_otr_bps }}"
     {{ remote_home }}/run_bench.sh {{ language }} {{ focus_area }} {{ experiment }} loopback \
       >> {{ remote_results_dir }}/results.jsonl
   args:
