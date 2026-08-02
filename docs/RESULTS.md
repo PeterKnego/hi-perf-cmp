@@ -505,15 +505,22 @@ across their two stores), so only their deltas isolate CoW.
   The pessimistic reading (that deletes would collapse the engine's position)
   did not materialise; the optimistic one (that the earlier numbers were
   representative) was also wrong.
-- **Chunked CoW pays for cancel in Rust but not in Go — and the reason is not
-  copy-on-write.** `mvcc_churn` never calls `capture()`, so the generation never
-  bumps and **not one chunk is ever copied**. The only CoW cost in this cell is
-  the epoch check plus chunk-table indirection per access. Rust pays 2.1× for
-  that (258 vs 125 ns); Go, with a symmetric implementation, pays nothing
-  (133 vs 136). One of those is wrong and this run cannot say which — the
-  leading hypothesis is Rust's `repair_best` rescan walking `level(side, i)`
-  through chunk indexing across 1,024 levels, but that is untested. Java's
-  number does not bear on the question at all (see ‡ above).
+- **Chunked CoW's cancel penalty in Rust is `Arc::get_mut`, not copy-on-write.**
+  `mvcc_churn` never calls `capture()`, so no chunk is ever copied. A local
+  experiment (levels=8, ~1,000 orders per level, so the ladder rescan never
+  does work) reproduces the gap at 1.88× — refuting the rescan hypothesis — and
+  the gap scales with the number of **mutable accesses per op**: update (2
+  accesses) +14 ns, insert (3) +30 ns, cancel (4) +47 ns, i.e. ~7–12 ns each.
+  Rust's `order_mut`/`level_mut` call `Arc::get_mut(...).expect(...)` — an
+  atomic uniqueness check plus a branch — on every write, to verify an
+  invariant the epoch check immediately above already guarantees (a chunk with
+  `born == gen` was created after the last capture, so no `Root` holds it,
+  which is why that `expect` never fires). Go's equivalent is a plain pointer
+  load that trusts the same invariant, which is why Go shows parity
+  (133 vs 136 ns). Rust's `mvcc_*` cells have therefore been carrying an
+  avoidable per-write cost in every run to date. Java's number does not bear on
+  this at all (see ‡ above).
+
 - **CoW's snapshot-stall advantage widens sharply under churn, and Java may
   finally see it.** Java's STW→CoW improvement is 1.35× without churn and 25×
   with it (6.04 ms → 239 µs) — which would invert the earlier finding that

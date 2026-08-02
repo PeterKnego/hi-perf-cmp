@@ -350,33 +350,21 @@ that is ~36x batched / ~82x unbatched. The pre-churn RESULTS figure was ~30-50x
 batched, so cancellation moves the engine trade by roughly a third — real, and
 far short of the order-of-magnitude collapse that was possible.
 
-**Chunked CoW pays for cancel in Rust but not in Go — and Java's number does
-not measure CoW at all.** Rust `mvcc_churn` cancel 258 ns vs flat 125 ns
-(2.1x); Go 133 vs 136 (parity); Java 164 vs 240.
-
-Two separate things here, and the first invalidates a comparison this entry
-originally presented as a three-language result:
-
-*Java's flat-vs-CoW delta is a data-layout artifact.* Java is the only language
-whose two stores differ structurally. `Book` uses `Long2ObjectHashMap<Order>`
-over a pool of 262,144 `Order` **objects**; `CowBook` uses `Long2LongHashMap`
-over primitive fields inside `OrderChunk` arrays. So Java's "flat" store does
-key -> object reference -> pointer chase, while its "CoW" store does key ->
-primitive slot -> primitive array index. The CoW store has strictly better
-memory layout in Java, independent of any copy-on-write machinery — which is
-what the 240 -> 164 ns move measures. Rust holds both variables constant
-(`IdMap` and the `Order` POD struct are shared by both stores) and so does Go
-(`*idMap` shared); only their deltas isolate CoW. Closing this would mean
-giving Java's `Book` a primitive id-map and a primitive order pool, which is a
-real change to an already-measured cell and wants its own plan.
-
-*The Rust/Go gap is real and still unexplained — but it is not copy-on-write.*
-`mvcc_churn` never calls `capture()`, so the generation never bumps and **not a
-single chunk is ever copied**. The only CoW cost in this cell is the epoch
-check plus chunk-table indirection per access. Rust pays 2.1x for that; Go,
-with a symmetric implementation, pays nothing. Leading hypothesis is Rust's
-`repair_best` rescan walking `level(side, i)` through chunk indexing across
-1,024 levels, but that is untested.
+**Chunked CoW's cancel penalty in Rust is `Arc::get_mut`, not copy-on-write.**
+`mvcc_churn` never calls `capture()`, so no chunk is ever copied. A local
+experiment (levels=8, ~1,000 orders per level, so the ladder rescan never
+does work) reproduces the gap at 1.88× — refuting the rescan hypothesis — and
+the gap scales with the number of **mutable accesses per op**: update (2
+accesses) +14 ns, insert (3) +30 ns, cancel (4) +47 ns, i.e. ~7–12 ns each.
+Rust's `order_mut`/`level_mut` call `Arc::get_mut(...).expect(...)` — an
+atomic uniqueness check plus a branch — on every write, to verify an
+invariant the epoch check immediately above already guarantees (a chunk with
+`born == gen` was created after the last capture, so no `Root` holds it,
+which is why that `expect` never fires). Go's equivalent is a plain pointer
+load that trusts the same invariant, which is why Go shows parity
+(133 vs 136 ns). Rust's `mvcc_*` cells have therefore been carrying an
+avoidable per-write cost in every run to date. Java's number does not bear on
+this at all (see ‡ above).
 
 **Snapshot-under-churn: CoW's advantage widens sharply, and Java sees it.**
 `writer_max`, same run:
