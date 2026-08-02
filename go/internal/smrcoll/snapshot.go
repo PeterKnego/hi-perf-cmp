@@ -50,11 +50,7 @@ func (s *Snapshotter) Encode(b *Book) []byte {
 	msg.Hwm = b.Hwm
 	msg.BestBid = b.BestBid
 	msg.BestAsk = b.BestAsk
-	// Go's Book has no free list yet (cancel/fill are Rust-only so far).
-	// Writing NIL is exactly what the Rust encoder produces for a
-	// cancel-free book; leaving the field unset would leave it at its zero
-	// value, wrongly naming slot 0 as the free-list head.
-	msg.FreeHead = NIL
+	msg.FreeHead = b.FreeHead
 
 	msg.Levels = msg.Levels[:0]
 	for side, lane := range [2][]Level{b.Bids, b.Asks} {
@@ -110,6 +106,9 @@ func Restore(data []byte, cfg bench.SmrConfig) (*Book, error) {
 	if err := hdr.Decode(m, r, msg.SbeSchemaVersion()); err != nil {
 		return nil, err
 	}
+	if hdr.Version != msg.SbeSchemaVersion() {
+		return nil, fmt.Errorf("unsupported snapshot schema version %d (expected %d)", hdr.Version, msg.SbeSchemaVersion())
+	}
 	if err := msg.Decode(m, r, hdr.Version, hdr.BlockLength, false); err != nil {
 		return nil, err
 	}
@@ -121,6 +120,10 @@ func Restore(data []byte, cfg bench.SmrConfig) (*Book, error) {
 	b.Hwm = msg.Hwm
 	b.BestBid = msg.BestBid
 	b.BestAsk = msg.BestAsk
+	if int(msg.Capacity) != cfg.Cap {
+		return nil, fmt.Errorf("snapshot capacity %d != SMRC_CAP %d", msg.Capacity, cfg.Cap)
+	}
+	b.FreeHead = msg.FreeHead
 	for i := range msg.Levels {
 		lv := &msg.Levels[i]
 		lane := b.Bids
