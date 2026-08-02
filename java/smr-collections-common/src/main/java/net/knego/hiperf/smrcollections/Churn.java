@@ -53,7 +53,10 @@ public final class Churn {
     private final long priceMin;
 
     public Churn(SmrConfig cfg) {
-        this.live = new long[cfg.cap()];
+        // Peak occupancy is steady+1, not steady: after prebuild the op index is
+        // even, so the next op is an insert before any departure. Rust's Vec and
+        // Go's slice grow transparently; a fixed array must be sized for it.
+        this.live = new long[cfg.cap() + 1];
         this.otrBps = cfg.otrBps();
         this.levels = cfg.levels();
         this.tick = cfg.tick();
@@ -138,6 +141,9 @@ public final class Churn {
             apply(store, op);
         }
         Samples s = new Samples(cfg.iters() / 2 + 1);
+        // HotSpot eagerly zeroes new arrays, so the pages behind insertNs/cancelNs/fillNs are
+        // already resident by the time we read RSS here — the baseline includes them rather
+        // than attributing their growth to the store. Load-bearing, not incidental.
         rssOut[0] = SmrCollections.rssBytes();
         for (int k = 0; k < cfg.iters(); k++) {
             c.nextOp(op);
