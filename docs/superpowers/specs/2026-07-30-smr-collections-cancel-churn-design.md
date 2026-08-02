@@ -451,6 +451,19 @@ existing baseline needs them stated:
 6. **ultima's `hwm` now means "rows ever inserted"**, not a live-set high-water
    mark, so under churn it grows unbounded and can exceed `capacity`. Nothing
    sizes anything from it today; a `debug_assert!` names the bound.
+7. **Go's `idMap` backward-shift compaction (`del`, `book.go:67-71`) never
+   executes at the fleet configuration.** Instrumenting the real op stream at
+   the ansible defaults (`smrc_cap: 262144` → a 524,288-slot table; max order
+   id 170,000 for `churn`, 270,000 for the `live_*_churn` cells) shows 0 probe
+   steps across the whole run: the Fibonacci multiplier is a bijection mod
+   2^19 and every key is below the table size, so `put`/`get` never probe and
+   `del` never enters its shift loop. In this regime Go's id-map is
+   effectively a direct-mapped array store, not a comparably-probing hash
+   table — so `cancel_mean` sits beside Rust's (std `HashMap`) and Java's
+   (Agrona) as though the three do comparable index work, when Go's does not
+   at this configuration. The behaviour the code comment justifies ("probe
+   chains never accumulate tombstones") is true here for a reason unrelated
+   to the compaction logic that implements it.
 
 ## Open items deliberately deferred
 
