@@ -1681,6 +1681,18 @@ func main() {
 
 Read `go/cmd/smr-collections-live_mvcc/main.go` first and follow exactly what it does for the capture/serializer handoff and the `skipped` counter — this cell must differ from it only in the workload. Then apply the same three additions Step 3 made: the churn stream, the per-op-type split, and `rss_peak_bytes` sampled outside the clock. Use `smrcoll.NewCowBook`, `book.Capture()` and `s.EncodeRoot(root)` in place of the flat store's inline `s.Encode(book)`, and set `experiment = "live_mvcc_churn"`.
 
+**Two differences from Step 3 that the async snapshot forces**, both mirroring `rust/smr-collections/live_mvcc_churn/src/main.rs`:
+
+1. Gate the mid-loop RSS sample on a `captured` bool set inside the *non-skipped* branch — not on `fired`, which is also true on iterations where the serializer was busy and the capture was skipped.
+2. Take one more RSS sample **after** the serializer is drained (`<-done`) and before the `snapNs[1:]` trim. Step 3's cell needs no equivalent because its snapshot is synchronous and fully inside the timed op; here the final capture's `EncodeRoot` and its CoW chunk copies run concurrently and can still be growing memory after the loop's last `fired` iteration. Without it, `rss_peak_bytes` reads systematically low against the Rust twin:
+
+```go
+	// Catch growth from the final in-flight window.
+	if r := bench.RSSBytes(); r > rssPeak {
+		rssPeak = r
+	}
+```
+
 - [ ] **Step 5: Build, vet and smoke-run all four**
 
 ```sh
