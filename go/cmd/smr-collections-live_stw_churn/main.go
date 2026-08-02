@@ -31,7 +31,17 @@ func main() {
 	writerNs := make([]int64, cfg.LiveIters)
 	snapNs := make([]int64, 0, cfg.LiveIters/cfg.SnapEvery+1)
 	var snapLen int
-	var ins, can, fil []int64
+	// Preallocate and first-touch the per-op-type sample slices before the RSS
+	// baseline, mirroring internal/smrcoll.RunChurn: make() zeroes the pages,
+	// then reslice to empty so the timed loop never reallocates. Otherwise
+	// these buffers' growth/GC would land inside rss_peak_bytes (the metric
+	// this cell exists to report) and, for the doubling copy, inside a timed
+	// writer_max sample.
+	half := cfg.LiveIters/2 + 1
+	ins := make([]int64, half)
+	can := make([]int64, half)
+	fil := make([]int64, half)
+	ins, can, fil = ins[:0], can[:0], fil[:0]
 	rssPeak := bench.RSSBytes()
 	for k := 0; k < cfg.LiveIters; k++ {
 		op := churn.NextOp()

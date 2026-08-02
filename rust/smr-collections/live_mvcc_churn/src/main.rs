@@ -59,7 +59,20 @@ fn main() {
 
     let mut writer_ns = vec![0u64; cfg.live_iters];
     let mut skipped = 0u64;
-    let mut s = ChurnSamples::default();
+    // Preallocate AND first-touch the per-op-type sample vectors before the
+    // RSS baseline, mirroring run_churn (common/src/churn.rs): `vec![0; n]`
+    // writes every page, `clear()` keeps the capacity, so the timed loop
+    // never reallocates. Otherwise these buffers' growth would land inside
+    // rss_peak_bytes, the metric this cell exists to report.
+    let half = cfg.live_iters / 2 + 1;
+    let mut s = ChurnSamples {
+        insert_ns: vec![0u64; half],
+        cancel_ns: vec![0u64; half],
+        fill_ns: vec![0u64; half],
+    };
+    s.insert_ns.clear();
+    s.cancel_ns.clear();
+    s.fill_ns.clear();
     let mut rss_peak = rss_bytes();
     for (k, w) in writer_ns.iter_mut().enumerate() {
         let op = churn.next_op();
