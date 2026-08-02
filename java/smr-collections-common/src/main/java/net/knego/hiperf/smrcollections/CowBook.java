@@ -85,6 +85,13 @@ public final class CowBook {
     public int hwm;
     public int bestBid = -1;
     public int bestAsk = -1;
+
+    /**
+     * Head of the intrusive LIFO free list (NIL when empty). Same semantics as
+     * {@link Book#freeHead}: freed slots chain through their own {@code next} field.
+     */
+    public int freeHead = Book.NIL;
+
     private final Long2LongHashMap ids = new Long2LongHashMap(Book.NIL);
 
     public CowBook(SmrConfig cfg) {
@@ -116,6 +123,16 @@ public final class CowBook {
         return side == 0 ? bidChunks : askChunks;
     }
 
+    /** Read-only chunk lookup: never copies, so a rescan cannot trigger copy-on-write. */
+    private OrderChunk orderChunkForRead(int slot) {
+        return orderChunks[slot / chunk];
+    }
+
+    /** Read-only chunk lookup: never copies, so a rescan cannot trigger copy-on-write. */
+    private LvlChunk lvlChunkForRead(byte side, int t) {
+        return lane(side)[t / LEVEL_CHUNK];
+    }
+
     private OrderChunk orderChunkForWrite(int slot) {
         int ci = slot / chunk;
         OrderChunk c = orderChunks[ci];
@@ -140,7 +157,7 @@ public final class CowBook {
     /** Same op semantics as {@link Book#insert} (keep in lockstep). */
     public void insert(long orderId, long price, long qty, byte side) {
         int t = tickOf(price);
-        int slot = hwm++;
+        int slot = allocSlot();
         LvlChunk lc = lvlChunkForWrite(side, t);
         int lo = t % LEVEL_CHUNK;
         int prevTail = lc.tail[lo];
@@ -183,10 +200,117 @@ public final class CowBook {
         lc.qtyTotal[t % LEVEL_CHUNK] -= add;
     }
 
+    /** Same op semantics as {@link Book#allocSlot} (keep in lockstep). */
+    private int allocSlot() {
+        if (freeHead != Book.NIL) {
+            int slot = freeHead;
+            freeHead = orderChunkForRead(slot).next[slot % chunk];
+            return slot;
+        }
+        if (hwm == capacity) {
+            throw new IllegalStateException("order pool exhausted: SMRC_CAP=" + capacity + " reached");
+        }
+        return hwm++;
+    }
+
+    /** Same op semantics as {@link Book#freeSlot} (keep in lockstep). */
+    private void freeSlot(int slot) {
+        OrderChunk oc = orderChunkForWrite(slot);
+        int oo = slot % chunk;
+        oc.orderId[oo] = 0; // freed marker: the snapshot walk skips these
+        oc.next[oo] = freeHead;
+        oc.prev[oo] = Book.NIL;
+        freeHead = slot;
+    }
+
+    /** Same op semantics as {@link Book#unlink} (keep in lockstep). */
+    private void unlink(int slot, byte side, int t, long rem) {
+        OrderChunk ocRead = orderChunkForRead(slot);
+        int prev = ocRead.prev[slot % chunk];
+        int next = ocRead.next[slot % chunk];
+        if (prev != Book.NIL) {
+            OrderChunk pc = orderChunkForWrite(prev);
+            pc.next[prev % chunk] = next;
+        }
+        if (next != Book.NIL) {
+            OrderChunk nc = orderChunkForWrite(next);
+            nc.prev[next % chunk] = prev;
+        }
+        LvlChunk lc = lvlChunkForWrite(side, t);
+        int lo = t % LEVEL_CHUNK;
+        if (lc.head[lo] == slot) {
+            lc.head[lo] = next;
+        }
+        if (lc.tail[lo] == slot) {
+            lc.tail[lo] = prev;
+        }
+        lc.qtyTotal[lo] -= rem;
+        lc.count[lo]--;
+    }
+
+    /**
+     * Same op semantics as {@link Book#repairBest} (keep in lockstep). Reads through the
+     * read-only chunk accessor — a rescan must not trigger copy-on-write of untouched chunks.
+     */
+    private void repairBest(byte side, int t) {
+        if (side == 0) {
+            if (bestBid != t || lvlChunkForRead((byte) 0, t).head[t % LEVEL_CHUNK] != Book.NIL) {
+                return;
+            }
+            int nb = -1;
+            for (int i = t; i >= 0; i--) {
+                if (lvlChunkForRead((byte) 0, i).head[i % LEVEL_CHUNK] != Book.NIL) {
+                    nb = i;
+                    break;
+                }
+            }
+            bestBid = nb;
+            return;
+        }
+        if (bestAsk != t || lvlChunkForRead((byte) 1, t).head[t % LEVEL_CHUNK] != Book.NIL) {
+            return;
+        }
+        int na = -1;
+        for (int i = t; i < nLevels; i++) {
+            if (lvlChunkForRead((byte) 1, i).head[i % LEVEL_CHUNK] != Book.NIL) {
+                na = i;
+                break;
+            }
+        }
+        bestAsk = na;
+    }
+
+    /** Same op semantics as {@link Book#cancel} (keep in lockstep). */
+    public void cancel(long orderId) {
+        int slot = (int) ids.remove(orderId);
+        OrderChunk oc = orderChunkForRead(slot);
+        int oo = slot % chunk;
+        long rem = oc.qty[oo] - oc.filled[oo];
+        byte side = oc.side[oo];
+        int t = tickOf(oc.price[oo]);
+        unlink(slot, side, t, rem);
+        freeSlot(slot);
+        repairBest(side, t);
+    }
+
+    /** Same op semantics as {@link Book#fill} (keep in lockstep). */
+    public void fill(long orderId) {
+        int slot = (int) ids.remove(orderId);
+        OrderChunk oc = orderChunkForWrite(slot);
+        int oo = slot % chunk;
+        long rem = oc.qty[oo] - oc.filled[oo];
+        oc.filled[oo] = oc.qty[oo];
+        byte side = oc.side[oo];
+        int t = tickOf(oc.price[oo]);
+        unlink(slot, side, t, rem);
+        freeSlot(slot);
+        repairBest(side, t);
+    }
+
     /** Freeze the current state (O(#chunks)) and bump the generation. */
     public CowRoot capture() {
-        CowRoot r = new CowRoot(priceMin, tick, nLevels, capacity, hwm, bestBid, bestAsk, chunk,
-                orderChunks.clone(), bidChunks.clone(), askChunks.clone());
+        CowRoot r = new CowRoot(priceMin, tick, nLevels, capacity, hwm, bestBid, bestAsk, freeHead,
+                chunk, orderChunks.clone(), bidChunks.clone(), askChunks.clone());
         gen++;
         return r;
     }
@@ -208,7 +332,10 @@ public final class CowBook {
         ids.clear();
         for (int slot = 0; slot < hwm; slot++) {
             OrderChunk oc = orderChunks[slot / chunk];
-            ids.put(oc.orderId[slot % chunk], slot);
+            long orderId = oc.orderId[slot % chunk];
+            if (orderId != 0) {
+                ids.put(orderId, slot);
+            }
         }
     }
 }

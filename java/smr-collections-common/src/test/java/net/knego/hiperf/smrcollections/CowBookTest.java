@@ -74,4 +74,43 @@ class CowBookTest {
         assertEquals(0, r1.orderFilled(0));
         assertEquals(4, r2.orderFilled(0));
     }
+
+    @Test
+    void cowCancelMatchesBookCancel() {
+        SmrConfig c = new SmrConfig(4096, 64, 1L, 0L, 500, 0, 0, 512, 200_000, 20_000, 100);
+        Book b = new Book(c);
+        CowBook cb = new CowBook(c);
+        Workload.SplitMix r1 = new Workload.SplitMix(Workload.SEED);
+        Workload.SplitMix r2 = new Workload.SplitMix(Workload.SEED);
+        Workload.Insert i1 = new Workload.Insert();
+        Workload.Insert i2 = new Workload.Insert();
+        for (int i = 0; i < 500; i++) {
+            Workload.nextInsert(r1, i, c.levels(), c.tick(), c.priceMin(), i1);
+            Workload.nextInsert(r2, i, c.levels(), c.tick(), c.priceMin(), i2);
+            b.insert(i1.orderId, i1.price, i1.qty, i1.side);
+            cb.insert(i2.orderId, i2.price, i2.qty, i2.side);
+        }
+        for (long id = 1; id <= 500; id += 3) {
+            b.cancel(id);
+            cb.cancel(id);
+        }
+        assertEquals(b.freeHead, cb.freeHead, "free heads agree");
+        assertEquals(b.hwm(), cb.hwm, "hwm agrees");
+        assertEquals(b.bestBid(), cb.bestBid, "best bid agrees");
+        assertEquals(b.bestAsk(), cb.bestAsk, "best ask agrees");
+        for (int t = 0; t < c.levels(); t++) {
+            assertEquals(b.levelQty((byte) 0, t), cb.levelQty((byte) 0, t), "bid level " + t);
+            assertEquals(b.levelQty((byte) 1, t), cb.levelQty((byte) 1, t), "ask level " + t);
+        }
+    }
+
+    @Test
+    void captureCarriesFreeHead() {
+        SmrConfig c = new SmrConfig(4096, 64, 1L, 0L, 100, 0, 0, 512, 200_000, 20_000, 100);
+        CowBook cb = new CowBook(c);
+        cb.insert(1, 5, 10, (byte) 0);
+        cb.insert(2, 5, 10, (byte) 0);
+        cb.cancel(1);
+        assertEquals(cb.freeHead, cb.capture().freeHead);
+    }
 }

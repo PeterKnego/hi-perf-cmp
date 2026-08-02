@@ -144,4 +144,32 @@ class CowSnapshotTest {
         assertArrayEquals(want, got, "concurrent capture == STW replay");
         assertEquals(want.length, got.length);
     }
+
+    @Test
+    void cowCancelImageMatchesFlatImage() {
+        SmrConfig c = new SmrConfig(4096, 64, 1L, 0L, 2000, 0, 0, 512, 200_000, 20_000, 100);
+        Book b = new Book(c);
+        CowBook cb = new CowBook(c);
+        Workload.SplitMix r1 = new Workload.SplitMix(Workload.SEED);
+        Workload.SplitMix r2 = new Workload.SplitMix(Workload.SEED);
+        Workload.Insert i1 = new Workload.Insert();
+        Workload.Insert i2 = new Workload.Insert();
+        for (int i = 0; i < c.steady(); i++) {
+            Workload.nextInsert(r1, i, c.levels(), c.tick(), c.priceMin(), i1);
+            Workload.nextInsert(r2, i, c.levels(), c.tick(), c.priceMin(), i2);
+            b.insert(i1.orderId, i1.price, i1.qty, i1.side);
+            cb.insert(i2.orderId, i2.price, i2.qty, i2.side);
+        }
+        for (long id = 1; id <= c.steady(); id += 3) {
+            b.cancel(id);
+            cb.cancel(id);
+        }
+        Snapshotter s1 = new Snapshotter(4 * 1024 * 1024);
+        int n1 = s1.encode(b);
+        byte[] flat = java.util.Arrays.copyOf(s1.backing(), n1);
+        CowSnapshotter s2 = new CowSnapshotter(4 * 1024 * 1024);
+        int n2 = s2.encodeRoot(cb.capture());
+        byte[] cow = java.util.Arrays.copyOf(s2.backing(), n2);
+        assertArrayEquals(flat, cow, "CoW image == flat image");
+    }
 }
