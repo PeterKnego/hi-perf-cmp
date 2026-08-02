@@ -172,4 +172,33 @@ class CowSnapshotTest {
         byte[] cow = java.util.Arrays.copyOf(s2.backing(), n2);
         assertArrayEquals(flat, cow, "CoW image == flat image");
     }
+
+    /**
+     * The churn-driven analogue of {@link #cowCancelImageMatchesFlatImage}: runs the real
+     * insert/cancel/fill stream (not a hand-rolled id%3 pattern) through both stores, so it is
+     * also the only test in the Java tree that exercises {@link CowBook#fill}.
+     */
+    @Test
+    void cowChurnImageMatchesFlatChurnImage() {
+        SmrConfig c = new SmrConfig(4096, 64, 1L, 0L, 2000, 0, 0, 512, 200_000, 20_000, 100);
+        Book b = new Book(c);
+        CowBook cb = new CowBook(c);
+        Churn cha = new Churn(c);
+        Churn chb = new Churn(c);
+        Churn.Op oa = new Churn.Op();
+        Churn.Op ob = new Churn.Op();
+        cha.prebuild(b, c.steady());
+        chb.prebuild(cb, c.steady());
+        for (int i = 0; i < 10_000; i++) {
+            cha.nextOp(oa);
+            chb.nextOp(ob);
+            Churn.apply(b, oa);
+            Churn.apply(cb, ob);
+        }
+        Snapshotter s1 = new Snapshotter(4 * 1024 * 1024);
+        byte[] flat = java.util.Arrays.copyOf(s1.backing(), s1.encode(b));
+        CowSnapshotter s2 = new CowSnapshotter(4 * 1024 * 1024);
+        byte[] cow = java.util.Arrays.copyOf(s2.backing(), s2.encodeRoot(cb.capture()));
+        assertArrayEquals(flat, cow, "CoW churn image == flat churn image");
+    }
 }
