@@ -456,9 +456,20 @@ one run on one fleet, so within-table comparisons are same-host.
 | **cancel** | flat (stw) | **125** | **136** | **240** |
 | fill | flat (stw) | 127 | 136 | 345 |
 | insert | chunked CoW | 70 | 97 | 109 |
-| **cancel** | chunked CoW | **258** | **133** | **164** |
+| **cancel** | chunked CoW | **258** | **133** | **164** ‡ |
 | insert | ultima_db | 9,608 | — | — |
 | **cancel** | ultima_db | **10,312** | — | — |
+
+‡ **Java's flat-vs-CoW delta is not a CoW measurement — do not read it as one.**
+Java is the only language whose two stores differ structurally: `Book` uses
+`Long2ObjectHashMap<Order>` over a pool of 262,144 `Order` *objects*, while
+`CowBook` uses `Long2LongHashMap` over primitive fields inside `OrderChunk`
+arrays. So Java's "flat" store does key → object reference → pointer chase,
+and its "CoW" store does key → primitive slot → primitive array index. The
+CoW store has strictly better memory layout in Java, independent of any
+copy-on-write machinery, which is what the 240 → 164 ns move measures. Rust
+and Go hold both variables constant (identical id-map and order representation
+across their two stores), so only their deltas isolate CoW.
 
 **The engine trade under cancellation** (same-run, per applied command):
 
@@ -494,11 +505,15 @@ one run on one fleet, so within-table comparisons are same-host.
   The pessimistic reading (that deletes would collapse the engine's position)
   did not materialise; the optimistic one (that the earlier numbers were
   representative) was also wrong.
-- **Chunked CoW pays for cancel in Rust but not in Go.** Rust's CoW cancel is
-  2.1× its flat cancel (258 vs 125 ns) — the op touches the order chunk, the
-  level chunk, then rescans through chunk indirection. Go's is at parity
-  (133 vs 136) and Java's CoW is *cheaper* than its flat store. Unexplained by
-  this run.
+- **Chunked CoW pays for cancel in Rust but not in Go — and the reason is not
+  copy-on-write.** `mvcc_churn` never calls `capture()`, so the generation never
+  bumps and **not one chunk is ever copied**. The only CoW cost in this cell is
+  the epoch check plus chunk-table indirection per access. Rust pays 2.1× for
+  that (258 vs 125 ns); Go, with a symmetric implementation, pays nothing
+  (133 vs 136). One of those is wrong and this run cannot say which — the
+  leading hypothesis is Rust's `repair_best` rescan walking `level(side, i)`
+  through chunk indexing across 1,024 levels, but that is untested. Java's
+  number does not bear on the question at all (see ‡ above).
 - **CoW's snapshot-stall advantage widens sharply under churn, and Java may
   finally see it.** Java's STW→CoW improvement is 1.35× without churn and 25×
   with it (6.04 ms → 239 µs) — which would invert the earlier finding that
