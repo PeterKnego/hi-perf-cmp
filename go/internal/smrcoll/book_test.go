@@ -96,3 +96,76 @@ func TestIDMapDeleteAbsentKeyIsANoop(t *testing.T) {
 		t.Fatalf("deleting an absent key disturbed the table: got %d", got)
 	}
 }
+
+func TestIDMapDeleteCompactsWrappedProbeRun(t *testing.T) {
+	const n = 8
+	m := newIDMap(4) // n = 8 slots
+	// Keys congruent mod n share an ideal slot. Slot 6 puts the run across
+	// the table's wrap point, which is the case most likely to be wrong.
+	var base int64
+	for k := int64(1); k < 10000; k++ {
+		if (uint64(k)*0x9E3779B97F4A7C15)&(n-1) == 6 {
+			base = k
+			break
+		}
+	}
+	if base == 0 {
+		t.Fatal("no key hashes to slot 6")
+	}
+	keys := []int64{base, base + n, base + 2*n, base + 3*n, base + 4*n}
+	for _, k := range keys {
+		if (uint64(k)*0x9E3779B97F4A7C15)&(n-1) != 6 {
+			t.Fatalf("key %d does not share the ideal slot — test is not exercising a chain", k)
+		}
+	}
+	for i, k := range keys {
+		m.put(k, uint32(i))
+	}
+	m.del(keys[0]) // head of the run
+	m.del(keys[2]) // middle of the run
+	for i, k := range keys {
+		got := m.get(k)
+		if i == 0 || i == 2 {
+			if got != NIL {
+				t.Fatalf("deleted key %d still resolves to %d", k, got)
+			}
+		} else if got != uint32(i) {
+			t.Fatalf("survivor %d: got %d, want %d", k, got, i)
+		}
+	}
+}
+
+func TestIDMapMatchesReferenceUnderCollisions(t *testing.T) {
+	const slots = 128
+	m := newIDMap(slots / 2) // n = 128
+	ref := make(map[int64]uint32)
+	var live []int64
+	rng := NewSplitMix(SmrSeed)
+	for step := 0; step < 20000; step++ {
+		// Four residue classes mod 128 -> four ideal slots -> long probe runs.
+		k := int64(1) + int64(step%4) + int64(step/4)*slots
+		m.put(k, uint32(step))
+		ref[k] = uint32(step)
+		live = append(live, k)
+		if len(live) > 40 {
+			v := int(rng.Next() % uint64(len(live)))
+			victim := live[v]
+			live[v] = live[len(live)-1]
+			live = live[:len(live)-1]
+			m.del(victim)
+			delete(ref, victim)
+		}
+		if step%97 == 0 {
+			for kk, vv := range ref {
+				if got := m.get(kk); got != vv {
+					t.Fatalf("step %d: key %d got %d, want %d", step, kk, got, vv)
+				}
+			}
+		}
+	}
+	for kk, vv := range ref {
+		if got := m.get(kk); got != vv {
+			t.Fatalf("final: key %d got %d, want %d", kk, got, vv)
+		}
+	}
+}
