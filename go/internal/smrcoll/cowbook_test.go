@@ -99,6 +99,24 @@ func TestCowCancelMatchesBookCancel(t *testing.T) {
 	if cb.FreeHead != b.FreeHead || cb.Hwm != b.Hwm {
 		t.Fatalf("freeHead %d/%d hwm %d/%d", cb.FreeHead, b.FreeHead, cb.Hwm, b.Hwm)
 	}
+	// Walk the full free chain, not just the head: a bug that swapped a
+	// second-from-head link while leaving the head correct would otherwise
+	// pass this test.
+	var gotChain, wantChain []uint32
+	for slot := cb.FreeHead; slot != NIL; slot = cb.OrderAt(slot).Next {
+		gotChain = append(gotChain, slot)
+	}
+	for slot := b.FreeHead; slot != NIL; slot = b.Pool[slot].Next {
+		wantChain = append(wantChain, slot)
+	}
+	if len(gotChain) != len(wantChain) {
+		t.Fatalf("free chain length %d, want %d", len(gotChain), len(wantChain))
+	}
+	for i := range wantChain {
+		if gotChain[i] != wantChain[i] {
+			t.Fatalf("free chain[%d] = %d, want %d", i, gotChain[i], wantChain[i])
+		}
+	}
 	if cb.BestBid != b.BestBid || cb.BestAsk != b.BestAsk {
 		t.Fatalf("best bid %d/%d ask %d/%d", cb.BestBid, b.BestBid, cb.BestAsk, b.BestAsk)
 	}
