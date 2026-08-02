@@ -495,6 +495,12 @@ existing baseline needs them stated:
    real store and the real `Churn` (re-seeded from `Workload.SEED`) are built
    fresh afterwards.
 
+   Second-order effect worth knowing: the scratch store's garbage is likely
+   still resident when `rss0` is sampled, because JVM heaps rarely return pages
+   to the OS. That should cancel in `rss_growth_bytes`, which is a delta over a
+   baseline taken *after* the pre-run — but it inflates the baseline, so read
+   Java's growth figure with note 8's caveat rather than as a bare number.
+
 ## Open items deliberately deferred
 
 - Cancel-heavy behaviour under a *growing* live set (churn plus net inflow),
