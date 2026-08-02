@@ -444,10 +444,22 @@ existing baseline needs them stated:
    always paid that probe — rather than adding a tax.
 4. **`ultima_batch_churn` emits no per-op split**, unlike every other churn
    cell. See [Metrics](#metrics) for why.
-5. *(Closed before merge — kept for the record.)* `rss_growth_bytes` briefly
-   included ~1.2 MB of harness sample buffers whose pages were first touched
-   inside the timed loop. `run_churn` now first-touches them before taking the
-   baseline, so the metric reports store growth only.
+5. *(Largely closed before merge — kept for the record.)* `rss_growth_bytes`
+   and `rss_peak_bytes` briefly included ~1.2–1.6 MB of harness sample buffers
+   whose pages were first touched inside the timed loop. All churn cells in
+   both languages now allocate those buffers with `vec![0u64; n]` / `make(...)`
+   and reslice to empty **before** taking the RSS baseline, so the loop never
+   reallocates and the metric reports store growth.
+
+   **Residual caveat:** "allocate-zeroed touches every page" is not
+   unconditionally true. Above the allocator's mmap threshold both Rust
+   (`calloc` → `mmap(MAP_ANONYMOUS)`) and Go's runtime can hand back virtual
+   zero pages that are not physically resident until written, so some genuine
+   first-touch may still land inside the timed loop. The effect is the same in
+   both languages, so the cross-language comparison holds either way — but the
+   absolute figure should not be read as pure store growth without checking
+   (`/proc/self/smaps`, or an explicit write pass) that the pre-touch actually
+   faulted the pages in.
 6. **ultima's `hwm` now means "rows ever inserted"**, not a live-set high-water
    mark, so under churn it grows unbounded and can exceed `capacity`. Nothing
    sizes anything from it today; a `debug_assert!` names the bound.
