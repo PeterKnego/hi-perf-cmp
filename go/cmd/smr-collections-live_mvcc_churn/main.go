@@ -64,6 +64,7 @@ func main() {
 	for k := 0; k < cfg.LiveIters; k++ {
 		op := churn.NextOp()
 		fired := k%cfg.SnapEvery == 0
+		var captured bool
 		t0 := time.Now()
 		if fired {
 			if busy.Load() {
@@ -71,6 +72,7 @@ func main() {
 			} else {
 				busy.Store(true)
 				ch <- capMsg{root: book.Capture(), t0: t0}
+				captured = true
 			}
 		}
 		smrcoll.ApplyChurn(book, op)
@@ -78,8 +80,10 @@ func main() {
 		// Sample RSS only AFTER the clock closes: RSSBytes reads
 		// /proc/self/statm — microseconds against sub-microsecond ops — so
 		// calling it inside the timed region would inflate writer_max, the one
-		// metric this cell exists to report precisely.
-		if fired {
+		// metric this cell exists to report precisely. Gated on captured (not
+		// fired) so a skipped iteration — no capture sent, no capture-triggered
+		// work — doesn't spend a sample.
+		if captured {
 			if r := bench.RSSBytes(); r > rssPeak {
 				rssPeak = r
 			}
@@ -96,6 +100,12 @@ func main() {
 	}
 	close(ch)
 	<-done
+	// Catch growth from the final in-flight window: the last capture's
+	// EncodeRoot and its CoW chunk copies run concurrently and can still be
+	// growing memory after the loop's last fired iteration.
+	if r := bench.RSSBytes(); r > rssPeak {
+		rssPeak = r
+	}
 	// The first recorded duration is the warm handshake above (the
 	// serializer is a single-consumer FIFO over the channel, so send order
 	// == process order) — exclude it from the emitted stats and counts.
