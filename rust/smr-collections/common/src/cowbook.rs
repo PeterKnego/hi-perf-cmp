@@ -156,9 +156,21 @@ impl CowBook {
             });
         }
         let off = slot as usize % self.chunk;
-        &mut Arc::get_mut(&mut self.order_chunks[ci])
-            .expect("current-gen chunk is unshared")
-            .orders[off]
+        let arc = &mut self.order_chunks[ci];
+        debug_assert_eq!(
+            Arc::strong_count(arc),
+            1,
+            "current-gen chunk must be unshared"
+        );
+        // SAFETY: the epoch check above guarantees `born == gen`. `capture()`
+        // clones the chunk-ref tables into the Root and *then* bumps `gen`, so
+        // every Arc a Root holds necessarily has `born < gen`. A chunk with
+        // `born == gen` therefore has `strong_count == 1`, and we hold
+        // `&mut self`, so no other reference into it can exist. `Arc::as_ptr`
+        // deliberately retains mutable provenance (`&raw mut (*ptr).data` in
+        // alloc/src/sync.rs) precisely so callers can write through it.
+        let chunk = unsafe { &mut *(Arc::as_ptr(arc) as *mut OrderChunk) };
+        &mut chunk.orders[off]
     }
 
     #[inline]
@@ -176,9 +188,17 @@ impl CowBook {
                 levels: lane[ci].levels.clone(),
             });
         }
-        &mut Arc::get_mut(&mut lane[ci])
-            .expect("current-gen chunk is unshared")
-            .levels[t as usize % LEVEL_CHUNK]
+        let arc = &mut lane[ci];
+        debug_assert_eq!(
+            Arc::strong_count(arc),
+            1,
+            "current-gen chunk must be unshared"
+        );
+        // SAFETY: as in `order_mut` — the epoch check above guarantees
+        // `born == gen`, and `capture()` bumps `gen` after cloning, so a
+        // current-generation chunk is never held by a Root.
+        let chunk = unsafe { &mut *(Arc::as_ptr(arc) as *mut LevelChunk) };
+        &mut chunk.levels[t as usize % LEVEL_CHUNK]
     }
 
     /// Same op semantics as `Book::insert` (keep in lockstep).
