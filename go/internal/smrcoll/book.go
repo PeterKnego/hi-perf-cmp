@@ -56,6 +56,39 @@ func (m *idMap) get(k int64) uint32 {
 	return m.vals[i]
 }
 
+// del removes k and backward-shift compacts the run behind it, so probe
+// chains never accumulate tombstones and lookup cost stays flat over uptime.
+// The resulting table is a pure function of the operations applied — which
+// matters because the id-map is rebuilt from the pool on restore and both
+// replicas must agree.
+func (m *idMap) del(k int64) {
+	i := (uint64(k) * 0x9E3779B97F4A7C15) & m.mask
+	for m.keys[i] != k {
+		if m.keys[i] == 0 {
+			return // absent
+		}
+		i = (i + 1) & m.mask
+	}
+	m.keys[i] = 0
+	j := i
+	for {
+		j = (j + 1) & m.mask
+		if m.keys[j] == 0 {
+			return
+		}
+		h := (uint64(m.keys[j]) * 0x9E3779B97F4A7C15) & m.mask
+		// Move keys[j] into the hole at i iff its ideal slot h does NOT lie
+		// cyclically within (i, j] — otherwise the move would place it before
+		// its own probe start and make it unreachable.
+		if ((j - h) & m.mask) >= ((j - i) & m.mask) {
+			m.keys[i] = m.keys[j]
+			m.vals[i] = m.vals[j]
+			m.keys[j] = 0
+			i = j
+		}
+	}
+}
+
 type Book struct {
 	PriceMin, Tick   int64
 	NLevels          uint32

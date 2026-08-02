@@ -41,3 +41,58 @@ func TestUpdateCapsFill(t *testing.T) {
 		t.Fatalf("after over-fill qty = %d, want 0", b.LevelQty(0, 5))
 	}
 }
+
+func TestIDMapDeleteKeepsSurvivorsFindable(t *testing.T) {
+	m := newIDMap(1024)
+	for k := int64(1); k <= 500; k++ {
+		m.put(k, uint32(k))
+	}
+	for k := int64(1); k <= 500; k += 2 {
+		m.del(k)
+	}
+	for k := int64(1); k <= 500; k++ {
+		got := m.get(k)
+		if k%2 == 1 {
+			if got != NIL {
+				t.Fatalf("deleted key %d still resolves to %d", k, got)
+			}
+		} else if got != uint32(k) {
+			t.Fatalf("surviving key %d: got %d, want %d", k, got, k)
+		}
+	}
+}
+
+func TestIDMapSurvivesLongChurn(t *testing.T) {
+	// A steady live set with continuous turnover — the churn workload's shape.
+	// Without backward-shift compaction this degrades or returns wrong answers.
+	m := newIDMap(256)
+	live := make(map[int64]uint32)
+	for k := int64(1); k <= 100; k++ {
+		m.put(k, uint32(k))
+		live[k] = uint32(k)
+	}
+	for k := int64(101); k <= 5000; k++ {
+		old := k - 100
+		m.del(old)
+		delete(live, old)
+		m.put(k, uint32(k))
+		live[k] = uint32(k)
+	}
+	for k, v := range live {
+		if got := m.get(k); got != v {
+			t.Fatalf("key %d: got %d, want %d", k, got, v)
+		}
+	}
+	if got := m.get(999999); got != NIL {
+		t.Fatalf("absent key resolved to %d — probe chain did not terminate", got)
+	}
+}
+
+func TestIDMapDeleteAbsentKeyIsANoop(t *testing.T) {
+	m := newIDMap(64)
+	m.put(7, 7)
+	m.del(1234)
+	if got := m.get(7); got != 7 {
+		t.Fatalf("deleting an absent key disturbed the table: got %d", got)
+	}
+}
