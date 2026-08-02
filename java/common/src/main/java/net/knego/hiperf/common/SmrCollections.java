@@ -55,4 +55,22 @@ public final class SmrCollections {
         emitInt(experiment, "snap_skipped", skipped, "count", 1);
         emitInt(experiment, "snapshot_bytes", snapLen, "bytes", 1);
     }
+
+    /**
+     * Resident set size in bytes, from Linux /proc/self/statm field 2 (resident pages), or 0
+     * where unreadable. The bench hosts are x86-64 Linux with 4 KiB pages, which is the only
+     * case that must be right. Allocates, so callers must keep it out of timed regions.
+     */
+    public static long rssBytes() {
+        try {
+            String s = java.nio.file.Files.readString(java.nio.file.Path.of("/proc/self/statm"));
+            String[] f = s.trim().split("\\s+");
+            if (f.length < 2) {
+                return 0L;
+            }
+            return Long.parseLong(f[1]) * 4096L;
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
 }

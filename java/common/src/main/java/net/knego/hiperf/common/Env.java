@@ -34,4 +34,22 @@ final class Env {
         }
         return value;
     }
+
+    /** readPositiveInt but admits zero, for knobs where zero is a meaningful setting. */
+    static int readNonNegativeInt(String name, int def) {
+        String raw = System.getenv(name);
+        if (raw == null || raw.isEmpty()) {
+            return def;
+        }
+        int value;
+        try {
+            value = Integer.parseInt(raw.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(name + " must be a non-negative integer, got: " + raw);
+        }
+        if (value < 0) {
+            throw new IllegalArgumentException(name + " must be a non-negative integer, got: " + raw);
+        }
+        return value;
+    }
 }

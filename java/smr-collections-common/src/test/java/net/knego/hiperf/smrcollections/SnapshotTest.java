@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 
 class SnapshotTest {
     private static SmrConfig cfg() {
-        return new SmrConfig(4096, 64, 1, 0, 2000, 0, 0, 4096, 200000, 20000);
+        return new SmrConfig(4096, 64, 1, 0, 2000, 0, 0, 4096, 200000, 20000, 100);
     }
 
     private static Book build(SmrConfig c, int n) {

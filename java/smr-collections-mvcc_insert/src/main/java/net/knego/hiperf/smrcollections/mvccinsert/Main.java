@@ -12,6 +12,7 @@ public final class Main {
     public static void main(String[] args) {
         try {
             SmrConfig cfg = SmrConfig.fromEnv();
+            cfg.requireBumpCapacity();
             CowBook book = new CowBook(cfg);
             Workload.SplitMix rng = new Workload.SplitMix(Workload.SEED);
             Workload.Insert ins = new Workload.Insert();

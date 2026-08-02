@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 class CowBookTest {
 
     private static SmrConfig cfg() {
-        return new SmrConfig(1024, 300, 1, 0, 500, 0, 0, 64, 200000, 20000);
+        return new SmrConfig(1024, 300, 1, 0, 500, 0, 0, 64, 200000, 20000, 100);
     }
 
     @Test

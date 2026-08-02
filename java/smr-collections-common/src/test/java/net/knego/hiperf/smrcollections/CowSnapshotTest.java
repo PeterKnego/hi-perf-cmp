@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class CowSnapshotTest {
 
     private static SmrConfig goldenCfg() {
-        return new SmrConfig(4096, 64, 1, 0, 2000, 0, 0, 512, 200000, 20000);
+        return new SmrConfig(4096, 64, 1, 0, 2000, 0, 0, 512, 200000, 20000, 100);
     }
 
     private static CowBook buildCow(SmrConfig c, int n) {
