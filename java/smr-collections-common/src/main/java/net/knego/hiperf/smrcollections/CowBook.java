@@ -13,7 +13,7 @@ import org.agrona.collections.Long2LongHashMap;
  * ({@code born < gen}), so a frozen {@link CowRoot} is never mutated. GC
  * reclaims dropped chunks. The copy decision is ALWAYS the epoch.
  */
-public final class CowBook {
+public final class CowBook implements Churn.Store {
     public static final int LEVEL_CHUNK = 256;
 
     static final class OrderChunk {

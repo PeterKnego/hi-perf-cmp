@@ -4,7 +4,7 @@ import net.knego.hiperf.common.SmrConfig;
 import org.agrona.collections.Long2ObjectHashMap;
 
 /** Fixed-capacity limit order book: flat ladder + pooled orders + Agrona id-map. */
-public final class Book {
+public final class Book implements Churn.Store {
     /** Sentinel handle (empty head/tail, link end). As unsigned = 0xFFFFFFFF. */
     public static final int NIL = -1;
 
