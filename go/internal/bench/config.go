@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Mode selects the role this process plays.
@@ -117,6 +118,42 @@ func positiveEnv(name string, def int) (int, error) {
 		return 0, fmt.Errorf("%s: must be a positive integer, got %d", name, v)
 	}
 	return v, nil
+}
+
+// nonNegativeEnv is positiveEnv but admits zero, for knobs where zero is a
+// meaningful setting rather than a mistake.
+func nonNegativeEnv(name string, def int) (int, error) {
+	s := os.Getenv(name)
+	if s == "" {
+		return def, nil
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %q is not a valid integer", name, s)
+	}
+	if v < 0 {
+		return 0, fmt.Errorf("%s: must not be negative, got %d", name, v)
+	}
+	return v, nil
+}
+
+// RSSBytes returns resident set size in bytes from Linux /proc/self/statm
+// field 2 (resident pages), or 0 where unreadable. The bench hosts are
+// x86-64 Linux with 4 KiB pages, which is the only case that must be right.
+func RSSBytes() int64 {
+	data, err := os.ReadFile("/proc/self/statm")
+	if err != nil {
+		return 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 2 {
+		return 0
+	}
+	pages, err := strconv.ParseInt(fields[1], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return pages * 4096
 }
 
 // Payload builds the fixed request payload of PayloadBytes, filled with a

@@ -22,6 +22,10 @@ type SmrConfig struct {
 	Chunk     int
 	LiveIters int
 	SnapEvery int
+	// OtrBps is the order-to-trade ratio in basis points: the share of
+	// departures that are fills rather than cancels. 100 = 1 %, the
+	// real-exchange figure.
+	OtrBps int
 }
 
 // LoadSmrConfig reads and validates the SMRC_* environment (plan Appendix A.1).
@@ -67,19 +71,24 @@ func LoadSmrConfig() (SmrConfig, error) {
 		return SmrConfig{}, err
 	}
 
+	otrBps, err := nonNegativeEnv("SMRC_OTR_BPS", 100)
+	if err != nil {
+		return SmrConfig{}, err
+	}
+	if otrBps > 10000 {
+		return SmrConfig{}, fmt.Errorf("SMRC_OTR_BPS must be in 0..=10000, got %d", otrBps)
+	}
+
 	cfg := SmrConfig{
 		Cap: cap_, Levels: uint32(levels), Tick: int64(tick), PriceMin: priceMin,
 		Steady: steady, Warmup: warmup, Iters: iters,
-		Chunk: chunk, LiveIters: liveIters, SnapEvery: snapEvery,
+		Chunk: chunk, LiveIters: liveIters, SnapEvery: snapEvery, OtrBps: otrBps,
 	}
 	if levels > 65535 {
 		return SmrConfig{}, fmt.Errorf("SMRC_LEVELS must be <= 65535")
 	}
 	if steady > cap_ || steady > 65535 {
 		return SmrConfig{}, fmt.Errorf("SMRC_STEADY must be <= SMRC_CAP and <= 65535")
-	}
-	if warmup+iters > cap_ {
-		return SmrConfig{}, fmt.Errorf("SMRC_WARMUP + SMRC_ITERS must be <= SMRC_CAP")
 	}
 	if chunk > cap_ {
 		return SmrConfig{}, fmt.Errorf("SMRC_CHUNK must be <= SMRC_CAP")
@@ -88,6 +97,16 @@ func LoadSmrConfig() (SmrConfig, error) {
 		return SmrConfig{}, fmt.Errorf("SMRC_SNAP_EVERY must be <= SMRC_LIVE_ITERS")
 	}
 	return cfg, nil
+}
+
+// RequireBumpCapacity reports whether the pool has room for every op a
+// bump-allocating cell will run. Churn cells recycle slots and must not call
+// it.
+func (c SmrConfig) RequireBumpCapacity() error {
+	if c.Warmup+c.Iters > c.Cap {
+		return fmt.Errorf("SMRC_WARMUP + SMRC_ITERS must be <= SMRC_CAP")
+	}
+	return nil
 }
 
 // signedEnv parses an int64 env var allowing zero/negative; returns def if

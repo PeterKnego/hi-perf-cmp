@@ -13,6 +13,9 @@ func main() {
 	if err != nil {
 		bench.Fatalf("smr-collections-"+experiment, "%v", err)
 	}
+	if err := cfg.RequireBumpCapacity(); err != nil {
+		bench.Fatalf("smr-collections-"+experiment, "%v", err)
+	}
 	book := smrcoll.NewCowBook(cfg)
 	rng := smrcoll.NewSplitMix(smrcoll.SmrSeed)
 	i := 0

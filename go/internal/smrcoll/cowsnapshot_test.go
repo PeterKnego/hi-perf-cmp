@@ -126,3 +126,97 @@ func TestConcurrentCaptureEqualsStwReplay(t *testing.T) {
 		t.Fatal("concurrent capture differs from STW replay at the same position")
 	}
 }
+
+func buildCowWithCancels(c bench.SmrConfig, n, cancelEvery int) *CowBook {
+	b := NewCowBook(c)
+	rng := NewSplitMix(SmrSeed)
+	for i := 0; i < n; i++ {
+		ins := NextInsert(rng, i, c.Levels, c.Tick, c.PriceMin)
+		b.Insert(ins.OrderID, ins.Price, ins.Qty, ins.Side)
+		if i%cancelEvery == cancelEvery-1 {
+			b.Cancel(ins.OrderID)
+		}
+	}
+	return b
+}
+
+// TestCowRoundTripPreservesFreeListOrder is the CoW analogue of
+// TestRoundTripPreservesFreeListOrder (snapshot_test.go): it exercises
+// RestoreCow with a non-empty free list, which none of the pre-existing
+// RestoreCow tests do (buildCow is insert-only, so FreeHead stays NIL there).
+func TestCowRoundTripPreservesFreeListOrder(t *testing.T) {
+	c := bench.SmrConfig{Cap: 4096, Levels: 64, Tick: 1, PriceMin: 0, Steady: 2000, Chunk: 512, OtrBps: 100}
+	b := buildCowWithCancels(c, c.Steady, 4)
+	if b.FreeHead == NIL {
+		t.Fatal("test needs a non-empty free list")
+	}
+	img := append([]byte(nil), NewSnapshotter().EncodeRoot(b.Capture())...)
+	r, err := RestoreCow(img, c)
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	walk := func(bk *CowBook) []uint32 {
+		var out []uint32
+		for slot := bk.FreeHead; slot != NIL; slot = bk.OrderAt(slot).Next {
+			out = append(out, slot)
+		}
+		return out
+	}
+	got, want := walk(r), walk(b)
+	if len(got) != len(want) {
+		t.Fatalf("free list length %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("free list[%d] = %d, want %d", i, got[i], want[i])
+		}
+	}
+	// Re-encode check: CoW analogue of TestRestoreAfterCancelsReencodesIdentically.
+	again := append([]byte(nil), NewSnapshotter().EncodeRoot(r.Capture())...)
+	if !bytes.Equal(img, again) {
+		t.Fatalf("re-encode differs: %d vs %d bytes", len(img), len(again))
+	}
+}
+
+func TestCowCancelImageMatchesFlatImage(t *testing.T) {
+	c := bench.SmrConfig{Cap: 4096, Levels: 64, Tick: 1, PriceMin: 0, Steady: 2000, Chunk: 512, OtrBps: 100}
+	b := NewBook(c)
+	cb := NewCowBook(c)
+	r1, r2 := NewSplitMix(SmrSeed), NewSplitMix(SmrSeed)
+	for i := 0; i < c.Steady; i++ {
+		a := NextInsert(r1, i, c.Levels, c.Tick, c.PriceMin)
+		x := NextInsert(r2, i, c.Levels, c.Tick, c.PriceMin)
+		b.Insert(a.OrderID, a.Price, a.Qty, a.Side)
+		cb.Insert(x.OrderID, x.Price, x.Qty, x.Side)
+	}
+	for id := int64(1); id <= int64(c.Steady); id += 3 {
+		b.Cancel(id)
+		cb.Cancel(id)
+	}
+	flat := append([]byte(nil), NewSnapshotter().Encode(b)...)
+	cow := NewSnapshotter().EncodeRoot(cb.Capture())
+	if !bytes.Equal(flat, cow) {
+		t.Fatalf("CoW image differs from flat: %d vs %d bytes", len(cow), len(flat))
+	}
+}
+
+// TestCowChurnImageMatchesFlatChurnImage is the churn-driven analogue of
+// TestCowCancelImageMatchesFlatImage: it runs the real insert/cancel/fill
+// stream (not a hand-rolled id%3 pattern) through both stores, so it is also
+// the only test in the Go tree that exercises CowBook.Fill.
+func TestCowChurnImageMatchesFlatChurnImage(t *testing.T) {
+	c := churnCfg()
+	b, cb := NewBook(c), NewCowBook(c)
+	cha, chb := NewChurn(c), NewChurn(c)
+	cha.Prebuild(b, c.Steady)
+	chb.Prebuild(cb, c.Steady)
+	for i := 0; i < 10000; i++ {
+		ApplyChurn(b, cha.NextOp())
+		ApplyChurn(cb, chb.NextOp())
+	}
+	flat := append([]byte(nil), NewSnapshotter().Encode(b)...)
+	cow := NewSnapshotter().EncodeRoot(cb.Capture())
+	if !bytes.Equal(flat, cow) {
+		t.Fatalf("CoW churn image differs from flat: %d vs %d bytes", len(cow), len(flat))
+	}
+}

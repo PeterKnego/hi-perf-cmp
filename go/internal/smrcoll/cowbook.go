@@ -7,7 +7,11 @@ package smrcoll
 // CowRoot is never mutated. GC reclaims dropped chunks. The copy decision is
 // ALWAYS the epoch, never pointer comparison.
 
-import "github.com/peterknego/hi-perf-cmp/go/internal/bench"
+import (
+	"fmt"
+
+	"github.com/peterknego/hi-perf-cmp/go/internal/bench"
+)
 
 // levelChunkLen is the fixed ladder chunk size (orders-per-chunk is SMRC_CHUNK).
 const levelChunkLen = 256
@@ -28,6 +32,7 @@ type CowRoot struct {
 	PriceMin, Tick   int64
 	NLevels          uint32
 	Capacity, Hwm    uint32
+	FreeHead         uint32
 	BestBid, BestAsk int32
 	chunk            int
 	orderChunks      []*orderChunk
@@ -57,6 +62,7 @@ type CowBook struct {
 	bidChunks        []*lvlChunk
 	askChunks        []*lvlChunk
 	Hwm              uint32
+	FreeHead         uint32
 	BestBid, BestAsk int32
 	ids              *idMap
 }
@@ -91,7 +97,7 @@ func NewCowBook(cfg bench.SmrConfig) *CowBook {
 		PriceMin: cfg.PriceMin, Tick: cfg.Tick, NLevels: cfg.Levels,
 		Chunk: cfg.Chunk, capacity: cfg.Cap, gen: 1,
 		orderChunks: ocs, bidChunks: mkLane(), askChunks: mkLane(),
-		BestBid: -1, BestAsk: -1, ids: newIDMap(cfg.Cap),
+		FreeHead: NIL, BestBid: -1, BestAsk: -1, ids: newIDMap(cfg.Cap),
 	}
 }
 
@@ -141,8 +147,7 @@ func (b *CowBook) levelMut(side uint8, t uint32) *Level {
 // Insert mirrors Book.Insert (keep in lockstep).
 func (b *CowBook) Insert(orderID, price, qty int64, side uint8) {
 	t := b.tickOf(price)
-	slot := b.Hwm
-	b.Hwm++
+	slot := b.allocSlot()
 	prevTail := b.LevelAt(side, t).Tail
 	*b.orderMut(slot) = Order{OrderID: orderID, Price: price, Qty: qty, Filled: 0, Next: NIL, Prev: prevTail, Side: side}
 	lvl := b.levelMut(side, t)
@@ -176,11 +181,110 @@ func (b *CowBook) Update(orderID, fillQty int64) {
 	b.levelMut(o.Side, t).QtyTotal -= add
 }
 
+func (b *CowBook) allocSlot() uint32 {
+	if b.FreeHead != NIL {
+		slot := b.FreeHead
+		b.FreeHead = b.OrderAt(slot).Next
+		return slot
+	}
+	if int(b.Hwm) == b.capacity {
+		panic(fmt.Sprintf("order pool exhausted: SMRC_CAP=%d reached", b.capacity))
+	}
+	slot := b.Hwm
+	b.Hwm++
+	return slot
+}
+
+func (b *CowBook) freeSlot(slot uint32) {
+	head := b.FreeHead
+	o := b.orderMut(slot)
+	o.OrderID = 0
+	o.Next = head
+	o.Prev = NIL
+	b.FreeHead = slot
+}
+
+func (b *CowBook) unlink(slot uint32, side uint8, t uint32, rem int64) {
+	prev, next := b.OrderAt(slot).Prev, b.OrderAt(slot).Next
+	if prev != NIL {
+		b.orderMut(prev).Next = next
+	}
+	if next != NIL {
+		b.orderMut(next).Prev = prev
+	}
+	lvl := b.levelMut(side, t)
+	if lvl.Head == slot {
+		lvl.Head = next
+	}
+	if lvl.Tail == slot {
+		lvl.Tail = prev
+	}
+	lvl.QtyTotal -= rem
+	lvl.Count--
+}
+
+// repairBest reads through LevelAt, never levelMut — a rescan must not
+// trigger copy-on-write of untouched chunks.
+func (b *CowBook) repairBest(side uint8, t uint32) {
+	if side == 0 {
+		if b.BestBid != int32(t) || b.LevelAt(0, t).Head != NIL {
+			return
+		}
+		nb := int32(-1)
+		for i := int(t); i >= 0; i-- {
+			if b.LevelAt(0, uint32(i)).Head != NIL {
+				nb = int32(i)
+				break
+			}
+		}
+		b.BestBid = nb
+		return
+	}
+	if b.BestAsk != int32(t) || b.LevelAt(1, t).Head != NIL {
+		return
+	}
+	na := int32(-1)
+	for i := int(t); i < int(b.NLevels); i++ {
+		if b.LevelAt(1, uint32(i)).Head != NIL {
+			na = int32(i)
+			break
+		}
+	}
+	b.BestAsk = na
+}
+
+// Cancel — same op semantics as Book.Cancel (keep in lockstep).
+func (b *CowBook) Cancel(orderID int64) {
+	slot := b.ids.get(orderID)
+	o := b.OrderAt(slot)
+	rem := o.Qty - o.Filled
+	side, price := o.Side, o.Price
+	t := b.tickOf(price)
+	b.ids.del(orderID)
+	b.unlink(slot, side, t, rem)
+	b.freeSlot(slot)
+	b.repairBest(side, t)
+}
+
+// Fill — same op semantics as Book.Fill (keep in lockstep).
+func (b *CowBook) Fill(orderID int64) {
+	slot := b.ids.get(orderID)
+	o := b.orderMut(slot)
+	rem := o.Qty - o.Filled
+	o.Filled = o.Qty
+	side, price := o.Side, o.Price
+	t := b.tickOf(price)
+	b.ids.del(orderID)
+	b.unlink(slot, side, t, rem)
+	b.freeSlot(slot)
+	b.repairBest(side, t)
+}
+
 // Capture freezes the current state (O(#chunks)) and bumps the generation.
 func (b *CowBook) Capture() *CowRoot {
 	root := &CowRoot{
 		PriceMin: b.PriceMin, Tick: b.Tick, NLevels: b.NLevels,
-		Capacity: uint32(b.capacity), Hwm: b.Hwm,
+		Capacity: uint32(b.capacity), Hwm: b.Hwm, FreeHead: b.FreeHead,
 		BestBid: b.BestBid, BestAsk: b.BestAsk, chunk: b.Chunk,
 		orderChunks: append([]*orderChunk(nil), b.orderChunks...),
 		bidChunks:   append([]*lvlChunk(nil), b.bidChunks...),
@@ -198,6 +302,8 @@ func (b *CowBook) LevelQty(side uint8, tick uint32) int64 { return b.LevelAt(sid
 func (b *CowBook) rebuildIDs() {
 	b.ids = newIDMap(b.capacity)
 	for slot := uint32(0); slot < b.Hwm; slot++ {
-		b.ids.put(b.OrderAt(slot).OrderID, slot)
+		if b.OrderAt(slot).OrderID != 0 {
+			b.ids.put(b.OrderAt(slot).OrderID, slot)
+		}
 	}
 }
