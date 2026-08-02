@@ -129,6 +129,13 @@ public final class CowSnapshotter {
             throw new IllegalArgumentException(
                     "snapshot capacity " + dec.capacity() + " != SMRC_CAP " + cfg.cap());
         }
+        // nLevels is final on CowBook (from cfg), so unlike Snapshotter.restore there is nothing
+        // to assign — but the wire value must still be checked, or a mismatched image is silently
+        // accepted instead of failing loudly like the capacity gate above.
+        if ((int) dec.nLevels() != cfg.levels()) {
+            throw new IllegalArgumentException(
+                    "snapshot nLevels " + dec.nLevels() + " != SMRC_LEVELS " + cfg.levels());
+        }
         b.freeHead = (int) dec.freeHead();
 
         BookSnapshotDecoder.LevelsDecoder levels = dec.levels();

@@ -98,7 +98,11 @@ public final class Snapshotter {
         return lastLen;
     }
 
-    /** View of the last-encoded image (indices 0..returnedLength). */
+    /**
+     * View of the last-encoded image (indices 0..returnedLength). Invalidated by the next call to
+     * {@link #encode}, which reuses this same backing array — callers that need the bytes to
+     * survive past the next encode must copy them first.
+     */
     public byte[] backing() {
         return backing;
     }
@@ -130,7 +134,6 @@ public final class Snapshotter {
         dec.wrap(buf, header.encodedLength(), header.blockLength(), header.version());
 
         Book b = new Book(cfg);
-        b.nLevels = (int) dec.nLevels();
         b.hwm = (int) dec.hwm();
         b.bestBid = dec.bestBid();
         b.bestAsk = dec.bestAsk();
@@ -139,6 +142,11 @@ public final class Snapshotter {
             throw new IllegalArgumentException(
                     "snapshot capacity " + dec.capacity() + " != SMRC_CAP " + cfg.cap());
         }
+        if ((int) dec.nLevels() != cfg.levels()) {
+            throw new IllegalArgumentException(
+                    "snapshot nLevels " + dec.nLevels() + " != SMRC_LEVELS " + cfg.levels());
+        }
+        b.nLevels = (int) dec.nLevels();
         b.freeHead = (int) dec.freeHead();
 
         BookSnapshotDecoder.LevelsDecoder levels = dec.levels();
