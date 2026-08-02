@@ -50,7 +50,14 @@ public final class SmrCollections {
         }
         emitLatency(experiment, "writer", writerNs);
         emitInt(experiment, "writer_max", max, "ns", writerNs.length);
-        emitLatency(experiment, "snapshot", snapNs);
+        // A distribution with no samples is skipped rather than emitted as zeros — if every
+        // timed capture was skipped (serializer busy the whole run), snapNs is empty and
+        // Stats.percentile would throw (idx = -1). Mirrors Churn.emit's same-shaped guard.
+        // writer_*, snap_count, snap_skipped and snapshot_bytes still emit unconditionally: a
+        // zero snapshot count is real information.
+        if (snapNs.length > 0) {
+            emitLatency(experiment, "snapshot", snapNs);
+        }
         emitInt(experiment, "snap_count", snapNs.length, "count", 1);
         emitInt(experiment, "snap_skipped", skipped, "count", 1);
         emitInt(experiment, "snapshot_bytes", snapLen, "bytes", 1);
