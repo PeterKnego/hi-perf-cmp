@@ -126,3 +126,25 @@ func TestConcurrentCaptureEqualsStwReplay(t *testing.T) {
 		t.Fatal("concurrent capture differs from STW replay at the same position")
 	}
 }
+
+func TestCowCancelImageMatchesFlatImage(t *testing.T) {
+	c := bench.SmrConfig{Cap: 4096, Levels: 64, Tick: 1, PriceMin: 0, Steady: 2000, Chunk: 512, OtrBps: 100}
+	b := NewBook(c)
+	cb := NewCowBook(c)
+	r1, r2 := NewSplitMix(SmrSeed), NewSplitMix(SmrSeed)
+	for i := 0; i < c.Steady; i++ {
+		a := NextInsert(r1, i, c.Levels, c.Tick, c.PriceMin)
+		x := NextInsert(r2, i, c.Levels, c.Tick, c.PriceMin)
+		b.Insert(a.OrderID, a.Price, a.Qty, a.Side)
+		cb.Insert(x.OrderID, x.Price, x.Qty, x.Side)
+	}
+	for id := int64(1); id <= int64(c.Steady); id += 3 {
+		b.Cancel(id)
+		cb.Cancel(id)
+	}
+	flat := append([]byte(nil), NewSnapshotter().Encode(b)...)
+	cow := NewSnapshotter().EncodeRoot(cb.Capture())
+	if !bytes.Equal(flat, cow) {
+		t.Fatalf("CoW image differs from flat: %d vs %d bytes", len(cow), len(flat))
+	}
+}

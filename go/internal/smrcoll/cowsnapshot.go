@@ -22,9 +22,7 @@ func (s *Snapshotter) EncodeRoot(r *CowRoot) []byte {
 	msg.Hwm = r.Hwm
 	msg.BestBid = r.BestBid
 	msg.BestAsk = r.BestAsk
-	// See Snapshotter.Encode: CowBook has no free list yet either, so this
-	// stays NIL, matching Rust's cancel-free-book output.
-	msg.FreeHead = NIL
+	msg.FreeHead = r.FreeHead
 
 	msg.Levels = msg.Levels[:0]
 	for side := uint8(0); side < 2; side++ {
@@ -79,6 +77,9 @@ func RestoreCow(data []byte, cfg bench.SmrConfig) (*CowBook, error) {
 	if err := hdr.Decode(m, rd, msg.SbeSchemaVersion()); err != nil {
 		return nil, err
 	}
+	if hdr.Version != msg.SbeSchemaVersion() {
+		return nil, fmt.Errorf("unsupported snapshot schema version %d (expected %d)", hdr.Version, msg.SbeSchemaVersion())
+	}
 	if err := msg.Decode(m, rd, hdr.Version, hdr.BlockLength, false); err != nil {
 		return nil, err
 	}
@@ -90,6 +91,10 @@ func RestoreCow(data []byte, cfg bench.SmrConfig) (*CowBook, error) {
 	b.Hwm = msg.Hwm
 	b.BestBid = msg.BestBid
 	b.BestAsk = msg.BestAsk
+	if int(msg.Capacity) != cfg.Cap {
+		return nil, fmt.Errorf("snapshot capacity %d != SMRC_CAP %d", msg.Capacity, cfg.Cap)
+	}
+	b.FreeHead = msg.FreeHead
 	for i := range msg.Levels {
 		lv := &msg.Levels[i]
 		lvl := b.levelMut(sideU8(lv.Side), lv.LevelTick)
