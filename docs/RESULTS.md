@@ -260,6 +260,20 @@ handle that keeps one version alive); the harness now pins at capture and
 retention stays at the store default. Same workload, same engine architecture —
 the per-op cost below is what the transaction machinery actually costs.
 
+**Correction — Rust chunked-CoW rows predate an `Arc::get_mut` removal:**
+`order_mut`/`level_mut` no longer call `Arc::get_mut` on every write (see
+`rust/smr-collections/common/src/cowbook.rs`); the redundant atomic
+uniqueness check was replaced by trusting the epoch invariant the code
+already establishes. Every Rust chunked-CoW figure below — the `insert`/
+`update` CoW rows in the next table and the `live_mvcc` writer figures
+further down — was measured before that change and is therefore slow by an
+estimated 7–12 ns per mutable access. That correction is directional (it
+comes from a different host than this table), but comparable in magnitude to
+the published flat-vs-CoW gap itself: the insert row's flat-48/CoW-77 ns gap
+is 29 ns, against an estimated ~30 ns correction on insert. See "Chunked
+CoW's cancel penalty in Rust is `Arc::get_mut`, not copy-on-write" further
+below for the full accounting and the six affected cells.
+
 **Steady-state op cost** (mean, ns — the price you pay per applied command):
 
 | op | store | rust | go | java |
@@ -520,6 +534,17 @@ across their two stores), so only their deltas isolate CoW.
   (133 vs 136 ns). Rust's `mvcc_*` cells have therefore been carrying an
   avoidable per-write cost in every run to date. Java's number does not bear on
   this at all (see ‡ above).
+  **Since fixed** — `order_mut`/`level_mut` now trust the epoch invariant
+  directly, matching Go. This changes six already-journaled Rust cells:
+  `mvcc_insert`, `mvcc_update`, `mvcc_snapshot`, `live_mvcc`, `mvcc_churn`,
+  `live_mvcc_churn`. Every figure for those cells on this page predates that
+  change and is therefore slow by roughly 7–12 ns per mutable access
+  (~14 ns/update, ~30 ns/insert, ~47 ns/cancel). The effect should be
+  negligible on `mvcc_snapshot` and the `live_*` cells, since those are
+  dominated by the serialize, not the per-write check. Quantifying it
+  properly needs a same-host A/B — this grid's ±21–35 % cross-instance band
+  would swamp the effect in any cross-run comparison — so the figures here
+  stand until that run happens.
 
 - **CoW's snapshot-stall advantage widens sharply under churn, and Java may
   finally see it.** Java's STW→CoW improvement is 1.35× without churn and 25×
