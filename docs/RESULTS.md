@@ -520,6 +520,13 @@ across their two stores), so only their deltas isolate CoW.
   (133 vs 136 ns). Rust's `mvcc_*` cells have therefore been carrying an
   avoidable per-write cost in every run to date. Java's number does not bear on
   this at all (see ‡ above).
+  **Since fixed** — `order_mut`/`level_mut` now trust the epoch invariant
+  directly, matching Go. Every Rust `mvcc_*` figure on this page predates that
+  change and is therefore slow by roughly 7–12 ns per mutable access
+  (~14 ns/update, ~30 ns/insert, ~47 ns/cancel). Quantifying it properly needs
+  a same-host A/B — this grid's ±21–35 % cross-instance band would swamp the
+  effect in any cross-run comparison — so the figures here stand until that
+  run happens.
 
 - **CoW's snapshot-stall advantage widens sharply under churn, and Java may
   finally see it.** Java's STW→CoW improvement is 1.35× without churn and 25×
