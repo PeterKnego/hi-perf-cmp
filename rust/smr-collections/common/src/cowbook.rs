@@ -167,6 +167,11 @@ impl CowBook {
             1,
             "current-gen chunk must be unshared"
         );
+        debug_assert_eq!(
+            Arc::weak_count(arc),
+            0,
+            "no Weak may exist to a chunk written through as_ptr"
+        );
         // SAFETY: the epoch check above guarantees `born == gen`. `capture()`
         // clones the chunk-ref tables into the Root and *then* bumps `gen`, so
         // every Arc a Root holds necessarily has `born < gen`. A chunk with
@@ -180,8 +185,9 @@ impl CowBook {
         // site that bumps `gen`; the chunk tables on both `CowBook` and `Root`
         // are private, so no caller can obtain an `&Arc<_>` to clone or
         // downgrade. (`Arc::get_mut`, which this replaced, also checked
-        // `weak == 0`; no `Weak` exists in this crate, and adding one would
-        // invalidate this argument.)
+        // `weak == 0`; no `Weak` exists in this crate, and the weak-count
+        // debug assert above turns that from prose into a CI-checked fact —
+        // the strong-count assert alone would NOT catch one.)
         let chunk = unsafe { &mut *(Arc::as_ptr(arc) as *mut OrderChunk) };
         &mut chunk.orders[off]
     }
@@ -206,6 +212,11 @@ impl CowBook {
             Arc::strong_count(arc),
             1,
             "current-gen chunk must be unshared"
+        );
+        debug_assert_eq!(
+            Arc::weak_count(arc),
+            0,
+            "no Weak may exist to a chunk written through as_ptr"
         );
         // SAFETY: as in `order_mut` for the epoch/enclosure argument — the
         // epoch check above guarantees `born == gen`, and `capture()` bumps
