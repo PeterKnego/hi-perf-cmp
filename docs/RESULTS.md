@@ -260,19 +260,24 @@ handle that keeps one version alive); the harness now pins at capture and
 retention stays at the store default. Same workload, same engine architecture —
 the per-op cost below is what the transaction machinery actually costs.
 
-**Correction — Rust chunked-CoW rows predate an `Arc::get_mut` removal:**
-`order_mut`/`level_mut` no longer call `Arc::get_mut` on every write (see
-`rust/smr-collections/common/src/cowbook.rs`); the redundant atomic
-uniqueness check was replaced by trusting the epoch invariant the code
+**Correction — Rust chunked-CoW rows predate an `Arc::get_mut` removal, now
+measured:** `order_mut`/`level_mut` no longer call `Arc::get_mut` on every
+write (see `rust/smr-collections/common/src/cowbook.rs`); the redundant
+atomic uniqueness check was replaced by trusting the epoch invariant the code
 already establishes. Every Rust chunked-CoW figure below — the `insert`/
 `update` CoW rows in the next table and the `live_mvcc` writer figures
-further down — was measured before that change and is therefore slow by an
-estimated 7–12 ns per mutable access. That correction is directional (it
-comes from a different host than this table), but comparable in magnitude to
-the published flat-vs-CoW gap itself: the insert row's flat-48/CoW-77 ns gap
-is 29 ns, against an estimated ~30 ns correction on insert. See "Chunked
-CoW's cancel penalty in Rust is `Arc::get_mut`, not copy-on-write" further
-below for the full accounting and the six affected cells.
+further down — was measured before that change and is therefore slow. A
+same-host A/B (runs 20260802T212131Z "before" / 20260802T213936Z "after";
+same instances, identical rebuild on both legs, not journaled) has since
+quantified it by comparing the flat→CoW gap **within** each leg: on `insert`
+that gap falls from **+32 ns to +8 ns** (1.64× → 1.15×), so roughly
+three-quarters of the published flat-48/CoW-77 ns gap was the refcount check
+rather than copy-on-write. The gap shrank rather than inverting — read the
+Rust CoW rows below as upper bounds, not as figures that will flip sign.
+See "Chunked CoW's cancel penalty in Rust is `Arc::get_mut`, not
+copy-on-write" further below for the full accounting, the much larger cancel
+correction, the six affected cells, and the caveat that limits how precisely
+any of this can be stated.
 
 **Steady-state op cost** (mean, ns — the price you pay per applied command):
 
@@ -485,6 +490,14 @@ copy-on-write machinery, which is what the 240 → 164 ns move measures. Rust
 and Go hold both variables constant (identical id-map and order representation
 across their two stores), so only their deltas isolate CoW.
 
+**Rust's chunked-CoW cancel (258 ns) is a pre-fix figure, and it carries the
+largest correction on this page.** It was measured before the `Arc::get_mut`
+removal, which hit cancel far harder than insert or update because the
+O(levels) rescan multiplies the per-access cost. The same-host A/B described
+under "Chunked CoW's cancel penalty in Rust is `Arc::get_mut`" below puts the
+flat→CoW cancel gap at **+21 ns after the fix**, against the +133 ns this
+table shows.
+
 **The engine trade under cancellation** (same-run, per applied command):
 
 | cell | per-op mean | vs same-run insert/update |
@@ -534,17 +547,44 @@ across their two stores), so only their deltas isolate CoW.
   (133 vs 136 ns). Rust's `mvcc_*` cells have therefore been carrying an
   avoidable per-write cost in every run to date. Java's number does not bear on
   this at all (see ‡ above).
-  **Since fixed** — `order_mut`/`level_mut` now trust the epoch invariant
-  directly, matching Go. This changes six already-journaled Rust cells:
-  `mvcc_insert`, `mvcc_update`, `mvcc_snapshot`, `live_mvcc`, `mvcc_churn`,
-  `live_mvcc_churn`. Every figure for those cells on this page predates that
-  change and is therefore slow by roughly 7–12 ns per mutable access
-  (~14 ns/update, ~30 ns/insert, ~47 ns/cancel). The effect should be
-  negligible on `mvcc_snapshot` and the `live_*` cells, since those are
-  dominated by the serialize, not the per-write check. Quantifying it
-  properly needs a same-host A/B — this grid's ±21–35 % cross-instance band
-  would swamp the effect in any cross-run comparison — so the figures here
-  stand until that run happens.
+  **Since fixed, and since measured** — `order_mut`/`level_mut` now trust the
+  epoch invariant directly, matching Go. This changes six already-journaled
+  Rust cells: `mvcc_insert`, `mvcc_update`, `mvcc_snapshot`, `live_mvcc`,
+  `mvcc_churn`, `live_mvcc_churn`; every figure for those cells on this page
+  predates the change. The same-host A/B that was owed has now run
+  (20260802T212131Z before / 20260802T213936Z after — same instances,
+  identical rebuild on both legs, 12 Rust cells: the six affected ones plus
+  their six flat-store controls, so the flat→CoW gap is a **within-leg**
+  comparison in each; not journaled, being a scoped 12-cell subset). Gaps,
+  mean ns:
+
+  | flat → CoW gap | before | after |
+  |---|---|---|
+  | `insert` | +31.6 (1.64×) | +7.6 (1.15×) |
+  | `update` | +27.0 (1.16×) | −46.2 (0.69×) |
+  | `churn` cancel | +248.6 (2.37×) | +21.3 (1.21×) |
+  | `churn` fill | +274.7 (2.48×) | +22.1 (1.20×) |
+
+  Two things follow. The 7–12 ns-per-access estimate above was about right for
+  insert and update but **badly understated cancel**: cancel and fill run the
+  O(levels) best-price rescan, so each op made hundreds of `level_mut` calls,
+  and the penalty those cells carried was ~250 ns/op, not ~47. And the
+  conclusion the gap supported survives — it shrank rather than inverted, so
+  chunked CoW's steady-state write cost over the flat store is now near zero
+  in Rust rather than a real penalty. CoW's snapshot-stall advantage is
+  unaffected in both legs (`writer_max` 0.25–0.41× the STW cell's).
+
+  **What this A/B cannot say.** The six flat-store controls — cells the change
+  cannot touch — moved 25–45 % between the two legs, so no cross-leg per-cell
+  delta is attributable to the fix; only the within-leg gaps above are. The
+  likely mechanism is that `book.rs` and `cowbook.rs` are one crate built
+  `lto = "thin"`, `codegen-units = 1`, so editing either can re-lay-out the
+  other. At n=1 per leg the residual noise is comparable to what remains of
+  the gap — the after-leg `update` gap is negative, which a structure doing
+  strictly more work cannot actually be. Read the post-fix gap as
+  **single-digit to low-tens of ns, not distinguishable from zero at this n**,
+  and treat the tables above as pre-fix figures that still stand until a full
+  re-measure replaces them.
 
 - **CoW's snapshot-stall advantage widens sharply under churn, and Java may
   finally see it.** Java's STW→CoW improvement is 1.35× without churn and 25×
