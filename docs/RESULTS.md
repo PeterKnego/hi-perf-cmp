@@ -279,6 +279,54 @@ copy-on-write" further below for the full accounting, the much larger cancel
 correction, the six affected cells, and the caveat that limits how precisely
 any of this can be stated.
 
+**Correction — every Go snapshot figure below predates a codec-mode fix, now
+measured:** the Go `booksnap` codec was generated in the sbe-tool's default
+**owned-struct** mode while the Rust arm used the flyweight encoder API, so the
+two arms of this cell were running different codegen modes and the published
+Go-vs-Rust serialize gap was measuring that rather than the language.
+`go/internal/smrcoll/regen-booksnap.sh` was missing the
+`-Dsbe.go.generate.generate.flyweights=true` its sibling `regen-journalsbe.sh`
+already passes. This is the same effect the `serialization` focus area isolates
+on a single record — `aeron_sbe` 125 ns vs `sbe_struct` 404 ns encode, "codegen
+mode, not format, sets the cost" — amplified by scale: this image carries ~486 K
+field writes instead of eight, and struct mode additionally materialized 60 K
+order structs per snapshot before writing a byte.
+
+A same-host A/B measured this — and unlike every other figure on this page it
+was taken on a **dev box, not the AWS rig**, and is not journaled
+(`SMRC_ITERS=300`, identical rebuild on both legs). Its absolutes are therefore
+not comparable with anything else here; only the before/after ratio is:
+
+| Go metric | before | after | ratio |
+|---|---|---|---|
+| snapshot p50 | 3.863 ms | 0.802 ms | **4.8×** |
+| snapshot mean | 4.054 ms | 0.868 ms | 4.7× |
+| restore p50 | 5.992 ms | 2.134 ms | **2.8×** |
+| restore mean | 6.596 ms | 2.665 ms | 2.5× |
+
+Restore improves because decode shares the codegen — it now reads through
+flyweight accessors instead of materializing every level and order. Decomposing
+the old encoder first showed the intermediate struct slices were only **14 %** of
+its cost (0.59 of 4.03 ms); the other 86 % was `SbeGoMarshaller` writing each
+field through an interface-dispatched `io.Writer` call, so dropping the
+intermediate alone would have bought almost nothing.
+
+**Affected cells, all Go:** `flat (stw)` ser/restore and `chunked CoW`
+ser/restore in the serialize table; `live_stw / go` and `live_mvcc / go` in the
+live table; `live_stw` and `live_stw_churn` in the churn table. Read every one
+as superseded pending a journaled re-run. `live_mvcc / go` skipped 5 of 10
+snapshot triggers because its ~5.2 ms serialize exceeded the ~4 ms window; that
+should stop.
+
+**Java was checked and needs no change.** sbe-tool's Java output has no
+owned-struct mode — it only emits Agrona flyweight encoder/decoder pairs — and
+the Java adapter already writes straight into a reused `UnsafeBuffer`. On the
+same dev box it measured 474 µs snapshot p50 and 5.34 ms restore p50 (12.1 ms
+mean) — again dev-box context, not a fleet figure. Java's restore cost is not
+the codec: `new Book(cfg)` allocates 262,144 `Order` and 2,048 `Level` objects
+before decoding a byte, where Go's `NewBook` makes one contiguous slice. That is a real property of the pooled-object design
+and the figure the grid should show.
+
 **Steady-state op cost** (mean, ns — the price you pay per applied command):
 
 | op | store | rust | go | java |
@@ -294,9 +342,12 @@ any of this can be stated.
 
 | store | rust ser | go ser | java ser | rust restore | go restore | java restore |
 |---|---|---|---|---|---|---|
-| flat (stw) | 611 µs | 5.01 ms | 790 µs | 1.34 ms | 9.20 ms | 10.7 ms |
-| chunked CoW | 682 µs | 5.08 ms | 706 µs | 4.81 ms | 9.13 ms | 5.42 ms |
+| flat (stw) | 611 µs | 5.01 ms † | 790 µs | 1.34 ms | 9.20 ms † | 10.7 ms |
+| chunked CoW | 682 µs | 5.08 ms † | 706 µs | 4.81 ms | 9.13 ms † | 5.42 ms |
 | ultima_db | 1.45 ms | — | — | 8.60 ms | — | — |
+
+† Superseded: measured before the Go flyweight-codec fix — see the correction
+above. Same-host A/B puts serialize ~4.8× and restore ~2.8× faster.
 
 **Snapshot under live writes** (`live_*`: 200 K timed updates, a snapshot every
 20 K ops; `writer_max` is the stall the write path actually observed):
@@ -304,15 +355,20 @@ any of this can be stated.
 | cell | writer p99 | **writer max** | serialize mean | skipped |
 |---|---|---|---|---|
 | live_stw / rust | 164 ns | **746 µs** | 639 µs | 0/10 |
-| live_stw / go | 166 ns | **5.15 ms** | 4.90 ms | 0/10 |
+| live_stw / go † | 166 ns | **5.15 ms** | 4.90 ms | 0/10 |
 | live_stw / java | 482 ns | **3.75 ms** | 1.97 ms | 0/10 |
 | live_mvcc / rust | 239 ns | **258 µs** | 673 µs | 0/10 |
-| live_mvcc / go | 297 ns | **233 µs** | 5.19 ms | 5/10 |
+| live_mvcc / go † | 297 ns | **233 µs** | 5.19 ms | 5/10 |
 | live_mvcc / java | 580 ns | **3.04 ms** | 3.83 ms | 0/10 |
 | live_ultima / rust | 8.26 µs | **196 µs** | 1.87 ms | 0/10 |
 
 (`live_ultima`'s writer p50 is 6.6 µs — the per-op txn cost — so its p99/max
 columns are on a different base than the ns-scale flat stores.)
+
+† Superseded: both Go rows predate the flyweight-codec fix, and both are
+serialize-dominated. `live_stw / go`'s writer_max *is* the serialize, so it
+should fall with it; `live_mvcc / go`'s 5/10 skipped triggers were caused by the
+serialize overrunning the trigger window and should stop.
 
 **What we learned:**
 
@@ -512,11 +568,14 @@ table shows.
 
 | cell | rust | go | java |
 |---|---|---|---|
-| `live_stw` (no churn) | 574 µs | 5.22 ms | 3.90 ms |
-| `live_stw_churn` | 684 µs | 5.37 ms | 6.04 ms |
+| `live_stw` (no churn) | 574 µs | 5.22 ms † | 3.90 ms |
+| `live_stw_churn` | 684 µs | 5.37 ms † | 6.04 ms |
 | `live_mvcc` (no churn) | 124 µs | 244 µs | 2.88 ms |
 | `live_mvcc_churn` | **204 µs** | **305 µs** | **239 µs** |
 | `live_ultima_churn` | 199 µs | — | — |
+
+† Superseded: Go STW writer_max is the serialize, measured before the
+flyweight-codec fix — see the correction earlier in this section.
 
 **What we learned:**
 
