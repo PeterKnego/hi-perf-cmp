@@ -1,7 +1,6 @@
 package smrcoll
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
@@ -12,131 +11,170 @@ import (
 
 var crc32cTable = crc32.MakeTable(crc32.Castagnoli)
 
-// Snapshotter holds the reusable marshaller + buffer + message scratch so that
+// sbeMeta is an unwrapped flyweight used only for the schema constants.
+var sbeMeta booksnap.BookSnapshot
+
+// messageHeaderLength is the SBE frame header preceding the message body.
+const messageHeaderLength = 8
+
+// Snapshotter holds the reusable output buffer and message flyweight so that
 // repeated Encode calls avoid re-allocating the SBE machinery.
+//
+// The codec is generated in flyweight mode
+// (`-Dsbe.go.generate.generate.flyweights=true`, see regen-booksnap.sh), so
+// fields are written straight into the output buffer at computed offsets. The
+// default owned-struct codegen instead materializes every level and order as a
+// Go struct and writes each field through an io.Writer, which costs ~5.5x more
+// on this image — the same flyweight-vs-struct gap the serialization focus area
+// measures on a single record.
 type Snapshotter struct {
-	m   *booksnap.SbeGoMarshaller
-	buf *bytes.Buffer
+	buf []byte
 	msg booksnap.BookSnapshot
 }
 
-func NewSnapshotter() *Snapshotter {
-	return &Snapshotter{m: booksnap.NewSbeGoMarshaller(), buf: new(bytes.Buffer)}
-}
+func NewSnapshotter() *Snapshotter { return &Snapshotter{} }
 
-func sideEnum(side uint8) booksnap.SideEnum {
+func sideEnum(side uint8) booksnap.Side {
 	if side == 0 {
-		return booksnap.Side.BID
+		return booksnap.Side_BID
 	}
-	return booksnap.Side.ASK
+	return booksnap.Side_ASK
 }
 
-func sideU8(s booksnap.SideEnum) uint8 {
-	if s == booksnap.Side.ASK {
+func sideU8(s booksnap.Side) uint8 {
+	if s == booksnap.Side_ASK {
 		return 1
 	}
 	return 0
 }
 
+// encodedLength returns the exact image size for nLevels levels and nOrders
+// orders, so the buffer is sized once rather than grown.
+func encodedLength(nLevels, nOrders int) int {
+	return messageHeaderLength + int(sbeMeta.SbeBlockLength()) +
+		groupHeaderLength + nLevels*levelBlockLength +
+		groupHeaderLength + nOrders*orderBlockLength + crcLength
+}
+
+const (
+	groupHeaderLength = 4
+	levelBlockLength  = 25
+	orderBlockLength  = 45
+	crcLength         = 4
+)
+
 // Encode serializes the book (header + body + 4-byte crc32c) into the reused
 // buffer and returns the bytes (valid until the next Encode call).
 func (s *Snapshotter) Encode(b *Book) []byte {
-	s.buf.Reset()
-	msg := &s.msg
-	msg.PriceMin = b.PriceMin
-	msg.TickSize = b.Tick
-	msg.NLevels = b.NLevels
-	msg.Capacity = uint32(len(b.Pool))
-	msg.Hwm = b.Hwm
-	msg.BestBid = b.BestBid
-	msg.BestAsk = b.BestAsk
-	msg.FreeHead = b.FreeHead
+	nLevels := 0
+	for _, lane := range [2][]Level{b.Bids, b.Asks} {
+		for i := range lane {
+			if lane[i].Head != NIL {
+				nLevels++
+			}
+		}
+	}
+	buf := s.grow(encodedLength(nLevels, int(b.Hwm)))
 
-	msg.Levels = msg.Levels[:0]
+	m := s.msg.WrapAndApplyHeader(buf, 0, uint64(len(buf)))
+	m.SetPriceMin(b.PriceMin).SetTickSize(b.Tick).SetNLevels(b.NLevels).
+		SetCapacity(uint32(len(b.Pool))).SetHwm(b.Hwm).
+		SetBestBid(b.BestBid).SetBestAsk(b.BestAsk).SetFreeHead(b.FreeHead)
+
+	lg := m.LevelsCount(uint16(nLevels))
 	for side, lane := range [2][]Level{b.Bids, b.Asks} {
 		for t := range lane {
 			lvl := lane[t]
 			if lvl.Head == NIL {
 				continue
 			}
-			msg.Levels = append(msg.Levels, booksnap.BookSnapshotLevels{
-				Side: sideEnum(uint8(side)), LevelTick: uint32(t),
-				QtyTotal: lvl.QtyTotal, OrderCount: lvl.Count, Head: lvl.Head, Tail: lvl.Tail,
-			})
+			lg.Next().SetSide(sideEnum(uint8(side))).SetLevelTick(uint32(t)).
+				SetQtyTotal(lvl.QtyTotal).SetOrderCount(lvl.Count).
+				SetHead(lvl.Head).SetTail(lvl.Tail)
 		}
 	}
-	msg.Orders = msg.Orders[:0]
+	og := m.OrdersCount(uint16(b.Hwm))
 	for slot := uint32(0); slot < b.Hwm; slot++ {
-		o := b.Pool[slot]
-		msg.Orders = append(msg.Orders, booksnap.BookSnapshotOrders{
-			Slot: slot, OrderId: o.OrderID, Price: o.Price, Qty: o.Qty, Filled: o.Filled,
-			// SBE field is NextSlot (Java Iterator.Next collision avoided); struct field stays Next.
-			Side: sideEnum(o.Side), NextSlot: o.Next, Prev: o.Prev,
-		})
+		o := &b.Pool[slot]
+		og.Next().SetSlot(slot).SetOrderId(o.OrderID).SetPrice(o.Price).
+			SetQty(o.Qty).SetFilled(o.Filled).SetSide(sideEnum(o.Side)).
+			SetNextSlot(o.Next).SetPrev(o.Prev)
 	}
+	return s.seal(buf, m.EncodedLength())
+}
 
-	hdr := booksnap.MessageHeader{
-		BlockLength: msg.SbeBlockLength(), TemplateId: msg.SbeTemplateId(),
-		SchemaId: msg.SbeSchemaId(), Version: msg.SbeSchemaVersion(),
+// grow returns a buffer of exactly n bytes, reusing the previous allocation
+// when it is large enough.
+func (s *Snapshotter) grow(n int) []byte {
+	if cap(s.buf) < n {
+		s.buf = make([]byte, n)
 	}
-	_ = hdr.Encode(s.m, s.buf)
-	_ = msg.Encode(s.m, s.buf, false)
+	return s.buf[:n]
+}
 
-	crc := crc32.Checksum(s.buf.Bytes(), crc32cTable)
-	var tmp [4]byte
-	binary.LittleEndian.PutUint32(tmp[:], crc)
-	s.buf.Write(tmp[:])
-	return s.buf.Bytes()
+// seal appends the crc32c trailer over everything written so far.
+func (s *Snapshotter) seal(buf []byte, bodyLength uint64) []byte {
+	end := messageHeaderLength + int(bodyLength)
+	binary.LittleEndian.PutUint32(buf[end:], crc32.Checksum(buf[:end], crc32cTable))
+	return buf[:end+crcLength]
+}
+
+// decodeHeader verifies the crc32c trailer and schema version, then wraps the
+// message body for decoding.
+func decodeHeader(data []byte, msg *booksnap.BookSnapshot) error {
+	if len(data) < crcLength {
+		return fmt.Errorf("snapshot too short")
+	}
+	sbeLen := len(data) - crcLength
+	want := binary.LittleEndian.Uint32(data[sbeLen:])
+	if crc32.Checksum(data[:sbeLen], crc32cTable) != want {
+		return fmt.Errorf("crc32c mismatch")
+	}
+	var hdr booksnap.MessageHeader
+	hdr.Wrap(data, 0, uint64(sbeMeta.SbeSchemaVersion()), uint64(sbeLen))
+	if hdr.Version() != sbeMeta.SbeSchemaVersion() {
+		return fmt.Errorf("unsupported snapshot schema version %d (expected %d)",
+			hdr.Version(), sbeMeta.SbeSchemaVersion())
+	}
+	msg.WrapForDecode(data, messageHeaderLength,
+		uint64(hdr.BlockLength()), uint64(hdr.Version()), uint64(sbeLen))
+	return nil
 }
 
 // Restore rebuilds a fresh book from an encoded image, verifying the crc32c.
 func Restore(data []byte, cfg bench.SmrConfig) (*Book, error) {
-	if len(data) < 4 {
-		return nil, fmt.Errorf("snapshot too short")
-	}
-	sbeLen := len(data) - 4
-	want := binary.LittleEndian.Uint32(data[sbeLen:])
-	if crc32.Checksum(data[:sbeLen], crc32cTable) != want {
-		return nil, fmt.Errorf("crc32c mismatch")
-	}
-	r := bytes.NewReader(data[:sbeLen])
-	m := booksnap.NewSbeGoMarshaller()
 	var msg booksnap.BookSnapshot
-	var hdr booksnap.MessageHeader
-	if err := hdr.Decode(m, r, msg.SbeSchemaVersion()); err != nil {
-		return nil, err
-	}
-	if hdr.Version != msg.SbeSchemaVersion() {
-		return nil, fmt.Errorf("unsupported snapshot schema version %d (expected %d)", hdr.Version, msg.SbeSchemaVersion())
-	}
-	if err := msg.Decode(m, r, hdr.Version, hdr.BlockLength, false); err != nil {
+	if err := decodeHeader(data, &msg); err != nil {
 		return nil, err
 	}
 
 	b := NewBook(cfg)
-	b.PriceMin = msg.PriceMin
-	b.Tick = msg.TickSize
-	b.NLevels = msg.NLevels
-	b.Hwm = msg.Hwm
-	b.BestBid = msg.BestBid
-	b.BestAsk = msg.BestAsk
-	if int(msg.Capacity) != cfg.Cap {
-		return nil, fmt.Errorf("snapshot capacity %d != SMRC_CAP %d", msg.Capacity, cfg.Cap)
+	b.PriceMin = msg.PriceMin()
+	b.Tick = msg.TickSize()
+	b.NLevels = msg.NLevels()
+	b.Hwm = msg.Hwm()
+	b.BestBid = msg.BestBid()
+	b.BestAsk = msg.BestAsk()
+	if int(msg.Capacity()) != cfg.Cap {
+		return nil, fmt.Errorf("snapshot capacity %d != SMRC_CAP %d", msg.Capacity(), cfg.Cap)
 	}
-	b.FreeHead = msg.FreeHead
-	for i := range msg.Levels {
-		lv := &msg.Levels[i]
+	b.FreeHead = msg.FreeHead()
+
+	for lg := msg.Levels(); lg.HasNext(); {
+		lv := lg.Next()
 		lane := b.Bids
-		if sideU8(lv.Side) == 1 {
+		if sideU8(lv.Side()) == 1 {
 			lane = b.Asks
 		}
-		lane[lv.LevelTick] = Level{Head: lv.Head, Tail: lv.Tail, QtyTotal: lv.QtyTotal, Count: lv.OrderCount}
+		lane[lv.LevelTick()] = Level{
+			Head: lv.Head(), Tail: lv.Tail(), QtyTotal: lv.QtyTotal(), Count: lv.OrderCount(),
+		}
 	}
-	for i := range msg.Orders {
-		o := &msg.Orders[i]
-		b.Pool[o.Slot] = Order{
-			OrderID: o.OrderId, Price: o.Price, Qty: o.Qty, Filled: o.Filled,
-			Next: o.NextSlot, Prev: o.Prev, Side: sideU8(o.Side),
+	for og := msg.Orders(); og.HasNext(); {
+		o := og.Next()
+		b.Pool[o.Slot()] = Order{
+			OrderID: o.OrderId(), Price: o.Price(), Qty: o.Qty(), Filled: o.Filled(),
+			Next: o.NextSlot(), Prev: o.Prev(), Side: sideU8(o.Side()),
 		}
 	}
 	b.rebuildIDs()

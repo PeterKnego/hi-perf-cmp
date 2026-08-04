@@ -8,6 +8,8 @@ jar="$root/rust/serialization/aeron_sbe/vendor/sbe-all-1.38.1.jar"
 schema="$root/rust/smr-collections/schema/book_snapshot.xml"
 out="$here"                       # tool creates booksnap/ under here
 rm -rf "$here/booksnap"
-java -Dsbe.target.language=Golang -Dsbe.output.dir="$out" -jar "$jar" "$schema"
+java -Dsbe.target.language=Golang \
+     -Dsbe.go.generate.generate.flyweights=true \
+     -Dsbe.output.dir="$out" -jar "$jar" "$schema"
 gofmt -w "$here/booksnap"
 echo "regenerated + gofmt'd $here/booksnap" 1>&2
