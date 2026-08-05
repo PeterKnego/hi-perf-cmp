@@ -18,7 +18,7 @@ code in each language.
 | [20260626T213457Z](../journal/runs/20260626T213457Z-deef392a8445/entry.md) | First `filesystem-write` run on local NVMe (fsync/fdatasync/prealloc/batch) |
 | [20260627T071950Z](../journal/runs/20260627T071950Z-07a4b9a872fc/entry.md) | First `thread-handoff` run (spin/condvar/channel/ring); network + filesystem re-measured |
 | [20260627T193417Z](../journal/runs/20260627T193417Z-003926ca6c91/entry.md) | Optimized SPSC ring (Rust + Go); full matrix re-measured |
-| [20260713T152911Z](../journal/runs/20260713T152911Z-23b9778538e9/entry.md) | First `serialization` run (sbe_gen/aeron_sbe/bincode); full matrix re-measured — **current baseline** |
+| [20260713T152911Z](../journal/runs/20260713T152911Z-23b9778538e9/entry.md) | First `serialization` run (sbe_gen/aeron_sbe/bincode); full matrix re-measured — **baseline for network-rtt / filesystem-write / serialization** |
 | [20260715T111653Z](../journal/runs/20260715T111653Z-9f707777cae2/entry.md) | First `smr-collections` run (LOB insert/update/snapshot, stop-the-world store — scoped run) |
 | [20260716T100733Z](../journal/runs/20260716T100733Z-16a158ef9fd2/entry.md) | Go `serialization` cells added (`bebop`, `protobuf`) alongside the Rust codecs (scoped run) |
 | [20260720T120209Z](../journal/runs/20260720T120209Z-79706160a45d/entry.md) | First `rpc-roundtrip` run (sbe_udp/grpc/bebop_tcp) — mutating cross-host round-trip (scoped run) |
@@ -33,9 +33,13 @@ code in each language.
 | [20260804T222844Z](../journal/runs/20260804T222844Z-c80faa7ab8ea/entry.md) | `smr-collections` full re-measure — first journaled run carrying the Rust CoW `Arc::get_mut` removal and the Go flyweight-codec fix; all 21 cells, one run (scoped). The smr section's tables quote this run |
 | [20260805T182442Z](../journal/runs/20260805T182442Z-f6c13200cda8/entry.md) | `thread-handoff` re-measure + first **backoff**/**backoff_yield** cells: the Aeron ladder's timed-park cost per language (Go `time.Sleep` collapse vs the aeron-go yielding fix vs nanosleep/parkNanos) — 16 cells, one run (scoped) |
 
-Unless noted, tables below show the **current baseline** run (20260713T152911Z). The
-July 15 – 27 runs are **scoped** (one focus area each, not a full-matrix
-re-measure), so the baseline pointer is unchanged; their sections cite their own run.
+The regression baseline is **per focus area** (each cell in
+`journal/baselines.json` names its reference run): `network-rtt`,
+`filesystem-write`, and `serialization` reference 20260713T152911Z;
+`smr-collections` references 20260804T222844Z; `thread-handoff` references
+20260805T182442Z. `rpc-roundtrip` is not yet baselined. Scoped runs (one
+focus area, not a full-matrix re-measure) move only their own cells' baseline;
+each section below cites the run its tables quote.
 
 ---
 
