@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import net.knego.hiperf.common.GcDiag;
 import net.knego.hiperf.common.SmrCollections;
 import net.knego.hiperf.common.SmrConfig;
 import net.knego.hiperf.smrcollections.CowBook;
@@ -71,6 +72,7 @@ public final class Main {
             }
 
             long[] writerNs = new long[cfg.liveIters()];
+            GcDiag diag = new GcDiag();
             long skipped = 0;
             for (int k = 0; k < cfg.liveIters(); k++) {
                 long t0 = System.nanoTime();
@@ -84,7 +86,9 @@ public final class Main {
                 }
                 Workload.nextUpdate(rng, n, up);
                 book.update(up.orderId, up.fillQty);
-                writerNs[k] = System.nanoTime() - t0;
+                long ns = System.nanoTime() - t0;
+                writerNs[k] = ns;
+                diag.record(k, ns);
             }
             q.put(new CapMsg(null, 0));
             ser.join();
@@ -94,6 +98,7 @@ public final class Main {
             // and counts.
             long[] snapNs = snapDur.stream().skip(1).mapToLong(Long::longValue).toArray();
             SmrCollections.emitLive(EXPERIMENT, writerNs, snapNs, skipped, snapLenBox[0]);
+            diag.emit(EXPERIMENT);
         } catch (IllegalArgumentException e) {
             System.err.println("smr-collections-" + EXPERIMENT + ": " + e.getMessage());
             System.exit(1);

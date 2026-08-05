@@ -1,6 +1,7 @@
 package net.knego.hiperf.smrcollections.livestwchurn;
 
 import java.util.Arrays;
+import net.knego.hiperf.common.GcDiag;
 import net.knego.hiperf.common.SmrCollections;
 import net.knego.hiperf.common.SmrConfig;
 import net.knego.hiperf.smrcollections.Book;
@@ -36,6 +37,7 @@ public final class Main {
             s.encode(book);
 
             long[] writerNs = new long[cfg.liveIters()];
+            GcDiag diag = new GcDiag();
             long[] snapNs = new long[cfg.liveIters() / cfg.snapEvery() + 1];
             int snapCount = 0;
             long snapLen = 0;
@@ -65,6 +67,7 @@ public final class Main {
                     rssPeak = Math.max(rssPeak, SmrCollections.rssBytes());
                 }
                 writerNs[k] = ns;
+                diag.record(k, ns);
                 if (op.kind == Churn.OP_INSERT) {
                     ins[insN++] = ns;
                 } else if (op.kind == Churn.OP_CANCEL) {
@@ -74,6 +77,7 @@ public final class Main {
                 }
             }
             SmrCollections.emitLive(EXPERIMENT, writerNs, Arrays.copyOf(snapNs, snapCount), 0, snapLen);
+            diag.emit(EXPERIMENT);
             if (insN > 0) {
                 SmrCollections.emitLatency(EXPERIMENT, "insert", Arrays.copyOf(ins, insN));
             }

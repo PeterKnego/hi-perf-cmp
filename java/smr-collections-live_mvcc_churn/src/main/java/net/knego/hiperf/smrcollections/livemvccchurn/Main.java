@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import net.knego.hiperf.common.GcDiag;
 import net.knego.hiperf.common.SmrCollections;
 import net.knego.hiperf.common.SmrConfig;
 import net.knego.hiperf.smrcollections.Churn;
@@ -75,6 +76,7 @@ public final class Main {
             }
 
             long[] writerNs = new long[cfg.liveIters()];
+            GcDiag diag = new GcDiag();
             long skipped = 0;
             int half = cfg.liveIters() / 2 + 1;
             long[] ins = new long[half];
@@ -114,6 +116,7 @@ public final class Main {
                     rssPeak = Math.max(rssPeak, SmrCollections.rssBytes());
                 }
                 writerNs[k] = ns;
+                diag.record(k, ns);
                 if (op.kind == Churn.OP_INSERT) {
                     ins[insN++] = ns;
                 } else if (op.kind == Churn.OP_CANCEL) {
@@ -135,6 +138,7 @@ public final class Main {
             // and counts.
             long[] snapNs = snapDur.stream().skip(1).mapToLong(Long::longValue).toArray();
             SmrCollections.emitLive(EXPERIMENT, writerNs, snapNs, skipped, snapLenBox[0]);
+            diag.emit(EXPERIMENT);
             if (insN > 0) {
                 SmrCollections.emitLatency(EXPERIMENT, "insert", java.util.Arrays.copyOf(ins, insN));
             }
