@@ -303,13 +303,21 @@ columns are on a different base than the ns-scale flat stores.)
   capture plus first-touch chunk copies, not the encode. (Single-event maxima
   carry 15–60 % cross-instance noise on this grid; the multiples are the
   finding, not the third digit.)
-- **In Java the stall source is the collector, not the algorithm**:
-  `live_mvcc` writer_max improves only ~1.35× (3.94 → 2.91 ms). CoW chunk
-  copies create garbage, and a GC pause lands on the writer where the
-  serialize used to. The same JVM keeps p99 at 532 ns — the design works; the
-  runtime charges for it elsewhere. (Unverified attribution — GC logs would
-  confirm. But see the churn subsection: under cancel-heavy load Java's CoW
-  writer_max drops to µs-scale in both runs measured.)
+- **In Java the stall source is the collector, not the algorithm — now
+  GC-log-verified.** `live_mvcc` writer_max improves only ~1.35×
+  (3.94 → 2.91 ms). CoW chunk copies create garbage, and a GC pause lands on
+  the writer where the serialize used to; the same JVM keeps p99 at 532 ns —
+  the design works, the runtime charges for it elsewhere. A labelled
+  GC-attribution diagnostic (2026-08-05, fleet, 3 repeats per live cell:
+  `SMRC_GC_DIAG` stall-event stamps lined up against `-Xlog:gc*` wall-clock
+  pause logs; never journaled as grid figures) confirmed it exactly: in all
+  three `live_mvcc` repeats the run's **single** G1 young pause (2.6–2.8 ms)
+  overlaps the writer_max op (2.8–3.1 ms) — the max *is* the pause. The STW
+  control double-confirms the mechanism from the other side: `live_stw`
+  logged **zero GC events in the entire run** (the serialize writes into a
+  reused buffer and allocates nothing — the chunk copies are what makes the
+  garbage), and its maxima sit on the snapshot-trigger iterations, i.e. the
+  serialize, as always claimed.
 - **The steady-state CoW tax in Rust is now small — and most of what the grid
   used to charge it was a bug.** Rust insert pays +23 % (48 → 59 ns) and
   update +7 % (90 → 96 ns). Earlier runs showed +62 % on insert: that was the
@@ -513,13 +521,23 @@ across their two stores), so only their deltas isolate CoW.
   first estimate). The accessors now trust the epoch invariant directly
   (debug-asserted on strong and weak counts), matching what Go always did.
   Java's number does not bear on this at all (see ‡ above).
-- **CoW's snapshot-stall advantage widens sharply under churn, and Java
-  does see it — in both runs measured.** Java's STW→CoW `writer_max`
-  improvement is ~1.35× without churn but **15× with it** (3.99 ms → 259 µs;
-  the prior run showed 25×, 6.04 ms → 239 µs). Two consecutive runs landing
-  µs-scale CoW maxima against ms-scale STW maxima upgrade this from
-  suggestive to consistent, though the GC-pause attribution behind the
-  no-churn cells remains unverified.
+- **CoW's snapshot-stall advantage widens sharply under churn, and Java does
+  see it — but the GC diagnostic shows *why*, and it tempers the claim.**
+  Java's STW→CoW `writer_max` improvement is ~1.35× without churn but **15×
+  with it** (3.99 ms → 259 µs; the prior run showed 25×). The 2026-08-05
+  GC-attribution runs explain the mechanism: each `live_mvcc_churn` repeat
+  still incurs exactly one ~2.3 ms G1 young pause, but it fires **before the
+  timed loop** — churn's heavier setup (pool + free-list fill) empties the
+  young gen right at loop entry, and the ~60–100 ms timed window then
+  completes without a collection, so writer_max stays µs-scale. The
+  structural claim stands: CoW removes the *serialize* from the writer
+  unconditionally, and the residual exposure is GC cadence, not the
+  algorithm. But the µs-scale churn maxima are a
+  measurement-window-vs-pause-cadence outcome, not a guarantee — a
+  production-length run would land periodic young pauses on the CoW writer
+  (~2–3 ms each at this allocation rate) unless the collector is tuned for
+  it; a ZGC/Shenandoah arm is the natural follow-up if that stall budget
+  matters.
 - **`journal compare` vs the previous smr run flags nothing confirmable:**
   untouched flat-store cells moved up to ±30 % in both directions across the
   two instance draws — the documented cross-instance band — which is exactly
@@ -647,7 +665,10 @@ remains empty.
    is starkest:** under churn, a stop-the-world serialize stalls the writer for
    0.7–4.0 ms depending on language, while chunked copy-on-write holds it to
    230–420 µs — and that gap is much wider under cancellation than without it
-   (in Java, 15–25× across the two runs measured).
+   (in Java, 15–25× across the two runs measured; GC-log-verified caveat:
+   Java's residual CoW stall exposure is young-GC cadence — ~2–3 ms pauses
+   from chunk-copy garbage — so over production-length windows the Java CoW
+   writer eats periodic GC stalls unless the collector is tuned for it).
    Choose stop-the-world only if you can snapshot on a non-voting replica.
 
 6. **RPC framework vs hand-rolled stack:** for a mutating request/response on
