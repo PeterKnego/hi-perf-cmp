@@ -1,5 +1,6 @@
 package net.knego.hiperf.smrcollections.livestw;
 
+import net.knego.hiperf.common.GcDiag;
 import net.knego.hiperf.common.SmrCollections;
 import net.knego.hiperf.common.SmrConfig;
 import net.knego.hiperf.smrcollections.Book;
@@ -31,6 +32,7 @@ public final class Main {
             // steady-state stall, not first-touch cost
             s.encode(book);
             long[] writerNs = new long[cfg.liveIters()];
+            GcDiag diag = new GcDiag();
             long[] snapNs = new long[cfg.liveIters() / cfg.snapEvery() + 1];
             int snapCount = 0;
             long snapLen = 0;
@@ -42,9 +44,12 @@ public final class Main {
                 }
                 Workload.nextUpdate(rng, n, up);
                 book.update(up.orderId, up.fillQty);
-                writerNs[k] = System.nanoTime() - t0;
+                long ns = System.nanoTime() - t0;
+                writerNs[k] = ns;
+                diag.record(k, ns);
             }
             SmrCollections.emitLive(EXPERIMENT, writerNs, java.util.Arrays.copyOf(snapNs, snapCount), 0, snapLen);
+            diag.emit(EXPERIMENT);
         } catch (IllegalArgumentException e) {
             System.err.println("smr-collections-" + EXPERIMENT + ": " + e.getMessage());
             System.exit(1);
