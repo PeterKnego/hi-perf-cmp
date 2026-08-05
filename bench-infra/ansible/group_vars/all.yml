@@ -15,6 +15,8 @@ experiments:
   - { focus_area: filesystem-write, experiment: batch,       kind: local }
   - { focus_area: thread-handoff,   experiment: spin,        kind: local }
   - { focus_area: thread-handoff,   experiment: condvar,     kind: local }
+  - { focus_area: thread-handoff,   experiment: backoff,     kind: local }
+  - { focus_area: thread-handoff,   experiment: backoff_yield, kind: local, languages: [go] }
   - { focus_area: thread-handoff,   experiment: channel,     kind: local }
   - { focus_area: thread-handoff,   experiment: ring,        kind: local }
   # serialization is Rust + Go (Java not planned): the optional `languages` key
@@ -82,6 +84,7 @@ fsw_batch: 32
 th_warmup: 10000
 th_iterations: 100000
 th_ring_cap: 1024
+th_gap_ns: 100000  # backoff cells: requester pacing gap so the responder ladder ramps
 
 # --- serialization params (single-host, node0). Seven experiment names over one
 #     shared journal record carrying a typed command (cmdQty int64, cmdPrice

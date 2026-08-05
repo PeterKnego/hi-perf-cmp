@@ -20,6 +20,10 @@ pub struct HandoffConfig {
     pub iterations: usize,
     /// Ring capacity (the `ring` experiment only).
     pub ring_cap: usize,
+    /// Pacing gap in ns (the `backoff` experiments only): the requester
+    /// busy-waits this long between round trips so the responder's idle
+    /// ladder ramps. Ignored by the unpaced cells.
+    pub gap_ns: u64,
 }
 
 impl HandoffConfig {
@@ -29,6 +33,7 @@ impl HandoffConfig {
             warmup: parse_positive("TH_WARMUP", 10_000)?,
             iterations: parse_positive("TH_ITERATIONS", 100_000)?,
             ring_cap: parse_positive("TH_RING_CAP", 1024)?,
+            gap_ns: parse_positive("TH_GAP_NS", 100_000)? as u64,
         })
     }
 }
@@ -60,6 +65,36 @@ where
     }
     let mut samples = vec![0u64; cfg.iterations];
     for slot in samples.iter_mut() {
+        let start = Instant::now();
+        round_trip();
+        *slot = start.elapsed().as_nanos() as u64;
+    }
+    samples
+}
+
+/// [`measure`] with a busy-waited gap of `cfg.gap_ns` before every round
+/// trip (warmup included), left OUTSIDE the timed window. The gap lets a
+/// responder's idle ladder ramp between requests; it is a busy-wait, not a
+/// sleep, so the requester's send timing does not inherit the timer
+/// overshoot the backoff cells exist to measure.
+pub fn measure_paced<F>(cfg: &HandoffConfig, mut round_trip: F) -> Vec<u64>
+where
+    F: FnMut(),
+{
+    let gap = std::time::Duration::from_nanos(cfg.gap_ns);
+    let wait = |gap: std::time::Duration| {
+        let deadline = Instant::now() + gap;
+        while Instant::now() < deadline {
+            std::hint::spin_loop();
+        }
+    };
+    for _ in 0..cfg.warmup {
+        wait(gap);
+        round_trip();
+    }
+    let mut samples = vec![0u64; cfg.iterations];
+    for slot in samples.iter_mut() {
+        wait(gap);
         let start = Instant::now();
         round_trip();
         *slot = start.elapsed().as_nanos() as u64;
@@ -120,10 +155,38 @@ mod tests {
             warmup: 3,
             iterations: 5,
             ring_cap: 16,
+            gap_ns: 0,
         };
         let mut calls = 0usize;
         let samples = measure(&cfg, || calls += 1);
         assert_eq!(samples.len(), 5, "one sample per measured iteration");
         assert_eq!(calls, 8, "warmup (3) + iterations (5) round-trip calls");
+    }
+
+    #[test]
+    fn measure_paced_keeps_the_gap_between_round_trips_and_outside_samples() {
+        let gap_ns = 1_000_000u64; // 1 ms: far above clock granularity
+        let cfg = HandoffConfig {
+            warmup: 1,
+            iterations: 4,
+            ring_cap: 16,
+            gap_ns,
+        };
+        let mut starts: Vec<Instant> = Vec::new();
+        let samples = measure_paced(&cfg, || starts.push(Instant::now()));
+        assert_eq!(samples.len(), 4);
+        assert_eq!(starts.len(), 5, "warmup (1) + iterations (4)");
+        for pair in starts.windows(2) {
+            let d = (pair[1] - pair[0]).as_nanos() as u64;
+            assert!(
+                d >= gap_ns,
+                "round trips only {d}ns apart, want >= {gap_ns}"
+            );
+        }
+        // The gap busy-wait sits OUTSIDE the timed window: each sample is the
+        // near-instant round trip, never the millisecond gap.
+        for (i, s) in samples.iter().enumerate() {
+            assert!(*s < gap_ns, "sample {i} = {s}ns includes the gap");
+        }
     }
 }
