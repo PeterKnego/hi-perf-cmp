@@ -13,6 +13,10 @@ type HandoffConfig struct {
 	Warmup     int
 	Iterations int
 	RingCap    int
+	// GapNs paces the backoff cells: the requester busy-waits this long
+	// between round trips so the responder's idle ladder ramps. Ignored by
+	// the unpaced cells.
+	GapNs int64
 }
 
 // LoadHandoffConfig reads TH_WARMUP, TH_ITERATIONS and TH_RING_CAP, applying
@@ -30,7 +34,12 @@ func LoadHandoffConfig() (HandoffConfig, error) {
 	if err != nil {
 		return HandoffConfig{}, err
 	}
-	return HandoffConfig{Warmup: warmup, Iterations: iterations, RingCap: ringCap}, nil
+	gapNs, err := positiveEnv("TH_GAP_NS", 100000)
+	if err != nil {
+		return HandoffConfig{}, err
+	}
+	return HandoffConfig{Warmup: warmup, Iterations: iterations, RingCap: ringCap,
+		GapNs: int64(gapNs)}, nil
 }
 
 // HandoffRoundTrip performs exactly one ping-pong handoff (send a token, wait
@@ -46,6 +55,32 @@ func MeasureHandoff(cfg HandoffConfig, rt HandoffRoundTrip) []int64 {
 	}
 	samples := make([]int64, cfg.Iterations)
 	for i := 0; i < cfg.Iterations; i++ {
+		start := time.Now()
+		rt()
+		samples[i] = time.Since(start).Nanoseconds()
+	}
+	return samples
+}
+
+// MeasureHandoffPaced is MeasureHandoff with a busy-waited gap of cfg.GapNs
+// before every round trip (warmup included), left OUTSIDE the timed window.
+// The gap lets a responder's idle ladder ramp between requests; it is a
+// busy-wait, not a sleep, so the requester's send timing does not inherit the
+// timer overshoot the backoff cells exist to measure.
+func MeasureHandoffPaced(cfg HandoffConfig, rt HandoffRoundTrip) []int64 {
+	gap := time.Duration(cfg.GapNs)
+	wait := func() {
+		deadline := time.Now().Add(gap)
+		for time.Now().Before(deadline) {
+		}
+	}
+	for i := 0; i < cfg.Warmup; i++ {
+		wait()
+		rt()
+	}
+	samples := make([]int64, cfg.Iterations)
+	for i := 0; i < cfg.Iterations; i++ {
+		wait()
 		start := time.Now()
 		rt()
 		samples[i] = time.Since(start).Nanoseconds()

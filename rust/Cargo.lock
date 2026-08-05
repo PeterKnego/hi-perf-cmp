@@ -1621,6 +1621,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread-handoff-backoff"
+version = "0.1.0"
+dependencies = [
+ "bench-common",
+]
+
+[[package]]
 name = "thread-handoff-channel"
 version = "0.1.0"
 dependencies = [

@@ -23,8 +23,13 @@ the goal is to choose and optimize the code for each path. Each focus area has o
 
 **Status:** `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments (cross-host capable).
 `filesystem-write` is implemented for the `fsync`, `fdatasync`, `prealloc`, and `batch` experiments
-(single-host, local NVMe). `thread-handoff` is implemented for the `spin`, `condvar`, `channel`, and
-`ring` experiments (single-host). `serialization` is implemented in Rust (`sbe_gen` zerocopy SBE,
+(single-host, local NVMe). `thread-handoff` is implemented for the `spin`, `condvar`, `channel`,
+`ring`, and `backoff` experiments (single-host), plus a Go-only `backoff_yield`: the `backoff` cells
+run a paced ping-pong (requester busy-waits `TH_GAP_NS`, default 100 µs) against a responder idling
+in the Aeron ladder (10 spins → 20 yields → timed park doubling 1 µs→1 ms) built on each language's
+naive timed park — Go deliberately keeps `time.Sleep`, whose sub-ms overshoot collapses the ladder;
+`backoff_yield` is the aeron-go `1ce3720` fix (sub-1 ms parks yield to a deadline), so the
+`backoff`→`backoff_yield` delta prices that fix. `serialization` is implemented in Rust (`sbe_gen` zerocopy SBE,
 `aeron_sbe` real-logic SBE-tool Rust output, `bincode` serde+bincode) and Go (`bebop` via the
 200sc/bebop safe API, `protobuf` via the canonical google.golang.org/protobuf runtime), single-host,
 measuring encode/decode latency + decode allocation. Each journal entry's command is a **typed command**
@@ -73,7 +78,7 @@ dirs. Cross-language/experiment comparison is the `tools/journal` CLI's job, not
 
 ## Build & run
 
-Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring}`, `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust; `aeron_sbe` also Go) and `serialization-{aeron_sbe,sbe_struct,bebop,protobuf,flatbuffers}` (Go), `smr-collections-{insert,update,snapshot,mvcc_insert,mvcc_update,mvcc_snapshot,live_stw,live_mvcc,churn,mvcc_churn,live_stw_churn,live_mvcc_churn}` (all languages) and `smr-collections-{ultima_insert,ultima_update,ultima_snapshot,live_ultima,ultima_batch_insert,ultima_batch_update,ultima_churn,ultima_batch_churn,live_ultima_churn}` (Rust), `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
+Artifact names: `network-rtt-{tcp,udp,quic}`, `filesystem-write-{fsync,fdatasync,prealloc,batch}`, `thread-handoff-{spin,condvar,channel,ring,backoff}` (all languages; `backoff_yield` Go-only), `serialization-{sbe_gen,aeron_sbe,bincode}` (Rust; `aeron_sbe` also Go) and `serialization-{aeron_sbe,sbe_struct,bebop,protobuf,flatbuffers}` (Go), `smr-collections-{insert,update,snapshot,mvcc_insert,mvcc_update,mvcc_snapshot,live_stw,live_mvcc,churn,mvcc_churn,live_stw_churn,live_mvcc_churn}` (all languages) and `smr-collections-{ultima_insert,ultima_update,ultima_snapshot,live_ultima,ultima_batch_insert,ultima_batch_update,ultima_churn,ultima_batch_churn,live_ultima_churn}` (Rust), `rpc-roundtrip-{sbe_udp}` (Rust) and `rpc-roundtrip-{grpc,bebop_tcp}` (Go).
 
 ```sh
 # Rust — Cargo workspace: bench-common + network-rtt + filesystem-write + thread-handoff experiments

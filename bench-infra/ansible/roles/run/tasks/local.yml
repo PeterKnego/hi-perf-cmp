@@ -23,6 +23,7 @@
     export TH_WARMUP="{{ th_warmup }}"
     export TH_ITERATIONS="{{ th_iterations }}"
     export TH_RING_CAP="{{ th_ring_cap }}"
+    export TH_GAP_NS="{{ th_gap_ns }}"
     export SER_WARMUP="{{ ser_warmup }}"
     export SER_ITERS="{{ ser_iterations }}"
     export SER_ENTRIES="{{ ser_entries }}"

@@ -37,6 +37,36 @@ public final class Handoff {
         return samples;
     }
 
+    /**
+     * {@link #measure} with a busy-waited gap of {@code cfg.gapNs()} before
+     * every round trip (warmup included), left OUTSIDE the timed window. The
+     * gap lets a responder's idle ladder ramp between requests; it is a
+     * busy-wait, not a sleep, so the requester's send timing does not inherit
+     * the timer overshoot the backoff cells exist to measure.
+     */
+    public static long[] measurePaced(HandoffConfig cfg, RoundTrip roundTrip) {
+        long gap = cfg.gapNs();
+        for (int i = 0; i < cfg.warmup(); i++) {
+            busyWait(gap);
+            roundTrip.run();
+        }
+        long[] samples = new long[cfg.iterations()];
+        for (int i = 0; i < cfg.iterations(); i++) {
+            busyWait(gap);
+            long start = System.nanoTime();
+            roundTrip.run();
+            samples[i] = System.nanoTime() - start;
+        }
+        return samples;
+    }
+
+    private static void busyWait(long ns) {
+        long deadline = System.nanoTime() + ns;
+        while (System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+        }
+    }
+
     /** Sort and emit handoff_rtt_p50/p99/mean (ns) for the experiment. */
     public static void emit(String experiment, long[] samples) {
         Arrays.sort(samples);

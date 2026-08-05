@@ -50,10 +50,11 @@ never `tcp_rtt_p50`).
 `network-rtt` is implemented for the `tcp`, `udp`, and `quic` experiments, and
 `filesystem-write` for the `fsync`, `fdatasync`, `prealloc`, and `batch`
 experiments (each a separate runnable artifact named `<focus_area>-<experiment>`).
-`thread-handoff` is implemented for the `spin`, `condvar`, `channel`, and `ring`
-experiments (each a runnable artifact named `thread-handoff-<experiment>`):
-`spin`/`condvar`/`channel` emit `handoff_rtt_{p50,p99,mean}` (ns), `ring` emits
-`handoff_throughput` (ops_per_sec). `serialization` is implemented for the
+`thread-handoff` is implemented for the `spin`, `condvar`, `channel`, `ring`,
+and `backoff` experiments plus a Go-only `backoff_yield` (each a runnable
+artifact named `thread-handoff-<experiment>`): `spin`/`condvar`/`channel` and
+the paced `backoff`/`backoff_yield` emit `handoff_rtt_{p50,p99,mean}` (ns),
+`ring` emits `handoff_throughput` (ops_per_sec). `serialization` is implemented for the
 `sbe_gen`, `aeron_sbe`, and `bincode` experiments in Rust, and the `bebop` and
 `protobuf` experiments in Go (single-host): each emits `encode_{p50,p99,mean}`
 and `decode_{p50,p99,mean}` (ns) plus `encoded_bytes`/`decode_alloc_bytes`
