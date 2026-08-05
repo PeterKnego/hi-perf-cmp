@@ -374,6 +374,66 @@
     "unit": "ns",
     "value": 45332.0
   },
+  "rpc-roundtrip/bebop_tcp/go/encoded_bytes": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "bytes",
+    "value": 252
+  },
+  "rpc-roundtrip/bebop_tcp/go/rtt_mean": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "ns",
+    "value": 35652.7878
+  },
+  "rpc-roundtrip/bebop_tcp/go/rtt_p50": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "ns",
+    "value": 34638
+  },
+  "rpc-roundtrip/bebop_tcp/go/rtt_p99": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "ns",
+    "value": 57060
+  },
+  "rpc-roundtrip/grpc/go/encoded_bytes": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "bytes",
+    "value": 247
+  },
+  "rpc-roundtrip/grpc/go/rtt_mean": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "ns",
+    "value": 130263.29479
+  },
+  "rpc-roundtrip/grpc/go/rtt_p50": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "ns",
+    "value": 126100
+  },
+  "rpc-roundtrip/grpc/go/rtt_p99": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "ns",
+    "value": 189301
+  },
+  "rpc-roundtrip/sbe_udp/rust/encoded_bytes": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "bytes",
+    "value": 252
+  },
+  "rpc-roundtrip/sbe_udp/rust/rtt_mean": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "ns",
+    "value": 26770.90514
+  },
+  "rpc-roundtrip/sbe_udp/rust/rtt_p50": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "ns",
+    "value": 26101
+  },
+  "rpc-roundtrip/sbe_udp/rust/rtt_p99": {
+    "run_id": "20260720T120209Z-79706160a45d",
+    "unit": "ns",
+    "value": 38520
+  },
   "serialization/aeron_sbe/rust/decode_mean": {
     "run_id": "20260713T152911Z-23b9778538e9",
     "unit": "ns",
