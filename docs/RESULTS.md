@@ -31,6 +31,7 @@ code in each language.
 | [20260729T214946Z](../journal/runs/20260729T214946Z-7f0f0cf5ee6b/entry.md) / [20260729T215021Z](../journal/runs/20260729T215021Z-7f0f0cf5ee6b/entry.md) | multi-table writer A/B (`SMRC_MULTI_TABLE` 0 → 1, `open_tables3`/`open_tables2`, #20) on the #20 engine — same-host, 2 batch cells (scoped) |
 | [20260802T132729Z](../journal/runs/20260802T132729Z-7ab2574456c8/entry.md) | First **cancel-heavy churn** run: cancel op + ~1 % order-to-trade workload across all three languages (15 churn cells) — full 89-cell matrix, one run |
 | [20260804T222844Z](../journal/runs/20260804T222844Z-c80faa7ab8ea/entry.md) | `smr-collections` full re-measure — first journaled run carrying the Rust CoW `Arc::get_mut` removal and the Go flyweight-codec fix; all 21 cells, one run (scoped). The smr section's tables quote this run |
+| [20260805T182442Z](../journal/runs/20260805T182442Z-f6c13200cda8/entry.md) | `thread-handoff` re-measure + first **backoff**/**backoff_yield** cells: the Aeron ladder's timed-park cost per language (Go `time.Sleep` collapse vs the aeron-go yielding fix vs nanosleep/parkNanos) — 16 cells, one run (scoped) |
 
 Unless noted, tables below show the **current baseline** run (20260713T152911Z). The
 July 15 – 27 runs are **scoped** (one focus area each, not a full-matrix
@@ -99,31 +100,61 @@ three languages sit at ~25.4–25.7 K ops/s this run.)
 ## thread-handoff — thread-to-thread data passing (single host)
 
 Ping-pong handoff of a value between two threads, measuring round-trip latency
-for `spin` (busy-wait), `condvar` (mutex + condition variable park/unpark), and
-`channel` (each language's standard channel), plus sustained **throughput** for
-`ring` (pipelined SPSC ring buffer).
+for `spin` (busy-wait), `condvar` (mutex + condition variable park/unpark),
+`channel` (each language's standard channel), and the paced `backoff` cells
+(Aeron-ladder idle strategy — see below), plus sustained **throughput** for
+`ring` (pipelined SPSC ring buffer). Latency/throughput cells re-measured in
+run 20260805T182442Z (one fleet), which also debuts `backoff`/`backoff_yield`:
 
 | experiment | rust | go | java |
 |---|---|---|---|
-| spin p50 | 256 ns | 202 ns | 298 ns |
-| condvar p50 | 281 ns | 389 ns | 287 ns |
-| channel p50 | 394 ns | 323 ns | 451 ns (mean 6.8 µs) |
-| ring throughput | **421.6 M ops/s** | 43.2 M ops/s | 7.8 M ops/s |
+| spin p50 | 232 ns | 98 ns | 307 ns |
+| condvar p50 | 383 ns | 396 ns | 281 ns |
+| channel p50 | 407 ns | 305 ns | 20.2 µs (parked) |
+| **backoff p50** (gap 100 µs) | **25.1 µs** | **969 µs** | **26.2 µs** |
+| **backoff_yield p50** (go only) | — | **33.7 µs** | — |
+| ring throughput | **379.5 M ops/s** | 54.7 M ops/s | 6.9 M ops/s |
 
-> **Regime note (condvar/channel).** These p50s are from a run whose Rust/Java
-> threads mostly **did not park** — the handoff stayed hot at ~280–450 ns, on
-> par with Go. When OS threads genuinely sleep, the cost is ~80× higher: the
-> prior baseline (20260627) measured Rust/Java condvar/channel at **~22–24 µs**
-> (futex syscall + scheduler round trip) vs Go's ~300–380 ns userspace park.
-> Whether threads park is scheduler/load-sensitive, so treat these two cells as
-> the *no-park* floor and the ~22 µs figure as the *parking* cost — the number
-> the focus area exists to expose. Java's channel still shows the split within
-> this run (p50 451 ns, mean 6.8 µs, p99 23.7 µs).
+> **Regime note (condvar/channel).** Whether OS threads actually park is
+> scheduler/load-sensitive, and the cells are bimodal across runs: this run's
+> Rust/Go condvar/channel stayed hot (~300–410 ns, the *no-park* floor) while
+> Java's `SynchronousQueue` parked at the median (p50 20.2 µs — the prior run
+> had it hot at 451 ns with the parking only in the tail). The earlier
+> 20260627 baseline caught Rust/Java parking at ~22–24 µs (futex + scheduler
+> round trip) vs Go's ~300–380 ns userspace goroutine park. Read the no-park
+> floor and the ~20–24 µs parking cost as the two modes; which one a run
+> catches is the scheduler's choice, and that parking penalty is the number
+> this focus area exists to expose.
 
 **What we learned:**
 
-- **Busy-wait spin is a ~200–300 ns floor everywhere** — with no scheduler
-  involved, the three runtimes converge (Go ~200 ns, Rust/Java ~260–300 ns).
+- **Busy-wait spin is a ~100–300 ns floor everywhere** — with no scheduler
+  involved, the three runtimes converge (Go ~100–200 ns, Rust/Java
+  ~230–310 ns).
+- **The Aeron backoff ladder's cost is set by the platform's timed-park
+  granularity, and Go's naive port collapses.** The `backoff` cells run a
+  paced ping-pong (requester busy-waits 100 µs between round trips so the
+  responder's spin → yield → park ladder ramps; park doubles 1 µs → 1 ms,
+  aeron-go defaults). Rust (`thread::sleep`/nanosleep) and Java (Agrona's
+  real `BackoffIdleStrategy` on `parkNanos`) wake in **25–26 µs at p50** —
+  honest short rungs plus tens-of-µs overshoot. Go's `time.Sleep` overshoots
+  sub-millisecond requests so badly (a 6 µs request costs ~425 µs; ≥ 8 µs
+  costs ~1 ms — aeron-go `1ce3720`'s measurement) that the ladder is at its
+  1 ms top rung by the first park: **p50 969 µs, p99 986 µs** — the wakeup
+  *is* the sleep remainder, ~37× Rust/Java and ~10⁴× the spin floor.
+- **The aeron-go yielding fix recovers Go almost entirely**: `backoff_yield`
+  (parks under the 1 ms floor served by yielding to a deadline, aeron-go
+  `1ce3720`) lands at **33.7 µs p50 — 29× better than the naive ladder** and
+  in the same band as Rust/Java's naive ports, without dedicating a core the
+  way `spin` does. This is the grid-methodology confirmation of the
+  cluster-level result that motivated the fix (backoff 793 µs → yielding
+  224 µs → spin 184 µs median ack in a 3-node Aeron cluster).
+- **Seven cross-run flags on untouched cells, none confirmed**: the
+  re-measured legacy cells moved in both directions vs the 20260713 baseline
+  (Go spin −51 %, Go ring +27 % *improved*; Rust condvar +36 %, Java ring
+  −11 % *flagged*) — instance-draw and scheduler variance on code-identical
+  binaries; [`journal/REGRESSIONS.md`](../journal/REGRESSIONS.md) stays
+  empty.
 - **The sleep/wakeup cost is bimodal, and this run mostly caught the no-park
   side.** condvar/channel handoff only pays the OS-park price when the woken
   thread actually sleeps. Here the Rust/Java threads stayed hot, so those
@@ -632,8 +663,12 @@ remains empty.
 3. **In-process handoff:** if threads may sleep, Go's runtime is ~50× cheaper
    at wakeup than OS-thread parking in Rust/Java **when parking actually
    happens** (~22 µs vs ~380 ns; whether it triggers is scheduler-sensitive);
-   if you can spin, all three reach ~200–300 ns, and a well-tuned Rust SPSC
-   ring moves 400 M+ ops/s.
+   if you can spin, all three reach ~100–300 ns, and a well-tuned Rust SPSC
+   ring moves 380 M+ ops/s. For the middle ground real duty cycles run — the
+   Aeron spin→yield→park backoff ladder — the cost is the platform's
+   timed-park granularity: Rust/Java wake in ~25 µs, but Go's `time.Sleep`
+   overshoot collapses the ladder to ~1 ms wakeups; the aeron-go
+   yield-below-floor fix recovers Go to ~34 µs (29×) without pinning a core.
 4. **Language choice matters least where the kernel or device dominates**
    (network RTT, disk sync) and most where the runtime owns scheduling
    (thread parking) or the compiler owns the inner loop (SPSC ring).
