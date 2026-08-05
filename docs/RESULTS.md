@@ -37,7 +37,7 @@ The regression baseline is **per focus area** (each cell in
 `journal/baselines.json` names its reference run): `network-rtt`,
 `filesystem-write`, and `serialization` reference 20260713T152911Z;
 `smr-collections` references 20260804T222844Z; `thread-handoff` references
-20260805T182442Z. `rpc-roundtrip` is not yet baselined. Scoped runs (one
+20260805T182442Z; `rpc-roundtrip` references 20260720T120209Z. Scoped runs (one
 focus area, not a full-matrix re-measure) move only their own cells' baseline;
 each section below cites the run its tables quote.
 
