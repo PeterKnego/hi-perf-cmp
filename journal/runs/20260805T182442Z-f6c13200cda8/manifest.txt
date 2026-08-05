@@ -1,0 +1,16 @@
+timestamp=20260805T182442Z
+instance_type=c6id.2xlarge
+vcpus=8
+mem_mb=15701
+kernel=6.17.0-1019-aws
+rtt_payload_bytes=64
+rtt_warmup=10000
+rtt_iterations=100000
+rtt_tcp_port=9100
+rtt_udp_port=9101
+rtt_quic_port=9102
+languages=rust,go,java
+experiments=thread-handoff/spin,thread-handoff/condvar,thread-handoff/backoff,thread-handoff/backoff_yield,thread-handoff/channel,thread-handoff/ring
+git_sha=f6c13200cda82cb8fdb85ae128e86f61096ee669 clean
+node0_role=node0 (client/driver + single-host benches)
+node1_role=node1 (network-rtt responder)
